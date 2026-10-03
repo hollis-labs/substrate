@@ -2,3 +2,25 @@
 # These entries apply only to commit messages; no working-tree file is exempted.
 agent-box-host (commit-message) Imported source commit messages name the former local workspace in recorded validation commands.
 home-path-macos (commit-message) Imported source commit messages record the original author's absolute workspace path in validation commands.
+
+# Harness unit imports (CW-20261003-0134 P3, first change): findings read in the imported files and judged not to be exposure.
+# Each entry names a file or one commit and says what was checked; matched text is not quoted here (this file is scanned too).
+# These live here, not in scan-public.allow.d/, because the guards workflow passes only this file with --allowlist.
+internal-ip harness/interception/egress/proxy.go the egress proxy's own SSRF deny list: private, link-local and cloud-metadata ranges written as constants; no real host
+internal-ip harness/interception/egress/proxy_test.go test inputs for the SSRF deny list (stub resolver answers); documentation-range and private-range sample addresses only
+internal-ip harness/interception/egress/ssrf.go comment explaining which address the deny list blocks; no real host
+internal-ip harness/interception/egress/ssrf_test.go SSRF deny-list test inputs: private, link-local, carrier-grade NAT and metadata sample addresses that the test expects to be refused
+internal-ip harness/interception/egress/ssrf_embedded_test.go IPv4 addresses embedded in IPv6 transition forms, as inputs the deny list must refuse; test-only
+internal-ip harness/interception/egress/ssrf_nat64_test.go NAT64-synthesized metadata address as a deny-list test input; test-only
+internal-ip harness/interception/egress/example_test.go example resolver stub that answers with the metadata address to show it being refused; no real host
+credentials-in-url harness/interception/egress/ssrf_test.go made-up userinfo in test URLs that check the proxy rejects or strips credentials in front of a blocked host; no real credential
+internal-ip harness/docs/units/go-egress-proxy/README.md documentation of the blocked ranges and an SSRF example against the metadata address; no real host
+internal-ip harness/docs/units/go-egress-proxy/CHANGELOG.md changelog entries describing the deny-list fixes with their sample addresses; no real host
+internal-ip (commit-message)@ba2e259e4f0e imported commit message describing the IPv6-embedded IPv4 deny-list fix with sample addresses; no real host
+internal-ip (commit-message)@c9299bddeed6 imported commit message describing the NAT64 deny-list fix with the metadata address; no real host
+home-path-macos harness/interception/permission/derivation.go doc comment example path with a made-up user name ("u")
+home-path-macos harness/interception/permission/derivation_test.go permission-rule test patterns with a made-up user name ("u"); no real home directory
+home-path-macos harness/interception/permission/resolve.go doc comment showing an elided example path pattern
+home-path-macos harness/interception/permission/resolve_test.go permission-rule test pattern with a made-up user name; no real home directory
+home-path-macos harness/interception/permission/summary/summary.go doc comment showing elided example path patterns
+home-path-macos harness/interception/permission/summary/summary_test.go permission-summary test patterns with a made-up user name ("u"); no real home directory
