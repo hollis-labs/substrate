@@ -24,3 +24,22 @@ home-path-macos harness/interception/permission/resolve.go doc comment showing a
 home-path-macos harness/interception/permission/resolve_test.go permission-rule test pattern with a made-up user name; no real home directory
 home-path-macos harness/interception/permission/summary/summary.go doc comment showing elided example path patterns
 home-path-macos harness/interception/permission/summary/summary_test.go permission-summary test patterns with a made-up user name ("u"); no real home directory
+
+# Harness unit imports (CW-20261003-0134 P3, second change: go-sandbox and go-providers): findings read in the imported files.
+home-path-macos harness/adapters/provider/bootdir_claude_trust_test.go trust-config test fixtures with made-up user names; no real home directory
+home-path-macos harness/adapters/provider/bootdir_test.go test inputs: made-up user names and an example absolute path of a locally installed helper binary under the original author's account name, already present in the public source repository; no credential
+home-path-linux harness/adapters/provider/event_pipeline_test.go glob-matching test input with a made-up user name
+home-path-linux harness/adapters/provider/hack/capturefixtures/main.go comment naming the normalised home directory that captured fixtures are rewritten to; no real path
+home-path-linux harness/adapters/provider/hack/probe-harness-layout.sh matches on scratch directories named home/.codex, home/.config and home/.opencode created under a temporary work directory; not a real home
+llm-provider-key harness/adapters/provider/hack/probe-mcp-exclusive.sh obviously made-up key value used to check that an MCP configuration is exclusive; not a real key
+secret-assignment harness/adapters/provider/mcp_servers_test.go made-up secret value in a test that checks secrets are not written to disk; not a real secret
+secret-assignment harness/adapters/provider/preparation_test.go made-up token values in fake auth.json files created by tests; not real credentials
+secret-assignment harness/adapters/provider/projection_test.go made-up token value in a fake auth.json that the test expects to stay unread; not a real credential
+home-path-linux harness/adapters/providertest/fixtures/README.md documentation of the normalised home directory used in recorded fixtures; no real path
+home-path-linux harness/adapters/providertest/fixtures/antigravity/print_mcp_tool.jsonl recorded fixture whose paths were normalised to a placeholder home directory; no real path
+home-path-linux harness/adapters/providertest/fixtures/codex/app_server_*.transcript.jsonl recorded fixtures whose paths were normalised to a placeholder home directory; no real path
+home-path-linux harness/adapters/provider/testdata/antigravity/print_mcp_tool.jsonl earlier location of the same recorded fixture (history only); placeholder home directory
+home-path-macos harness/docs/units/go-sandbox/README.md documentation example path with a made-up user name
+home-path-macos harness/sandbox/apply_darwin_test.go sandbox profile test inputs with a made-up user name; no real home directory
+home-path-linux harness/sandbox/apply_linux_test.go sandbox test input with a made-up user name; no real home directory
+home-path-macos harness/sandbox/protect_darwin_test.go sandbox write-protection test inputs with a made-up user name; no real home directory
