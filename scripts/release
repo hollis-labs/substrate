@@ -3,14 +3,15 @@
 #
 # Usage: scripts/release [--apply] <module> <version>
 #
-#   scripts/release mesh v0.1.0           dry run: validate and print the tag
-#   scripts/release --apply mesh v0.1.0   also create the annotated tag in THIS clone
+#   scripts/release <module> v0.1.0           dry run: validate and print the tag
+#   scripts/release --apply <module> v0.1.0   also create the annotated tag in THIS clone
 #
 # Dry run is the default. This script never pushes: publishing a tag is a separate,
 # owner-approved step, and the command to run is printed at the end.
 #
 # Releases are per module and never lockstep. The tag is <module>/<version> (for
-# example mesh/v0.1.0), which is how the Go tooling finds a module in a subdirectory.
+# example harness/v0.3.2 or util/v1.0.0), which is how the Go tooling finds a module
+# in a subdirectory.
 # Checks: the module exists; the version is plain semver with a leading v; a v2+
 # major matches the module path suffix; the tag is new and newer than the module's
 # latest tag; <module>/CHANGELOG.md has a section for the version; the working tree
@@ -21,7 +22,7 @@ set -euo pipefail
 . "$(cd "$(dirname "$0")" && pwd)/_common.sh"
 
 usage() {
-  sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'
+  sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 SEMVER_RE='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+(\.[0-9A-Za-z-]+)*)?$'
