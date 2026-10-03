@@ -50,3 +50,11 @@ home-path-macos harness/agentlaunch/testdata/shared-materialization/*.json recor
 home-path-macos harness/docs/units/agentkit/docs/shared-materialization-contracts.md point-in-time record of the repositories surveyed, with the original author's local checkout locations; already in the public agentkit repository, no credential
 home-path-macos harness/docs/units/agentkit/docs/shared-materialization-handoff.md point-in-time handoff record with the original author's local workspace and checkout locations; already in the public agentkit repository, no credential
 agent-box-host harness/docs/units/agentkit/docs/shared-materialization-handoff.md the same record names the original author's local workspace directory (an internal label for a workspace folder, not a reachable host); already in the public agentkit repository
+
+# Harness unit imports (CW-20261003-0134 P3, fourth change: go-agent-wrapper): findings read in the imported files.
+secret-assignment harness/adapters/acp/lifecycle_test.go made-up token value inside a malformed protocol frame that the test feeds to the diagnostics path; not a real secret
+secret-assignment harness/adapters/acp/permission_test.go made-up token value in a permission-request fixture used to check that tool input is redacted; not a real secret
+secret-assignment harness/adapters/wrapper/acp_permission_subprocess_test.go made-up token values in shell fixtures that emit permission requests; not real secrets
+secret-assignment harness/adapters/wrapper/acp_subprocess_test.go made-up token value in a shell fixture that emits a malformed frame; not a real secret
+home-path-macos harness/docs/units/go-agent-wrapper/docs/shared-materialization-conformance.md point-in-time conformance record with the original author's local workspace and checkout locations; already in the public go-agent-wrapper repository, no credential
+agent-box-host harness/docs/units/go-agent-wrapper/docs/shared-materialization-conformance.md the same record names the original author's local workspace directory (an internal label for a workspace folder, not a reachable host); already in the public go-agent-wrapper repository
