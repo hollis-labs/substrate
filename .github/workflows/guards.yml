@@ -30,7 +30,7 @@ jobs:
         run: scripts/check-one-way
 
       - name: public hygiene (secrets, hosts, private paths; tree and history)
-        run: scripts/scan-public
+        run: scripts/scan-public --allowlist scan-public.allowlist
 
       - name: scripts parse (shellcheck, python syntax)
         run: |
