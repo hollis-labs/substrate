@@ -43,3 +43,10 @@ home-path-macos harness/docs/units/go-sandbox/README.md documentation example pa
 home-path-macos harness/sandbox/apply_darwin_test.go sandbox profile test inputs with a made-up user name; no real home directory
 home-path-linux harness/sandbox/apply_linux_test.go sandbox test input with a made-up user name; no real home directory
 home-path-macos harness/sandbox/protect_darwin_test.go sandbox write-protection test inputs with a made-up user name; no real home directory
+
+# Harness unit imports (CW-20261003-0134 P3, third change: agentkit): findings read in the imported files.
+home-path-macos harness/agentcontext/provider_test.go provider test input with a made-up user name; no real home directory
+home-path-macos harness/agentlaunch/testdata/shared-materialization/*.json recorded materialization fixtures that carry the original author's local checkout locations as plain strings; already present in the public agentkit repository, no credential
+home-path-macos harness/docs/units/agentkit/docs/shared-materialization-contracts.md point-in-time record of the repositories surveyed, with the original author's local checkout locations; already in the public agentkit repository, no credential
+home-path-macos harness/docs/units/agentkit/docs/shared-materialization-handoff.md point-in-time handoff record with the original author's local workspace and checkout locations; already in the public agentkit repository, no credential
+agent-box-host harness/docs/units/agentkit/docs/shared-materialization-handoff.md the same record names the original author's local workspace directory (an internal label for a workspace folder, not a reachable host); already in the public agentkit repository
