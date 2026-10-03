@@ -7,10 +7,12 @@ or the fabric agents run on lives here. General-purpose libraries live in
 
 ## Status
 
-Pre-release skeleton. Each module below exists and builds, but is empty: code
-arrives through history-preserving imports of existing repositories, and no
-version has been tagged yet. Expect the layout of each module to change while
-that happens.
+`harness`, `llm-core` and `mesh` hold code that was imported, with its git
+history, from earlier standalone repositories; `harness` and `mesh` also hold
+code written in this repository since. `agent` is a skeleton: it builds and has
+only a package doc, no API yet. Releases are per module and tagged
+`<module>/vX.Y.Z`; the versions of a module are listed in its own
+`CHANGELOG.md`.
 
 ## Modules
 
