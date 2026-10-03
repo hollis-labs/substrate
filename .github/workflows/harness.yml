@@ -27,3 +27,5 @@ jobs:
     with:
       module: harness
       race: true
+      # The sandbox tests need a Linux backend; the hosted runner does not ship one.
+      sandbox-backend: true
