@@ -1,0 +1,29 @@
+# Checks for the llm-core module only; runs when its files (or the shared module workflow) change.
+name: llm-core
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "llm-core/**"
+      - ".github/workflows/llm-core.yml"
+      - ".github/workflows/_module.yml"
+  pull_request:
+    paths:
+      - "llm-core/**"
+      - ".github/workflows/llm-core.yml"
+      - ".github/workflows/_module.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: llm-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  module:
+    uses: ./.github/workflows/_module.yml
+    with:
+      module: llm-core
+      race: true
