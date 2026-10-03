@@ -31,6 +31,9 @@ Use a module the usual way, once it has a release:
 go get github.com/hollis-labs/substrate/mesh@latest
 ```
 
+Coming from a standalone module such as `go-sandbox` or `go-messaging`? See
+[docs/migration.md](docs/migration.md) for the old-to-new table and adoption notes.
+
 ## Rules
 
 - **One-way dependencies.** Substrate may depend on `libs`. `libs` never depends
