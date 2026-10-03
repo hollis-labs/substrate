@@ -1,0 +1,4 @@
+# Historical validation commands imported from the already-public go-messaging repository.
+# These entries apply only to commit messages; no working-tree file is exempted.
+agent-box-host (commit-message) Imported source commit messages name the former local workspace in recorded validation commands.
+home-path-macos (commit-message) Imported source commit messages record the original author's absolute workspace path in validation commands.
