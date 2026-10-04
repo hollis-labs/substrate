@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import sys
 
 REPO = Path(__file__).resolve().parent.parent
 CORPUS = REPO / "harness/workspace/testdata/goldens"
@@ -36,6 +37,18 @@ def private_path_scrub(candidate, scratch):
         raw = path.read_text()
         if str(scratch) in raw or any(re.search(pattern, raw) for pattern in patterns):
             raise RuntimeError("private-path scrub rejected a staged fixture; nothing published")
+
+
+def scan_candidate(candidate, env):
+    scan = subprocess.run([str(REPO / "scripts/scan-public"), "--repo", str(candidate),
+                           "--tree", "--no-allowlist"], env=env, capture_output=True, text=True)
+    scanned = re.search(r"tree: (\d+) text files scanned, (\d+) binary files", scan.stdout)
+    if scan.returncode or scanned is None or sum(map(int, scanned.groups())) == 0:
+        print(scan.stdout, file=sys.stderr, end="")
+        print(scan.stderr, file=sys.stderr, end="")
+        reason = "zero files or unavailable scan statistics" if scanned is None or sum(map(int, scanned.groups())) == 0 else "fixture findings or scanner error"
+        raise RuntimeError("public-surface scan rejected staged fixtures: " + reason + "; nothing published")
+    print(scan.stdout, end="")
 
 
 def main():
@@ -68,10 +81,7 @@ def main():
                             "--repo", args.cairn_repo, "--output", str(candidate / "seeds/cairn")],
                            cwd=REPO, env=env, check=True)
         private_path_scrub(candidate, scratch)
-        scan = subprocess.run([str(REPO / "scripts/scan-public"), "--repo", str(candidate),
-                               "--tree", "--no-allowlist"], env=env, capture_output=True, text=True)
-        if scan.returncode:
-            raise RuntimeError("public-surface scan rejected staged fixtures; nothing published")
+        scan_candidate(candidate, env)
         print("private-path scrub: clean; public-surface scan: clean (all staged fixtures, no allowlist)")
         changes = []
         for source in sorted(candidate.rglob("*")):
