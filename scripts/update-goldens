@@ -1,0 +1,110 @@
+#!/usr/bin/env python3
+"""Review and optionally accept the offline Harness planting corpus.
+
+scripts/update-goldens [--accept] [--cairn-repo <local-repo>]
+
+The ordinary gate never invokes this script. It builds current consumers,
+renders into private TMPDIR with fixture HOME/provider homes, scrubs only
+execution roots/session/time in the renderer, rejects any residual private
+path, runs scan-public on EVERY staged fixture, then displays unified diffs.
+Only --accept replaces expectations, after both privacy checks succeed.
+Cairn seeds are recaptured only when --cairn-repo is explicitly supplied.
+"""
+import argparse
+import difflib
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
+import sys
+
+REPO = Path(__file__).resolve().parent.parent
+CORPUS = REPO / "harness/workspace/testdata/goldens"
+
+
+def private_path_scrub(candidate, scratch):
+    # Execution roots are replaced by renderers. Reject remainders instead of
+    # silently sanitizing filenames, argv, diagnostics or ownership.
+    patterns = [r"/(?:Users|home)/[^/\s]+", r"(?i)[a-z]:\\Users\\",
+                r"~/(?:dev|projects|\.config|\.codex|\.claude)(?:/|\b)"]
+    for path in candidate.rglob("*"):
+        if path.is_symlink():
+            raise RuntimeError("staged corpus contains a symlink")
+        if not path.is_file():
+            continue
+        raw = path.read_text()
+        if str(scratch) in raw or any(re.search(pattern, raw) for pattern in patterns):
+            raise RuntimeError("private-path scrub rejected a staged fixture; nothing published")
+
+
+def scan_candidate(candidate, env):
+    scan = subprocess.run([str(REPO / "scripts/scan-public"), "--repo", str(candidate),
+                           "--tree", "--no-allowlist"], env=env, capture_output=True, text=True)
+    scanned = re.search(r"tree: (\d+) text files scanned, (\d+) binary files", scan.stdout)
+    if scan.returncode or scanned is None or sum(map(int, scanned.groups())) == 0:
+        print(scan.stdout, file=sys.stderr, end="")
+        print(scan.stderr, file=sys.stderr, end="")
+        reason = "zero files or unavailable scan statistics" if scanned is None or sum(map(int, scanned.groups())) == 0 else "fixture findings or scanner error"
+        raise RuntimeError("public-surface scan rejected staged fixtures: " + reason + "; nothing published")
+    print(scan.stdout, end="")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--accept", action="store_true")
+    parser.add_argument("--cairn-repo")
+    args = parser.parse_args()
+    if not os.environ.get("TMPDIR"):
+        parser.error("private TMPDIR is required")
+    cache = subprocess.check_output(["go", "env", "GOCACHE", "GOMODCACHE"], cwd=REPO / "harness", text=True).splitlines()
+    with tempfile.TemporaryDirectory(prefix="update-goldens-", dir=os.environ["TMPDIR"]) as temporary:
+        scratch = Path(temporary)
+        scratch.chmod(0o700)
+        candidate = scratch / "candidate"
+        candidate.mkdir(mode=0o700)
+        home = scratch / "home"
+        home.mkdir(mode=0o700)
+        for child in ["codex", "opencode", "config"]:
+            (home / child).mkdir(mode=0o700)
+        env = dict(os.environ, HOME=str(home), CODEX_HOME=str(home / "codex"),
+                   OPENCODE_CONFIG_DIR=str(home / "opencode"), XDG_CONFIG_HOME=str(home / "config"),
+                   TMPDIR=temporary, GOTMPDIR=temporary, GOCACHE=cache[0], GOMODCACHE=cache[1],
+                   GOFLAGS="-p=2", GOWORK="off", GOPROXY="off", GOSUMDB="off")
+        subprocess.run(["go", "test", "-v", "./workspace/goldens", "./adapters/agentsessions",
+                        "./agentlaunch/contexthook", "-run", "Golden", "-args",
+                        "-goldens=stage", "-goldens-output", str(candidate)],
+                       cwd=REPO / "harness", env=env, check=True)
+        if args.cairn_repo:
+            subprocess.run(["python3", str(REPO / "harness/workspace/goldens/cairn_seeds.py"),
+                            "--repo", args.cairn_repo, "--output", str(candidate / "seeds/cairn")],
+                           cwd=REPO, env=env, check=True)
+        private_path_scrub(candidate, scratch)
+        scan_candidate(candidate, env)
+        print("private-path scrub: clean; public-surface scan: clean (all staged fixtures, no allowlist)")
+        changes = []
+        for source in sorted(candidate.rglob("*")):
+            if not source.is_file():
+                continue
+            relative = source.relative_to(candidate)
+            destination = CORPUS / relative
+            old = destination.read_text() if destination.exists() else ""
+            new = source.read_text()
+            if old == new:
+                continue
+            print("".join(difflib.unified_diff(old.splitlines(True), new.splitlines(True),
+                         fromfile=relative.as_posix(), tofile=relative.as_posix() + " (actual)")))
+            changes.append((source, destination))
+        # All staged fixtures were scrubbed and scanned before ANY publication.
+        if args.accept:
+            for source, destination in changes:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+                destination.chmod(0o644)
+            print("accepted reviewed fixture differences")
+        else:
+            print("preview only; rerun with --accept after reviewing the diff")
+
+if __name__ == "__main__":
+    main()

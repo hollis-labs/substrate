@@ -26,8 +26,10 @@ home-path-macos harness/interception/permission/summary/summary.go doc comment s
 home-path-macos harness/interception/permission/summary/summary_test.go permission-summary test patterns with a made-up user name ("u"); no real home directory
 
 # Harness unit imports (CW-20261003-0134 P3, second change: go-sandbox and go-providers): findings read in the imported files.
-home-path-macos harness/adapters/provider/bootdir_claude_trust_test.go trust-config test fixtures with made-up user names; no real home directory
-home-path-macos harness/adapters/provider/bootdir_test.go test inputs: made-up user names and an example absolute path of a locally installed helper binary under the original author's account name, already present in the public source repository; no credential
+home-path-macos harness/adapters/provider/bootdir_claude_trust_test.go@66977c5f3d5f Imported history only; current fixture tree is neutral.
+home-path-macos harness/adapters/provider/bootdir_claude_trust_test.go@a9a00dec076c Imported history only; current fixture tree is neutral.
+home-path-macos harness/adapters/provider/bootdir_test.go@484aca75963d Imported history only; current fixture tree is neutral.
+home-path-macos harness/adapters/provider/bootdir_test.go@fe87a8d911eb Imported history only; current fixture tree is neutral.
 home-path-linux harness/adapters/provider/event_pipeline_test.go glob-matching test input with a made-up user name
 home-path-linux harness/adapters/provider/hack/capturefixtures/main.go comment naming the normalised home directory that captured fixtures are rewritten to; no real path
 home-path-linux harness/adapters/provider/hack/probe-harness-layout.sh matches on scratch directories named home/.codex, home/.config and home/.opencode created under a temporary work directory; not a real home
@@ -46,7 +48,7 @@ home-path-macos harness/sandbox/protect_darwin_test.go sandbox write-protection 
 
 # Harness unit imports (CW-20261003-0134 P3, third change: agentkit): findings read in the imported files.
 home-path-macos harness/agentcontext/provider_test.go provider test input with a made-up user name; no real home directory
-home-path-macos harness/agentlaunch/testdata/shared-materialization/*.json recorded materialization fixtures that carry the original author's local checkout locations as plain strings; already present in the public agentkit repository, no credential
+home-path-macos harness/agentlaunch/testdata/shared-materialization/*.json@9e0a0506e893 Imported history only; current fixture tree is neutral.
 home-path-macos harness/docs/units/agentkit/docs/shared-materialization-contracts.md point-in-time record of the repositories surveyed, with the original author's local checkout locations; already in the public agentkit repository, no credential
 home-path-macos harness/docs/units/agentkit/docs/shared-materialization-handoff.md point-in-time handoff record with the original author's local workspace and checkout locations; already in the public agentkit repository, no credential
 agent-box-host harness/docs/units/agentkit/docs/shared-materialization-handoff.md the same record names the original author's local workspace directory (an internal label for a workspace folder, not a reachable host); already in the public agentkit repository
