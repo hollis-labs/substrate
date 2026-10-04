@@ -13,6 +13,8 @@ code written in this repository since. `agent` is a skeleton: it builds and has
 only a package doc, no API yet. Releases are per module and tagged
 `<module>/vX.Y.Z`; the versions of a module are listed in its own
 `CHANGELOG.md`.
+`harness` has no tag yet, and its package layout is interim: a restructure will
+move its packages again.
 
 ## Modules
 
@@ -30,6 +32,9 @@ Use a module the usual way, once it has a release:
 ```sh
 go get github.com/hollis-labs/substrate/mesh@latest
 ```
+
+Coming from a standalone module such as `go-sandbox` or `go-messaging`? See
+[docs/migration.md](docs/migration.md) for the old-to-new table and adoption notes.
 
 ## Rules
 
