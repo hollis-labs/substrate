@@ -13,6 +13,8 @@ code written in this repository since. `agent` is a skeleton: it builds and has
 only a package doc, no API yet. Releases are per module and tagged
 `<module>/vX.Y.Z`; the versions of a module are listed in its own
 `CHANGELOG.md`.
+`harness` has no tag yet, and its package layout is interim: a restructure will
+move its packages again.
 
 ## Modules
 
