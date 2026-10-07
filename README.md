@@ -13,8 +13,10 @@ code written in this repository since. `agent` is a skeleton: it builds and has
 only a package doc, no API yet. Releases are per module and tagged
 `<module>/vX.Y.Z`; the versions of a module are listed in its own
 `CHANGELOG.md`.
-`harness` has no tag yet, and its package layout is interim: a restructure will
-move its packages again.
+`harness` provides the consolidated library foundation described in its
+[README](harness/README.md), including explicit unsupported operations and
+adoption requirements. Its first release is prepared in
+[harness/CHANGELOG.md](harness/CHANGELOG.md); release tags remain per module.
 
 ## Modules
 

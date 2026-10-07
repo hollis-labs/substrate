@@ -1,8 +1,8 @@
 # Moving from the standalone modules
 
-> **`harness` has no released version and no tag.** Its package layout is interim: a restructure will move `harness` packages again. The `harness` rows below describe the tree today and are not a promise that the layout stays. Anyone who rewrites imports to today's `harness` paths will need another rewrite after the restructure. The `llm-core`, `mesh` and `libs` rows are released versions and are not affected.
+> **Harness library foundation.** The consolidated source and first-release entry are available for review; no `harness/` tag exists yet. Launch planting adapters now live in `agentlaunch/planting`; the three interim workspace planting packages are removed. Native installed apply and launch-readiness evidence remain adoption requirements, not capabilities supplied by this library release.
 
-This page lists the Hollis Labs modules that moved into the `substrate` and `libs` repositories, what each one became, and what to expect when a consumer adopts the new module paths. It states what exists; it sets no schedule and promises nothing to any consumer. State as of 2026-10-03.
+This page lists the Hollis Labs modules that moved into the `substrate` and `libs` repositories, what each one became, and what to expect when a consumer adopts the new module paths. It states what exists; it sets no schedule and promises nothing to any consumer. Import destinations updated 2026-10-07. Old repository tag observations and application dry-run results below retain their original 2026-10-03 scope.
 
 The first sections are the version table. [Adoption notes](#adoption-notes) follow it.
 
@@ -102,9 +102,9 @@ New module: `github.com/hollis-labs/libs/workflow`, in the [libs repository](htt
 
 **The old repositories stay.** The move did not change or delete anything in the old repositories. Each one still exists with its tags (checked on the code host when this page was written) and still resolves under its old module path, so a consumer can stay on an old version for as long as it wants. The moved code is the old repository's main branch at the time of the move, which can be ahead of its last tag; each migration note names the source commit and the number of commits whose history moved with it.
 
-**The import rewrite is mechanical.** An import path changes by prefix; package names, symbols and APIs are not renamed, and every package keeps the package clause it had (except where a module's CHANGELOG says otherwise, for example the root of `llm-core/contracts`). The migration notes list every old and new import path of each module; those tables are the mapping. `go get github.com/hollis-labs/<repository>/<module>@<version>` replaces `go get` of the old module; the new module path is in each group heading above.
+**The import rewrite is mechanical.** An import path changes by prefix; package names, symbols and APIs are not renamed, and every package keeps the package clause it had (except where a module's CHANGELOG says otherwise, for example the root of `llm-core/contracts`). The migration notes list old and new import paths. Harness consolidation also removes the bootdir writer and moves planting contracts; its current changes below and CHANGELOG take precedence over the original mechanical import. `go get github.com/hollis-labs/<repository>/<module>@<version>` replaces `go get` of the old module; the new module path is in each group heading above.
 
-**What a dry-run rewrite of existing applications found.** The `llm-core` and `harness` rows were applied, without committing or pushing anything, to six Hollis Labs applications against the merged `substrate` tree, with their build, `go vet` and test compilation compared before and after. The `harness` rows were rehearsed at today's interim layout, so a later restructure of `harness` means another rewrite of those imports:
+**What a dry-run rewrite of existing applications found.** The `llm-core` and `harness` rows were applied, without committing or pushing anything, to six Hollis Labs applications against the merged `substrate` tree, with their build, `go vet` and test compilation compared before and after. The `harness` rows were rehearsed at the 2026-10-03 imported layout, before workspace consolidation and authority API changes. These historical results do not establish current application adoption:
 
 - `torque`, `tether`, `cairn` and `folio`: no edit beyond the import paths. Build, vet and test compilation pass.
 - `hadron`: 12 compile errors, all in one file, `internal/agentsubstrate/launcher.go`. The application pins `agentkit` v0.6.1 and was written against that API; the rewrite moves it to the current one in one step. `agentkit` v0.12.0 removed `agentlaunch.RuntimeKind` and its constants and replaced them with `runtimes.Mode` of `github.com/hollis-labs/substrate/llm-core/contracts/runtimes`: `RuntimeKind` becomes `runtimes.Mode`, `RuntimeSubprocess` becomes `runtimes.ModeSubprocessPerTurn` (the spelling `subprocess` is now `subprocess-per-turn`), `RuntimeServeHTTP` becomes `runtimes.ModeHTTPSSE` (`serve-http` is now `http-sse`), and `RuntimeStreamingStdio`, `RuntimePTY` and `RuntimeJsonRpcStdio` become `runtimes.ModeStreamingStdio`, `runtimes.ModePTY` and `runtimes.ModeJSONRPCStdio`. The package `agentruntime/runtimekind` was removed in the same release and has no rewrite rule; its `PTYDebug` has no replacement (`pty-debug` is `pty` plus the debug posture). The edit is a code change in that one file. Packages that depend on it were not type-checked, so further differences can appear after it.
@@ -114,7 +114,7 @@ New module: `github.com/hollis-labs/libs/workflow`, in the [libs repository](htt
 
 **Known issues in `harness`.** The `TestSandbox_OutsideWorkspaceReadBlocked` test in `harness/sandbox` is skipped unconditionally on Linux: the skip says the test needs additional bind configuration, and it has said so since the sandbox was first extracted, before the move. So the tests do not verify that a sandboxed process on Linux cannot read a denied path outside its workspace. That is not known to be broken; it is not verified. On macOS the same test runs only when `~/.ssh` exists. The other Linux sandbox isolation tests run and pass in CI. A second caveat concerns the Codex turn lifecycle: the wrapper in `harness/adapters/wrapper` takes the end of a Codex JSON-RPC stdio turn from the session's typed terminal event, which restored the native turn-order test that was skipped earlier in this move, but only when the CLI adapter is named `codex`. The session layer emits that typed terminal only for an adapter with that name, so a compatible custom adapter that speaks the same protocol under another name does not get it, and the fix does not cover it. Both statements are in `harness/CHANGELOG.md`.
 
-**Behaviour changes already recorded in the module CHANGELOGs.** The `v0.1.0` section of each released module's `CHANGELOG.md`, and the `Unreleased` section of `harness`, list what a consumer can notice. The ones that are not import paths:
+**Behaviour changes already recorded in the module CHANGELOGs.** The `v0.1.0` section of each released module's `CHANGELOG.md`, and the prepared `v0.1.0` section of `harness`, list what a consumer can notice. The ones that are not import paths:
 
 - `libs/util`: the OpenTelemetry instrumentation scope names of `otel` and `otel/genai` are now the new import paths, so exported traces and metrics carry a new `otel.scope.name`; dashboards or alerts keyed on the old name need updating. One `go.mod` can require only one version of a dependency, so the highest version any imported library asked for won; the raised versions (for example `modernc.org/sqlite` from v1.48.1 to v1.60.1) are listed in the CHANGELOG.
 - `libs/ui-go`: `envelopes.ModulePath` is now `github.com/hollis-labs/libs/ui-go`, the module that owns the package, instead of the old repository path; the catalog's source identity and the module line of generated TypeScript report the new value, so regenerating output changes those lines. `go-chatstream` required `go-ssekit` and `go-streamhub` as separate modules; they are now ordinary imports of `ui-go/ssekit` and `ui-go/streamhub`.
@@ -122,3 +122,32 @@ New module: `github.com/hollis-labs/libs/workflow`, in the [libs repository](htt
 - `substrate/llm-core`: the package clause of the root of `contracts` changed from `agentcontracts` to `contracts`; `status.go` (`InstanceStatus` and related types) was removed from `contracts` because the mesh contracts supersede it.
 - `substrate/mesh`: `federation` and `tetherclient` import `messaging` as a package of the same module instead of requiring the old `go-messaging` module.
 - `substrate/harness`: code that pinned a sibling module at a tag now builds against the sibling's packages in the same module, at the source of its old repository's main branch (for example the wrapper, which pinned `agentkit` v0.21.0, now builds against `agentkit` v0.26.1); the `harness/CHANGELOG.md` entries under Changed list each pin that moved. The Linux sandbox loopback helper no longer fails with `operation not permitted` when `bwrap` has already brought `lo` up.
+
+## Current harness consolidation
+
+The module pins `llm-core` and `mesh` v0.1.0. Its prepared `harness/v0.1.0`
+release uses `github.com/hollis-labs/substrate/harness`; the version table
+continues to say no tag until one is actually published.
+
+| Removed interim import | Current caller boundary |
+|---|---|
+| `harness/workspace/plant` | `harness/agentlaunch/planting`: `Planter`, `PlantSpec`, `PlantResult`, `PlantHook`, `SharedPlanter`, `NoOpPlanter` |
+| `harness/workspace/providerplant` | `harness/agentlaunch/planting`: provider projection/preparation and `PlantContextFor` |
+| `harness/workspace/bootdir` | No public writer replacement; submit explicit artifacts through `agentlaunch.MaterializeArtifacts` with artifact authority |
+
+All paths in this table are relative to `github.com/hollis-labs/substrate/`.
+Update the package qualifier to `planting`; wrapper `Config.Planter` and
+`Config.PlantSpec` retain their roles with the relocated types. Provider
+projection is pure; materializing preparation requires an explicit
+`ArtifactAuthorizer`. Engine overrides and the `AtomicWrite` side-writer
+are removed without a compatibility authority adapter. Five session start
+paths similarly require explicit artifact root and authority. See the complete
+removed-field list in [harness/CHANGELOG.md](../harness/CHANGELOG.md).
+
+Real native installed mutation is Unsupported; the private metadata consumer
+has no production issuer. Publication/readiness needs trusted host evidence
+that the library does not manufacture. Existing operator directories are not
+adopted or chmodded, and uncertain roots/receipts remain recovery obligations.
+These support limits, runtime validation and consumer migration are adoption
+work; a library tag does not establish them. See
+[harness/README.md](../harness/README.md).
