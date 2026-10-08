@@ -15,24 +15,24 @@ and persistence, described in its [README](agent/README.md). Releases are per mo
 `CHANGELOG.md`.
 `harness` provides the consolidated library foundation described in its
 [README](harness/README.md), including explicit unsupported operations and
-adoption requirements. Its first release is prepared in
-[harness/CHANGELOG.md](harness/CHANGELOG.md); release tags remain per module.
+adoption requirements. Published versions are listed below; release tags remain
+per module, with release notes in each module's `CHANGELOG.md`.
 
 ## Modules
 
 Each module has its own `go.mod`, its own version and its own tags.
 
-| Module | Import path | Scope |
-|---|---|---|
-| `harness` | `github.com/hollis-labs/substrate/harness` | The agent harness (Cairn): launch, workspace and session plumbing for agent CLIs. |
-| `llm-core` | `github.com/hollis-labs/substrate/llm-core` | The LLM core: shared model, provider and routing contracts and types. |
-| `mesh` | `github.com/hollis-labs/substrate/mesh` | The agent mesh: messaging, federation, the tether client, human-in-the-loop, agent teams, the broker and agent definitions. |
-| `agent` | `github.com/hollis-labs/substrate/agent` | The agent runtime core. |
+| Module | Import path | Latest published tag | Scope |
+|---|---|---|---|
+| `harness` | `github.com/hollis-labs/substrate/harness` | `harness/v0.3.0` | The agent harness (Cairn): launch, workspace and session plumbing for agent CLIs. |
+| `llm-core` | `github.com/hollis-labs/substrate/llm-core` | `llm-core/v0.1.0` | The LLM core: shared model, provider and routing contracts and types. |
+| `mesh` | `github.com/hollis-labs/substrate/mesh` | `mesh/v0.1.0` | The agent mesh: messaging, federation, the tether client, human-in-the-loop, agent teams, the broker and agent definitions. |
+| `agent` | `github.com/hollis-labs/substrate/agent` | `agent/v0.1.0` | Embeddable native agent mechanisms with host-owned policy and persistence. |
 
-Use a module the usual way, once it has a release:
+Use a published module the usual way:
 
 ```sh
-go get github.com/hollis-labs/substrate/mesh@latest
+go get github.com/hollis-labs/substrate/mesh@v0.1.0
 ```
 
 Coming from a standalone module such as `go-sandbox` or `go-messaging`? See
