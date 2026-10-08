@@ -60,3 +60,6 @@ secret-assignment harness/adapters/wrapper/acp_permission_subprocess_test.go mad
 secret-assignment harness/adapters/wrapper/acp_subprocess_test.go made-up token value in a shell fixture that emits a malformed frame; not a real secret
 home-path-macos harness/docs/units/go-agent-wrapper/docs/shared-materialization-conformance.md point-in-time conformance record with the original author's local workspace and checkout locations; already in the public go-agent-wrapper repository, no credential
 agent-box-host harness/docs/units/go-agent-wrapper/docs/shared-materialization-conformance.md the same record names the original author's local workspace directory (an internal label for a workspace folder, not a reachable host); already in the public go-agent-wrapper repository
+
+# Context provider fixture inherited at the package relocation; current tree uses a neutral example path.
+home-path-macos agent/agentcontext/provider_test.go@22da9785af97 Made-up provider test user inherited from the already-public harness fixture at relocation; neutralized in the following extraction commit, no real home directory.
