@@ -9,8 +9,8 @@ or the fabric agents run on lives here. General-purpose libraries live in
 
 `harness`, `llm-core` and `mesh` hold code that was imported, with its git
 history, from earlier standalone repositories; `harness` and `mesh` also hold
-code written in this repository since. `agent` is a skeleton: it builds and has
-only a package doc, no API yet. Releases are per module and tagged
+code written in this repository since. `agent` provides embeddable native runtime mechanisms with host-owned policy
+and persistence, described in its [README](agent/README.md). Releases are per module and tagged
 `<module>/vX.Y.Z`; the versions of a module are listed in its own
 `CHANGELOG.md`.
 `harness` provides the consolidated library foundation described in its
