@@ -35,6 +35,19 @@ New module: `github.com/hollis-labs/substrate/mesh`.
 | [`go-messaging`](https://github.com/hollis-labs/go-messaging) | `v0.7.0` | `github.com/hollis-labs/substrate/mesh/messaging` | `mesh/v0.1.0` | [note](../mesh/messaging/MIGRATION.md) |
 | [`go-tether-client`](https://github.com/hollis-labs/go-tether-client) | `v0.10.0` | `github.com/hollis-labs/substrate/mesh/tetherclient` | `mesh/v0.1.0` | [note](../mesh/tetherclient/MIGRATION.md) |
 
+### agent (6 old modules)
+
+New module: `github.com/hollis-labs/substrate/agent`.
+
+| Old repository | Last old tag | New import prefix | First new version | Migration note |
+|---|---|---|---|---|
+| [`go-context-window`](https://github.com/hollis-labs/go-context-window) | `v0.1.0` | `github.com/hollis-labs/substrate/agent/contextwindow` | `agent/v0.2.0` | [note](../agent/contextwindow/MIGRATION.md) |
+| [`go-loopdetect`](https://github.com/hollis-labs/go-loopdetect) | `v0.1.0` | `github.com/hollis-labs/substrate/agent/loopdetect` | `agent/v0.2.0` | [note](../agent/loopdetect/MIGRATION.md) |
+| [`go-reflexes`](https://github.com/hollis-labs/go-reflexes) | `v0.2.0` | `github.com/hollis-labs/substrate/agent/reflexes` | `agent/v0.2.0` | [note](../agent/reflexes/MIGRATION.md) |
+| [`go-toolbroker`](https://github.com/hollis-labs/go-toolbroker) | `v0.2.0` | `github.com/hollis-labs/substrate/agent/toolbroker` | `agent/v0.2.0` | [note](../agent/toolbroker/MIGRATION.md) |
+| [`go-toolresult`](https://github.com/hollis-labs/go-toolresult) | `v0.1.0` | `github.com/hollis-labs/substrate/agent/toolresult` | `agent/v0.2.0` | [note](../agent/toolresult/MIGRATION.md) |
+| [`go-toolselect`](https://github.com/hollis-labs/go-toolselect) | `v0.3.0` | `github.com/hollis-labs/substrate/agent/toolselect` | `agent/v0.2.0` | [note](../agent/toolselect/MIGRATION.md) |
+
 ### harness (11 old modules)
 
 New module: `github.com/hollis-labs/substrate/harness`. Each package of an old module has its own new home; the note of a module with several homes lists all of them. The packages under `harness/internal/` are not importable from outside the module and have no public import path.
