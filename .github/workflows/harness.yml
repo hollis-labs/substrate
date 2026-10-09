@@ -29,3 +29,21 @@ jobs:
       race: true
       # The sandbox tests need a Linux backend; the hosted runner does not ship one.
       sandbox-backend: true
+
+  runner-windows:
+    name: runner Windows build and limit contract
+    runs-on: windows-latest
+    env:
+      GOWORK: "off"
+    defaults:
+      run:
+        working-directory: harness
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: harness/go.mod
+          cache-dependency-path: harness/go.sum
+      - run: go build ./runner/...
+      - run: go vet ./runner/...
+      - run: go test ./runner -run '^TestApplyResourceLimits_(ZeroIsNoOp|WindowsUnsupported)$' -count=1
