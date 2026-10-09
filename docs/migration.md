@@ -1,6 +1,6 @@
 # Moving from the standalone modules
 
-> **Harness library foundation.** The consolidated source and first-release entry are available for review; no `harness/` tag exists yet. Launch planting adapters now live in `agentlaunch/planting`; the three interim workspace planting packages are removed. Native installed apply and launch-readiness evidence remain adoption requirements, not capabilities supplied by this library release.
+> **Harness library releases.** `harness/v0.1.0`, `harness/v0.2.0` and `harness/v0.3.0` are published; each release's notes are its section of `harness/CHANGELOG.md`. Launch planting adapters now live in `agentlaunch/planting`; the three interim workspace planting packages are removed. Native installed apply and launch-readiness evidence remain adoption requirements, not capabilities supplied by these library releases.
 
 This page lists the Hollis Labs modules that moved into the `substrate` and `libs` repositories, what each one became, and what to expect when a consumer adopts the new module paths. It states what exists; it sets no schedule and promises nothing to any consumer. Import destinations updated 2026-10-07. Old repository tag observations and application dry-run results below retain their original 2026-10-03 scope.
 
@@ -54,17 +54,17 @@ New module: `github.com/hollis-labs/substrate/harness`. Each package of an old m
 
 | Old repository | Last old tag | New import prefix | First new version | Migration note |
 |---|---|---|---|---|
-| [`agentkit`](https://github.com/hollis-labs/agentkit) | `v0.26.1` | several homes under `github.com/hollis-labs/substrate/harness/`: `adapters`, `agentcontext`, `agentlaunch`, `broker`, `workspace` | none yet (no `harness/` tag) | [note](../harness/docs/units/agentkit/MIGRATION.md) |
-| [`go-agent-wrapper`](https://github.com/hollis-labs/go-agent-wrapper) | `v0.28.0` | several homes under `github.com/hollis-labs/substrate/harness/`: `adapters`, `interception`, `sandbox`, `workspace` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-agent-wrapper/MIGRATION.md) |
-| [`go-egress-proxy`](https://github.com/hollis-labs/go-egress-proxy) | `v0.2.4` | `github.com/hollis-labs/substrate/harness/interception` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-egress-proxy/MIGRATION.md) |
-| [`go-harness-filters`](https://github.com/hollis-labs/go-harness-filters) | `v0.1.1` | `github.com/hollis-labs/substrate/harness/interception` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-harness-filters/MIGRATION.md) |
-| [`go-materialize`](https://github.com/hollis-labs/go-materialize) | `v0.1.0` | `github.com/hollis-labs/substrate/harness/workspace` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-materialize/MIGRATION.md) |
-| [`go-permission`](https://github.com/hollis-labs/go-permission) | `v0.1.0` | `github.com/hollis-labs/substrate/harness/interception` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-permission/MIGRATION.md) |
-| [`go-providers`](https://github.com/hollis-labs/go-providers) | `v0.46.0` | `github.com/hollis-labs/substrate/harness/adapters` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-providers/MIGRATION.md) |
-| [`go-runner`](https://github.com/hollis-labs/go-runner) | `v0.8.2` | `github.com/hollis-labs/substrate/harness/runner` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-runner/MIGRATION.md) |
-| [`go-runtime-events`](https://github.com/hollis-labs/go-runtime-events) | `v0.2.2` | `github.com/hollis-labs/substrate/harness/adapters` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-runtime-events/MIGRATION.md) |
-| [`go-safefs`](https://github.com/hollis-labs/go-safefs) | `v0.1.0` | `github.com/hollis-labs/substrate/harness/sandbox` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-safefs/MIGRATION.md) |
-| [`go-sandbox`](https://github.com/hollis-labs/go-sandbox) | `v0.6.0` | `github.com/hollis-labs/substrate/harness/sandbox` | none yet (no `harness/` tag) | [note](../harness/docs/units/go-sandbox/MIGRATION.md) |
+| [`agentkit`](https://github.com/hollis-labs/agentkit) | `v0.26.1` | several homes under `github.com/hollis-labs/substrate/harness/`: `adapters`, `agentcomposition`, `agentlaunch`, `broker`, `workspace`; `agentcontext` is `github.com/hollis-labs/substrate/agent/agentcontext` (from `harness/v0.3.0` and `agent/v0.1.0`) | `harness/v0.1.0` | [note](../harness/docs/units/agentkit/MIGRATION.md) |
+| [`go-agent-wrapper`](https://github.com/hollis-labs/go-agent-wrapper) | `v0.28.0` | several homes under `github.com/hollis-labs/substrate/harness/`: `adapters`, `interception`, `sandbox`, `workspace` | `harness/v0.1.0` | [note](../harness/docs/units/go-agent-wrapper/MIGRATION.md) |
+| [`go-egress-proxy`](https://github.com/hollis-labs/go-egress-proxy) | `v0.2.4` | `github.com/hollis-labs/substrate/harness/interception` | `harness/v0.1.0` | [note](../harness/docs/units/go-egress-proxy/MIGRATION.md) |
+| [`go-harness-filters`](https://github.com/hollis-labs/go-harness-filters) | `v0.1.1` | `github.com/hollis-labs/substrate/harness/interception` | `harness/v0.1.0` | [note](../harness/docs/units/go-harness-filters/MIGRATION.md) |
+| [`go-materialize`](https://github.com/hollis-labs/go-materialize) | `v0.1.0` | `github.com/hollis-labs/substrate/harness/workspace` | `harness/v0.1.0` | [note](../harness/docs/units/go-materialize/MIGRATION.md) |
+| [`go-permission`](https://github.com/hollis-labs/go-permission) | `v0.1.0` | `github.com/hollis-labs/substrate/harness/interception` | `harness/v0.1.0` | [note](../harness/docs/units/go-permission/MIGRATION.md) |
+| [`go-providers`](https://github.com/hollis-labs/go-providers) | `v0.46.0` | `github.com/hollis-labs/substrate/harness/adapters` | `harness/v0.1.0` | [note](../harness/docs/units/go-providers/MIGRATION.md) |
+| [`go-runner`](https://github.com/hollis-labs/go-runner) | `v0.8.2` | `github.com/hollis-labs/substrate/harness/runner` | `harness/v0.1.0` | [note](../harness/docs/units/go-runner/MIGRATION.md) |
+| [`go-runtime-events`](https://github.com/hollis-labs/go-runtime-events) | `v0.2.2` | `github.com/hollis-labs/substrate/harness/adapters` | `harness/v0.1.0` | [note](../harness/docs/units/go-runtime-events/MIGRATION.md) |
+| [`go-safefs`](https://github.com/hollis-labs/go-safefs) | `v0.1.0` | `github.com/hollis-labs/substrate/harness/sandbox` | `harness/v0.1.0` | [note](../harness/docs/units/go-safefs/MIGRATION.md) |
+| [`go-sandbox`](https://github.com/hollis-labs/go-sandbox) | `v0.6.0` | `github.com/hollis-labs/substrate/harness/sandbox` | `harness/v0.1.0` | [note](../harness/docs/units/go-sandbox/MIGRATION.md) |
 
 ### libs: util (12 old modules)
 
@@ -127,7 +127,7 @@ New module: `github.com/hollis-labs/libs/workflow`, in the [libs repository](htt
 
 **Known issues in `harness`.** The `TestSandbox_OutsideWorkspaceReadBlocked` test in `harness/sandbox` is skipped unconditionally on Linux: the skip says the test needs additional bind configuration, and it has said so since the sandbox was first extracted, before the move. So the tests do not verify that a sandboxed process on Linux cannot read a denied path outside its workspace. That is not known to be broken; it is not verified. On macOS the same test runs only when `~/.ssh` exists. The other Linux sandbox isolation tests run and pass in CI. A second caveat concerns the Codex turn lifecycle: the wrapper in `harness/adapters/wrapper` takes the end of a Codex JSON-RPC stdio turn from the session's typed terminal event, which restored the native turn-order test that was skipped earlier in this move, but only when the CLI adapter is named `codex`. The session layer emits that typed terminal only for an adapter with that name, so a compatible custom adapter that speaks the same protocol under another name does not get it, and the fix does not cover it. Both statements are in `harness/CHANGELOG.md`.
 
-**Behaviour changes already recorded in the module CHANGELOGs.** The `v0.1.0` section of each released module's `CHANGELOG.md`, and the prepared `v0.1.0` section of `harness`, list what a consumer can notice. The ones that are not import paths:
+**Behaviour changes already recorded in the module CHANGELOGs.** The `v0.1.0` section of each module's `CHANGELOG.md`, `harness` included, lists what a consumer can notice. The ones that are not import paths:
 
 - `libs/util`: the OpenTelemetry instrumentation scope names of `otel` and `otel/genai` are now the new import paths, so exported traces and metrics carry a new `otel.scope.name`; dashboards or alerts keyed on the old name need updating. One `go.mod` can require only one version of a dependency, so the highest version any imported library asked for won; the raised versions (for example `modernc.org/sqlite` from v1.48.1 to v1.60.1) are listed in the CHANGELOG.
 - `libs/ui-go`: `envelopes.ModulePath` is now `github.com/hollis-labs/libs/ui-go`, the module that owns the package, instead of the old repository path; the catalog's source identity and the module line of generated TypeScript report the new value, so regenerating output changes those lines. `go-chatstream` required `go-ssekit` and `go-streamhub` as separate modules; they are now ordinary imports of `ui-go/ssekit` and `ui-go/streamhub`.
@@ -138,9 +138,9 @@ New module: `github.com/hollis-labs/libs/workflow`, in the [libs repository](htt
 
 ## Current harness consolidation
 
-The module pins `llm-core` and `mesh` v0.1.0. Its prepared `harness/v0.1.0`
-release uses `github.com/hollis-labs/substrate/harness`; the version table
-continues to say no tag until one is actually published.
+The module pins `llm-core` and `mesh` v0.1.0 and, from `harness/v0.3.0`,
+`agent` v0.1.0. Its releases, starting with `harness/v0.1.0`, use the module
+path `github.com/hollis-labs/substrate/harness`.
 
 | Removed interim import | Current caller boundary |
 |---|---|
