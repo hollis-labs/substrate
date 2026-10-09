@@ -27,7 +27,7 @@ Each module has its own `go.mod`, its own version and its own tags.
 | `harness` | `github.com/hollis-labs/substrate/harness` | `harness/v0.3.0` | The agent harness (Cairn): launch, workspace and session plumbing for agent CLIs. |
 | `llm-core` | `github.com/hollis-labs/substrate/llm-core` | `llm-core/v0.1.0` | The LLM core: shared model, provider and routing contracts and types. |
 | `mesh` | `github.com/hollis-labs/substrate/mesh` | `mesh/v0.1.0` | The agent mesh: messaging, federation, the tether client, human-in-the-loop, agent teams, the broker and agent definitions. |
-| `agent` | `github.com/hollis-labs/substrate/agent` | `agent/v0.2.0` | Embeddable native agent mechanisms with host-owned policy and persistence. |
+| `agent` | `github.com/hollis-labs/substrate/agent` | `agent/v0.3.0` | Embeddable native agent mechanisms with host-owned policy and persistence. |
 
 Use a published module the usual way:
 
@@ -54,12 +54,16 @@ consumer, use the module path with `@vX.Y.Z`, without the directory in the versi
 GOWORK=off go get github.com/hollis-labs/substrate/harness@v0.3.0 \
   github.com/hollis-labs/substrate/llm-core@v0.1.0 \
   github.com/hollis-labs/substrate/mesh@v0.1.0 \
-  github.com/hollis-labs/substrate/agent@v0.2.0
+  github.com/hollis-labs/substrate/agent@v0.3.0
 ```
 
 Use a supported toolchain satisfying the selected modules' Go directives.
 The current app adoptions used Go 1.26.9. Read each module's CHANGELOG and the
 actual public API at the selected version before adapting older callers.
+
+Agent v0.3.0 core turn, approval and service types now use the consolidated
+llm-core, harness permission and ui-go packages. Migrate matching consumer
+imports and mocks together; old and new named types are not interchangeable.
 
 ### Old-to-new import map
 
