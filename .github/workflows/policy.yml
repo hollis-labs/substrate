@@ -1,0 +1,29 @@
+# Check policy with the same reusable workflow as the other modules.
+name: policy
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "policy/**"
+      - ".github/workflows/policy.yml"
+      - ".github/workflows/_module.yml"
+  pull_request:
+    paths:
+      - "policy/**"
+      - ".github/workflows/policy.yml"
+      - ".github/workflows/_module.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: policy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  module:
+    uses: ./.github/workflows/_module.yml
+    with:
+      module: policy
+      race: true

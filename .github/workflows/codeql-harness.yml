@@ -1,0 +1,56 @@
+# Analyze the harness module independently; mesh keeps its existing workflow.
+name: CodeQL harness
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "harness/**"
+      - ".github/workflows/codeql-harness.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "harness/**"
+      - ".github/workflows/codeql-harness.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-harness-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze harness (go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      GOWORK: "off"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: harness/go.mod
+          cache-dependency-path: |
+            harness/go.mod
+            harness/go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: manual
+
+      - name: Build harness for analysis
+        working-directory: harness
+        run: go build -a ./...
+
+      - name: Analyze harness
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:go/module:harness"
