@@ -28,6 +28,10 @@ Each module has its own `go.mod`, its own version and its own tags.
 | `llm-core` | `github.com/hollis-labs/substrate/llm-core` | `llm-core/v0.1.0` | The LLM core: shared model, provider and routing contracts and types. |
 | `mesh` | `github.com/hollis-labs/substrate/mesh` | `mesh/v0.1.0` | The agent mesh: messaging, federation, the tether client, human-in-the-loop, agent teams, the broker and agent definitions. |
 | `agent` | `github.com/hollis-labs/substrate/agent` | `agent/v0.3.0` | Embeddable native agent mechanisms with host-owned policy and persistence. |
+| `policy` | `github.com/hollis-labs/substrate/policy` | Unpublished | Neutral policy decisions, mandatory obligations and audited admission; no engine adapters or consumer wiring. |
+
+The new [policy module](policy/README.md) is source-only. Its recorded-case
+scaffolding does not establish conformance of existing application engines.
 
 Use a published module the usual way:
 
