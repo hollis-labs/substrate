@@ -26,7 +26,7 @@ Each module has its own `go.mod`, its own version and its own tags.
 |---|---|---|---|
 | `harness` | `github.com/hollis-labs/substrate/harness` | `harness/v0.3.0` | The agent harness (Cairn): launch, workspace and session plumbing for agent CLIs. |
 | `llm-core` | `github.com/hollis-labs/substrate/llm-core` | `llm-core/v0.1.0` | The LLM core: shared model, provider and routing contracts and types. |
-| `mesh` | `github.com/hollis-labs/substrate/mesh` | `mesh/v0.1.0` | The agent mesh: messaging, federation, the tether client, human-in-the-loop, agent teams, the broker and agent definitions. |
+| `mesh` | `github.com/hollis-labs/substrate/mesh` | `mesh/v0.4.0` | The agent mesh: messaging, federation, the tether client, human-in-the-loop, agent teams, the broker and agent definitions. |
 | `agent` | `github.com/hollis-labs/substrate/agent` | `agent/v0.3.0` | Embeddable native agent mechanisms with host-owned policy and persistence. |
 | `policy` | `github.com/hollis-labs/substrate/policy` | Unpublished | Neutral policy decisions, mandatory obligations and audited admission; no engine adapters or consumer wiring. |
 
@@ -36,7 +36,7 @@ scaffolding does not establish conformance of existing application engines.
 Use a published module the usual way:
 
 ```sh
-go get github.com/hollis-labs/substrate/mesh@v0.1.0
+go get github.com/hollis-labs/substrate/mesh@v0.4.0
 ```
 
 Coming from a standalone module such as `go-sandbox` or `go-messaging`? See
@@ -50,14 +50,15 @@ application source or deploy anything. The earlier import-map/codemod rehearsal
 was a dry run; its scratch replacements and old package homes are not a current
 consumer recipe.
 
-The version table above names published module tags as of 2026-10-09. For a
-consumer, use the module path with `@vX.Y.Z`, without the directory in the version:
+The mesh pin above is updated for the 2026-10-10 release; the other module pins
+retain the 2026-10-09 adoption baseline. For a consumer, use the module path with
+`@vX.Y.Z`, without the directory in the version:
 
 ```sh
 # Run inside the consumer's Go module; select only the modules it uses.
 GOWORK=off go get github.com/hollis-labs/substrate/harness@v0.3.0 \
   github.com/hollis-labs/substrate/llm-core@v0.1.0 \
-  github.com/hollis-labs/substrate/mesh@v0.1.0 \
+  github.com/hollis-labs/substrate/mesh@v0.4.0 \
   github.com/hollis-labs/substrate/agent@v0.3.0
 ```
 
