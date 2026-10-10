@@ -1,0 +1,56 @@
+# Analyze the mesh module's Go build, independently of other substrate modules.
+name: CodeQL mesh
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mesh/**"
+      - ".github/workflows/codeql-mesh.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "mesh/**"
+      - ".github/workflows/codeql-mesh.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-mesh-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze mesh (go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      GOWORK: "off"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: mesh/go.mod
+          cache-dependency-path: |
+            mesh/go.mod
+            mesh/go.sum
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          build-mode: manual
+
+      - name: Build mesh for analysis
+        working-directory: mesh
+        run: go build -a ./...
+
+      - name: Analyze mesh
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:go/module:mesh"
