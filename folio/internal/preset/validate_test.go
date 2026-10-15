@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/folio/internal/preset"
+	"github.com/hollis-labs/tools/folio/internal/preset"
 )
 
 func TestValidate_Valid(t *testing.T) {

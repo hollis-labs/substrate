@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	gh "github.com/hollis-labs/folio/internal/github"
-	"github.com/hollis-labs/folio/service"
+	gh "github.com/hollis-labs/tools/folio/internal/github"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 func newCmd(bundledFS fs.FS, version string) *cobra.Command {

@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hollis-labs/folio/internal/manifest"
+	"github.com/hollis-labs/tools/folio/internal/manifest"
 )
 
 // InspectOptions parameterises Service.Inspect.

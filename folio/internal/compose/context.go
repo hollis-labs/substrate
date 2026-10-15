@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hollis-labs/folio/internal/preset"
-	"github.com/hollis-labs/folio/internal/render"
+	"github.com/hollis-labs/tools/folio/internal/preset"
+	"github.com/hollis-labs/tools/folio/internal/render"
 )
 
 // ScopeVarsForLayer produces the input map a composed preset sees during

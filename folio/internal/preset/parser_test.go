@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/hollis-labs/folio/internal/preset"
+	"github.com/hollis-labs/tools/folio/internal/preset"
 )
 
 func TestParse_Minimal(t *testing.T) {

@@ -551,4 +551,4 @@ Captured in Vanta as follow-ups:
 - `folio inspect` rich UI.
 - Cross-platform CRLF support (LF-only documented for v0).
 
-[0.1.0]: https://github.com/hollis-labs/folio/releases/tag/v0.1.0
+[0.1.0]: https://github.com/hollis-labs/tools/folio/releases/tag/v0.1.0

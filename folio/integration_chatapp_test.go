@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/folio"
-	"github.com/hollis-labs/folio/internal/manifest"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio"
+	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 func TestIntegration_ChatAppPreset_Render(t *testing.T) {

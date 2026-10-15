@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	gh "github.com/hollis-labs/folio/internal/github"
+	gh "github.com/hollis-labs/tools/folio/internal/github"
 )
 
 // recRunner is a tiny gh.Runner that records calls and returns scripted

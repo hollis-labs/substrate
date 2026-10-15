@@ -15,7 +15,7 @@ package compose
 import (
 	"io/fs"
 
-	"github.com/hollis-labs/folio/internal/preset"
+	"github.com/hollis-labs/tools/folio/internal/preset"
 )
 
 // MaxComposeDepth caps the depth of transitive composes: walks. Exceeding the

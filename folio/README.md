@@ -58,7 +58,7 @@ compiles them and exercises desktop/narrow/short-height native controls.
 ## Quickstart
 
 ```sh
-go install github.com/hollis-labs/folio/cmd/folio@latest
+go install github.com/hollis-labs/tools/folio/cmd/folio@latest
 
 folio new base /tmp/folio-smoke \
   --input project_name=smoke_test \

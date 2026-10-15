@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/folio/internal/manifest"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 // presetTree is a throwaway preset directory the tests can edit between

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	gh "github.com/hollis-labs/folio/internal/github"
+	gh "github.com/hollis-labs/tools/folio/internal/github"
 )
 
 // PublishOptions parameterises Service.PublishToGitHub. TargetDir must

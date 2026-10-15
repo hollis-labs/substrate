@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/folio"
-	"github.com/hollis-labs/folio/internal/manifest"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio"
+	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 // TestIntegration_AppDashboardPreset_Defaults renders the app-dashboard preset with

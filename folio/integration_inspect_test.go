@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/folio"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 // The bundled base, go-baseline (through go-lib), app-dashboard and nanite-plugin

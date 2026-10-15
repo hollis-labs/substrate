@@ -10,9 +10,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/hollis-labs/folio"
-	"github.com/hollis-labs/folio/internal/manifest"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio"
+	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 // allPresetInputs holds a valid input set for rendering each bundled preset

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/folio/cmd/folio/internal/cli"
+	"github.com/hollis-labs/tools/folio/cmd/folio/internal/cli"
 )
 
 // scaffoldBase renders the bundled base preset into a fresh directory through

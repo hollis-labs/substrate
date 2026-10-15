@@ -1,4 +1,4 @@
-module github.com/hollis-labs/folio
+module github.com/hollis-labs/tools/folio
 
 go 1.26.6
 

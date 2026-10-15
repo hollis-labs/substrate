@@ -9,8 +9,8 @@ package main
 import (
 	"os"
 
-	"github.com/hollis-labs/folio"
-	"github.com/hollis-labs/folio/cmd/folio/internal/cli"
+	"github.com/hollis-labs/tools/folio"
+	"github.com/hollis-labs/tools/folio/cmd/folio/internal/cli"
 )
 
 func main() {

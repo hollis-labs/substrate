@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/folio/cmd/folio/internal/cli"
+	"github.com/hollis-labs/tools/folio/cmd/folio/internal/cli"
 )
 
 func TestRun_PresetValidate(t *testing.T) {

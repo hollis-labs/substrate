@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/folio"
-	"github.com/hollis-labs/folio/internal/manifest"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio"
+	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 // TestIntegration_ComposingGoPackagePreset is the v0.2 end-to-end gate. It

@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/hollis-labs/folio/internal/preset"
+	"github.com/hollis-labs/tools/folio/internal/preset"
 )
 
 // LoadResult is returned by a Loader when it resolves a composes[] entry.

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/hollis-labs/folio/internal/compose"
-	"github.com/hollis-labs/folio/internal/preset"
+	"github.com/hollis-labs/tools/folio/internal/compose"
+	"github.com/hollis-labs/tools/folio/internal/preset"
 )
 
 // fakeLoader satisfies compose.Loader from canned in-memory presets.

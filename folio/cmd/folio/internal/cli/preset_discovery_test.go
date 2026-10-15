@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/folio/cmd/folio/internal/cli"
-	"github.com/hollis-labs/folio/service"
+	"github.com/hollis-labs/tools/folio/cmd/folio/internal/cli"
+	"github.com/hollis-labs/tools/folio/service"
 )
 
 // isolateHome points the user preset dir (~/.folio/presets/local) at a temp
