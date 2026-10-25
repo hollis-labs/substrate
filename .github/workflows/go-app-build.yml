@@ -13,7 +13,10 @@ on:
       node_version:  { type: string,  required: false, default: "", description: "set to install node for ui_cmd/test_cmd" }
       ldflags_var:   { type: string,  required: false, default: "main.version", description: "-X target for the version; empty = none" }
       extra_files:   { type: string,  required: false, default: "", description: "space-separated paths added to the tarball" }
-      migrations_glob: { type: string, required: false, default: "", description: "glob of numbered migration files; highest number goes in build-info.json (omitted when empty)" }
+      migrations_glob: { type: string, required: false, default: "", description: "glob of numbered migration files, relative to working_directory; highest number goes in build-info.json (omitted when empty)" }
+      pre_test_cmd:  { type: string,  required: false, default: "", description: "shell run in the TEST job only (hosted runner, never build-1) before ui_cmd/test_cmd, e.g. sudo apt-get install -y bubblewrap" }
+      ldflags_extra: { type: string,  required: false, default: "", description: "extra go linker flags appended as-is after the version -X flag, e.g. -X main.GitSHA=$GITHUB_SHA" }
+      working_directory: { type: string, required: false, default: ".", description: "directory of the Go module / app (go.mod, test, build, ui_cmd, main_pkg, extra_files, migrations_glob are relative to it); dist and the artifact stay at the repo root" }
     outputs:
       version:       { value: "${{ jobs.build.outputs.version }}" }
       artifact:      { value: "${{ jobs.build.outputs.artifact }}" }
@@ -26,13 +29,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env: { GOWORK: "off", GOMAXPROCS: "4", GOFLAGS: "-p=2" }
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
-        with: { go-version-file: go.mod, cache: true }
+        with: { go-version-file: "${{ inputs.working_directory }}/go.mod", cache: true, cache-dependency-path: "${{ inputs.working_directory }}/go.sum" }
       - if: ${{ inputs.node_version != '' }}
         uses: actions/setup-node@v4
         with: { node-version: "${{ inputs.node_version }}" }
+      - if: ${{ inputs.pre_test_cmd != '' }}
+        name: pre_test_cmd
+        run: ${{ inputs.pre_test_cmd }}
       - if: ${{ inputs.ui_cmd != '' }}
         run: ${{ inputs.ui_cmd }}
       - run: ${{ inputs.test_cmd }}
@@ -50,11 +59,14 @@ jobs:
       version:  ${{ steps.ver.outputs.version }}
       artifact: ${{ steps.ver.outputs.artifact }}
     env: { GOWORK: "off", CGO_ENABLED: "0" }
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
     steps:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, fetch-tags: true }
       - uses: actions/setup-go@v6
-        with: { go-version-file: go.mod, cache: false }
+        with: { go-version-file: "${{ inputs.working_directory }}/go.mod", cache: false }
       - if: ${{ inputs.node_version != '' }}
         uses: actions/setup-node@v4
         with: { node-version: "${{ inputs.node_version }}" }
@@ -79,11 +91,14 @@ jobs:
           LDVAR: ${{ inputs.ldflags_var }}
           EXTRA: ${{ inputs.extra_files }}
           MIGGLOB: ${{ inputs.migrations_glob }}
+          LDX: ${{ inputs.ldflags_extra }}
         run: |
           set -euo pipefail
-          rm -rf dist && mkdir -p dist
+          DIST="$GITHUB_WORKSPACE/dist"
+          rm -rf "$DIST" && mkdir -p "$DIST"
           ld="-s -w"; [ -n "$LDVAR" ] && ld="$ld -X $LDVAR=$VERSION"
-          python3 - dist/build-info.json "$APP" "$VERSION" "$TARGETS" "$MIGGLOB" "$GITHUB_SHA" "$(go env GOVERSION)" <<'PY'
+          [ -n "$LDX" ] && ld="$ld $LDX"
+          python3 - "$DIST/build-info.json" "$APP" "$VERSION" "$TARGETS" "$MIGGLOB" "$GITHUB_SHA" "$(go env GOVERSION)" <<'PY'
           import json,sys,re,glob,datetime
           out,app,ver,targets,mig,sha,gov=sys.argv[1:8]
           d={"schema":"fleet-build-info/v1","app":app,"commit":sha,"sha12":sha[:12],"version":ver,"go_version":gov,
@@ -97,11 +112,11 @@ jobs:
             os=${t%/*}; arch=${t#*/}; st=$(mktemp -d)
             GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ld" -o "$st/$BIN" "$PKG"
             [ -n "$EXTRA" ] && cp -r $EXTRA "$st/"
-            cp dist/build-info.json "$st/"
-            tar -C "$st" -czf "dist/${APP}_${VERSION}_${os}_${arch}.tar.gz" .
+            cp "$DIST/build-info.json" "$st/"
+            tar -C "$st" -czf "$DIST/${APP}_${VERSION}_${os}_${arch}.tar.gz" .
             rm -rf "$st"
           done
-          (cd dist && sha256sum ./*.tar.gz ./build-info.json | sed 's# \./# #' > SHA256SUMS && cat SHA256SUMS)
+          (cd "$DIST" && sha256sum ./*.tar.gz ./build-info.json | sed 's# \./# #' > SHA256SUMS && cat SHA256SUMS)
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.ver.outputs.artifact }}
