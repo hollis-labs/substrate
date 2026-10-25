@@ -1,0 +1,110 @@
+name: go-app-build
+# Reusable: test on a hosted runner, build on build-1, publish a workflow artifact.
+# No tag, no release, no install. See ci-build-deploy-workflow-v1.
+on:
+  workflow_call:
+    inputs:
+      app:           { type: string,  required: true,  description: "artifact/tarball name, e.g. basalisk" }
+      main_pkg:      { type: string,  required: true,  description: "go package to build, e.g. ./cmd/basalisk" }
+      binary:        { type: string,  required: false, default: "" , description: "file name inside the tarball (default: app)" }
+      targets:       { type: string,  required: false, default: '["linux/amd64","darwin/arm64"]' }
+      test_cmd:      { type: string,  required: false, default: "go vet ./... && go test -race -count=1 -timeout 8m ./..." }
+      ui_cmd:        { type: string,  required: false, default: "", description: "shell run before go build (e.g. make ui-build); empty = none" }
+      node_version:  { type: string,  required: false, default: "", description: "set to install node for ui_cmd/test_cmd" }
+      ldflags_var:   { type: string,  required: false, default: "main.version", description: "-X target for the version; empty = none" }
+      extra_files:   { type: string,  required: false, default: "", description: "space-separated paths added to the tarball" }
+      migrations_glob: { type: string, required: false, default: "", description: "glob of numbered migration files; highest number goes in build-info.json (omitted when empty)" }
+    outputs:
+      version:       { value: "${{ jobs.build.outputs.version }}" }
+      artifact:      { value: "${{ jobs.build.outputs.artifact }}" }
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env: { GOWORK: "off", GOMAXPROCS: "4", GOFLAGS: "-p=2" }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod, cache: true }
+      - if: ${{ inputs.node_version != '' }}
+        uses: actions/setup-node@v4
+        with: { node-version: "${{ inputs.node_version }}" }
+      - if: ${{ inputs.ui_cmd != '' }}
+        run: ${{ inputs.ui_cmd }}
+      - run: ${{ inputs.test_cmd }}
+      - name: govulncheck
+        continue-on-error: true   # advisory for now (stdlib finding on go 1.26.9); drop once go.mod is patched
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  build:
+    needs: test
+    # A fork PR never reaches build-1; same-repo branches and pushes do.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, build-1]
+    timeout-minutes: 30
+    outputs:
+      version:  ${{ steps.ver.outputs.version }}
+      artifact: ${{ steps.ver.outputs.artifact }}
+    env: { GOWORK: "off", CGO_ENABLED: "0" }
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, fetch-tags: true }
+      - uses: actions/setup-go@v6
+        with: { go-version-file: go.mod, cache: false }
+      - if: ${{ inputs.node_version != '' }}
+        uses: actions/setup-node@v4
+        with: { node-version: "${{ inputs.node_version }}" }
+      - id: ver
+        shell: bash
+        run: |
+          set -euo pipefail
+          v=$(git describe --tags --match 'v*' --dirty=-dirty 2>/dev/null || echo "v0.0.0-$(git rev-list --count HEAD)-g$(git rev-parse --short=7 HEAD)")
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "artifact=${{ inputs.app }}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
+      - if: ${{ inputs.ui_cmd != '' }}
+        shell: bash
+        run: ${{ inputs.ui_cmd }}
+      - name: Build tarballs
+        shell: bash
+        env:
+          APP: ${{ inputs.app }}
+          BIN: ${{ inputs.binary != '' && inputs.binary || inputs.app }}
+          PKG: ${{ inputs.main_pkg }}
+          TARGETS: ${{ inputs.targets }}
+          VERSION: ${{ steps.ver.outputs.version }}
+          LDVAR: ${{ inputs.ldflags_var }}
+          EXTRA: ${{ inputs.extra_files }}
+          MIGGLOB: ${{ inputs.migrations_glob }}
+        run: |
+          set -euo pipefail
+          rm -rf dist && mkdir -p dist
+          ld="-s -w"; [ -n "$LDVAR" ] && ld="$ld -X $LDVAR=$VERSION"
+          python3 - dist/build-info.json "$APP" "$VERSION" "$TARGETS" "$MIGGLOB" "$GITHUB_SHA" "$(go env GOVERSION)" <<'PY'
+          import json,sys,re,glob,datetime
+          out,app,ver,targets,mig,sha,gov=sys.argv[1:8]
+          d={"schema":"fleet-build-info/v1","app":app,"commit":sha,"sha12":sha[:12],"version":ver,"go_version":gov,
+             "built_at":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),"targets":json.loads(targets)}
+          if mig:
+              nums=[int(m.group(1)) for f in glob.glob(mig) for m in [re.match(r"(\d+)",f.split("/")[-1])] if m]
+              if nums: d["migrations_max"]=max(nums)
+          json.dump(d,open(out,"w"),indent=2)
+          PY
+          for t in $(echo "$TARGETS" | python3 -c 'import json,sys;print(" ".join(json.load(sys.stdin)))'); do
+            os=${t%/*}; arch=${t#*/}; st=$(mktemp -d)
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ld" -o "$st/$BIN" "$PKG"
+            [ -n "$EXTRA" ] && cp -r $EXTRA "$st/"
+            cp dist/build-info.json "$st/"
+            tar -C "$st" -czf "dist/${APP}_${VERSION}_${os}_${arch}.tar.gz" .
+            rm -rf "$st"
+          done
+          (cd dist && sha256sum ./*.tar.gz ./build-info.json | sed 's# \./# #' > SHA256SUMS && cat SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.artifact }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: ${{ github.ref == 'refs/heads/main' && 30 || 7 }}
