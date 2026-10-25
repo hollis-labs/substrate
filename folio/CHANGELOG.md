@@ -4,8 +4,11 @@ All notable changes to folio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
 
+## v0.0.1 - 2026-10-25
+
+First tagged release. Pre-1.0: interfaces can change between 0.x versions.
 ### Added
 
 - Opt-in maintained Chimera host for `app-dashboard` 2.1.0 and `chat-app` 1.1.0,
