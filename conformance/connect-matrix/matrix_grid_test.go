@@ -3,6 +3,7 @@ package connectmatrix_test
 import (
 	"bytes"
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -168,5 +169,24 @@ func TestOtherScopesFollowTheOtherAudience(t *testing.T) {
 	b, _ := os.ReadFile(log)
 	if !strings.Contains(string(b), "--audience nanite --label connect-matrix --json --scope nanite.read") {
 		t.Errorf("other-audience mint used the wrong scopes:\n%s", b)
+	}
+}
+
+func TestUnixSocketPair(t *testing.T) {
+	iss := mockIssuer(t)
+	sock := filepath.Join(t.TempDir(), "t.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skip("unix sockets unavailable")
+	}
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	f := false
+	p := tpl("app", "http://tether.invalid")
+	p.UnixSocket, p.Enforcing = sock, &f
+	rs := gridRunner(t, iss, []cm.Pair{p}, []string{"tachyon"}).Run(context.Background(), nil)
+	if c := result(rs[0], "accepted"); c.Result != cm.Pass {
+		t.Errorf("accepted over unix socket: %+v", c)
 	}
 }

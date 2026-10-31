@@ -18,16 +18,16 @@
   "targets": [
     {
       "name": "tether",
-      "target": "http://127.0.0.1:8948",
+      "target": "http://tetherd.local",
       "audience": "tether",
       "scopes": [
         "tether.read"
       ],
       "probe": {
-        "path": "/catalog/agents",
-        "host": "tether.hub.nanite.cloud"
+        "path": "/catalog/agents"
       },
-      "other_audience": "nanite"
+      "other_audience": "nanite",
+      "unix_socket": "/var/lib/fabric/tether/run/tetherd.sock"
     },
     {
       "name": "torque",

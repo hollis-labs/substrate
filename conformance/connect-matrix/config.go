@@ -64,6 +64,12 @@ type Pair struct {
 	Audience string   `json:"audience"`
 	Scopes   []string `json:"scopes"`
 	Probe    Probe    `json:"probe"`
+	// UnixSocket, when set, makes every request for this pair dial that unix
+	// socket instead of the host in Target (Target still supplies the path
+	// base and the default Host header). Use it for an app whose local
+	// listener is a socket, such as Tether (tetherd.sock), whose TCP listener
+	// is the enforce-only remote one.
+	UnixSocket string `json:"unix_socket,omitempty"`
 	// Caller is the app identity the token is minted for (the service
 	// principal). Default: the pair name.
 	Caller string `json:"caller,omitempty"`

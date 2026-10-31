@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -249,13 +250,28 @@ func (r *Runner) probe(ctx context.Context, p Pair, token string) (int, error) {
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	resp, err := r.Client.Do(req) // #nosec G704 -- operator-supplied target
+	resp, err := r.clientFor(p).Do(req) // #nosec G704 -- operator-supplied target
 	if err != nil {
 		return 0, errors.New(scrub(err))
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	_ = resp.Body.Close()
 	return resp.StatusCode, nil
+}
+
+// clientFor returns the runner client, or for a pair with a unix socket a
+// client of the same settings that dials that socket.
+func (r *Runner) clientFor(p Pair) *http.Client {
+	if p.UnixSocket == "" {
+		return r.Client
+	}
+	sock := p.UnixSocket
+	c := *r.Client
+	c.Transport = &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var d net.Dialer
+		return d.DialContext(ctx, "unix", sock)
+	}, DisableKeepAlives: true}
+	return &c
 }
 
 func check(name string, err error, ok string) CheckResult {
