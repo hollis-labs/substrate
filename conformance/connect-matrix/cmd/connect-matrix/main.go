@@ -2,7 +2,7 @@
 // tokens: mint, call, wrong-audience refusal, revoke, rejection within a bound.
 //
 //	connect-matrix mock-issuer [-listen 127.0.0.1:9100] [-iss mock] [-pub-key-out FILE]
-//	connect-matrix run -config FILE [-only NAME,...] [-json FILE]
+//	connect-matrix run -config FILE [-only NAME,...] [-json FILE] [-matrix]
 package main
 
 import (
@@ -52,7 +52,7 @@ func main() {
 func usage() {
 	fmt.Fprintln(os.Stderr, `usage:
   connect-matrix mock-issuer [-listen ADDR] [-iss NAME] [-pub-key-out FILE]
-  connect-matrix run -config FILE [-only NAME,...] [-json FILE]`)
+  connect-matrix run -config FILE [-only NAME,...] [-json FILE] [-matrix]`)
 }
 
 func mockIssuer(ctx context.Context, args []string) error {
@@ -109,6 +109,7 @@ func run(ctx context.Context, args []string) (bool, error) {
 	cfgPath := fs.String("config", "", "config file (JSON)")
 	only := fs.String("only", "", "comma-separated pair names to run")
 	jsonOut := fs.String("json", "", "also write results as JSON to this file")
+	matrix := fs.Bool("matrix", false, "print the caller x target matrix before the table")
 	if err := fs.Parse(args); err != nil {
 		return false, err
 	}
@@ -131,6 +132,9 @@ func run(ctx context.Context, args []string) (bool, error) {
 	}
 	r := &cm.Runner{Issuer: iss, Cfg: cfg}
 	results := r.Run(ctx, sel)
+	if *matrix {
+		cm.WriteMatrix(os.Stdout, results)
+	}
 	cm.WriteTable(os.Stdout, results)
 	if *jsonOut != "" {
 		f, err := os.OpenFile(*jsonOut, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)

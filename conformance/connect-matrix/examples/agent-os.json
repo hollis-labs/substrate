@@ -1,0 +1,142 @@
+{
+  "issuer": {
+    "type": "cli",
+    "command": "/var/lib/fabric/bin/tether",
+    "global_args": [
+      "--catalog",
+      "/var/lib/fabric/tether/catalog"
+    ]
+  },
+  "revoke_bound_seconds": 45,
+  "callers": [
+    "tachyon",
+    "tether",
+    "nanite",
+    "torque",
+    "tesseract"
+  ],
+  "targets": [
+    {
+      "name": "tether",
+      "target": "http://127.0.0.1:8948",
+      "audience": "tether",
+      "scopes": [
+        "tether.read"
+      ],
+      "probe": {
+        "path": "/catalog/agents",
+        "host": "tether.hub.nanite.cloud"
+      },
+      "other_audience": "nanite"
+    },
+    {
+      "name": "torque",
+      "target": "http://127.0.0.1:8990",
+      "audience": "torque",
+      "scopes": [
+        "torque.read"
+      ],
+      "probe": {
+        "path": "/api/v1/tasks?limit=1"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "tesseract",
+      "target": "http://127.0.0.1:8089",
+      "audience": "tesseract",
+      "scopes": [
+        "tesseract.read"
+      ],
+      "probe": {
+        "path": "/v1/namespaces/list"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "nanite",
+      "target": "http://127.0.0.1:8090",
+      "audience": "nanite",
+      "scopes": [
+        "nanite.read"
+      ],
+      "probe": {
+        "path": "/api/agents"
+      },
+      "other_audience": "torque"
+    },
+    {
+      "name": "tachyon",
+      "target": "http://127.0.0.1:8093",
+      "audience": "tachyon",
+      "scopes": [
+        "tachyon.read"
+      ],
+      "probe": {
+        "path": "/api/plugins/console/v1/access/apps"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "fragments-engine",
+      "target": "http://127.0.0.1:8091",
+      "audience": "fragments-engine",
+      "scopes": [
+        "fragments-engine.read"
+      ],
+      "probe": {
+        "path": "/healthz"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "cerberus",
+      "target": "http://127.0.0.1:4783",
+      "audience": "cerberus",
+      "scopes": [
+        "cerberus.read"
+      ],
+      "probe": {
+        "path": "/api/health"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "basalisk",
+      "target": "http://127.0.0.1:8085",
+      "audience": "basalisk",
+      "scopes": [
+        "basalisk.read"
+      ],
+      "probe": {
+        "path": "/status"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "tangent",
+      "target": "http://127.0.0.1:7843",
+      "audience": "tangent",
+      "scopes": [
+        "tangent.read"
+      ],
+      "probe": {
+        "path": "/api/health"
+      },
+      "other_audience": "tether"
+    },
+    {
+      "name": "station",
+      "audience": "station",
+      "scopes": [
+        "station.read"
+      ],
+      "na": "no read endpoint found (every probed path answers 404)",
+      "target": "http://127.0.0.1:8097",
+      "probe": {
+        "path": "/"
+      },
+      "other_audience": "tether"
+    }
+  ]
+}

@@ -26,6 +26,11 @@ type Config struct {
 	// PollIntervalMillis is how often a revoked token is retried. Default 500.
 	PollIntervalMillis int    `json:"poll_interval_ms"`
 	Pairs              []Pair `json:"pairs"`
+	// Callers and Targets generate a pair for every (caller, target): each is
+	// named "caller->target". A caller equal to the target is reported n/a.
+	// Targets are pair templates; their Name is the target app's name.
+	Callers []string `json:"callers,omitempty"`
+	Targets []Pair   `json:"targets,omitempty"`
 }
 
 // IssuerConfig selects where tokens come from.
@@ -37,12 +42,19 @@ type Config struct {
 // answers {"token","id"}; RevokeURL receives POST {"id"} with the same bearer.
 // These shapes are a placeholder until the Tether service-token issuing
 // command lands (CW-20261019-0044); adjust the issuer then, not the pairs.
+//
+// type "cli": the Tether operator CLI on this machine. Command is run as
+// `service-token issue GlobalArgs... --app CALLER --audience AUD --scope S
+// --json` and `service-token revoke JTI GlobalArgs...`. No shell is involved
+// and stdout (the token) is never put in an error or report.
 type IssuerConfig struct {
-	Type           string `json:"type"`
-	URL            string `json:"url,omitempty"`
-	MintURL        string `json:"mint_url,omitempty"`
-	RevokeURL      string `json:"revoke_url,omitempty"`
-	CredentialFile string `json:"credential_file,omitempty"`
+	Type           string   `json:"type"`
+	Command        string   `json:"command,omitempty"`
+	GlobalArgs     []string `json:"global_args,omitempty"`
+	URL            string   `json:"url,omitempty"`
+	MintURL        string   `json:"mint_url,omitempty"`
+	RevokeURL      string   `json:"revoke_url,omitempty"`
+	CredentialFile string   `json:"credential_file,omitempty"`
 }
 
 // Pair is one app-to-app connection to prove.
@@ -52,6 +64,19 @@ type Pair struct {
 	Audience string   `json:"audience"`
 	Scopes   []string `json:"scopes"`
 	Probe    Probe    `json:"probe"`
+	// Caller is the app identity the token is minted for (the service
+	// principal). Default: the pair name.
+	Caller string `json:"caller,omitempty"`
+	// WriteProbe is an optional harmless write made with the same token. Leave
+	// it out where no harmless write exists.
+	WriteProbe *Probe `json:"write_probe,omitempty"`
+	// Posture is "enforcing", "permissive" or "auto" (default when Enforcing is
+	// unset and Callers/Targets are used): auto sends a bogus bearer first and
+	// treats a 2xx answer as permissive.
+	Posture string `json:"posture,omitempty"`
+	// NA, when set, marks the pair not applicable with this reason; nothing is
+	// minted or called.
+	NA string `json:"na,omitempty"`
 	// OtherAudience is the audience of the token used for the wrong-audience
 	// check; default "connect-matrix-other".
 	OtherAudience string `json:"other_audience,omitempty"`
@@ -68,6 +93,8 @@ type Probe struct {
 	Path     string `json:"path"`      // required
 	OKStatus int    `json:"ok_status"` // default 200
 	Body     string `json:"body,omitempty"`
+	// Host, when set, is sent as the Host header (some apps refuse unknown hosts).
+	Host string `json:"host,omitempty"`
 }
 
 // LoadConfig reads and validates a config file.
@@ -95,6 +122,10 @@ func (c *Config) Validate() error {
 		if err := plainURL("issuer.url", c.Issuer.URL); err != nil {
 			return err
 		}
+	case "cli":
+		if c.Issuer.Command == "" {
+			return errors.New("config: issuer.command is required for type cli")
+		}
 	case "http":
 		if c.Issuer.MintURL == "" || c.Issuer.RevokeURL == "" || c.Issuer.CredentialFile == "" {
 			return errors.New("config: issuer.mint_url, revoke_url and credential_file are required for type http")
@@ -114,12 +145,30 @@ func (c *Config) Validate() error {
 	if c.PollIntervalMillis <= 0 {
 		c.PollIntervalMillis = 500
 	}
+	for _, t := range c.Targets {
+		for _, caller := range c.Callers {
+			p := t
+			p.Name = caller + "->" + t.Name
+			p.Caller = caller
+			if caller == t.Name {
+				p.NA = "same app"
+			}
+			if p.Posture == "" && p.Enforcing == nil {
+				p.Posture = "auto"
+			}
+			c.Pairs = append(c.Pairs, p)
+		}
+	}
+	c.Targets, c.Callers = nil, nil
 	if len(c.Pairs) == 0 {
 		return errors.New("config: no pairs")
 	}
 	seen := map[string]bool{}
 	for i := range c.Pairs {
 		p := &c.Pairs[i]
+		if p.NA != "" && p.Target == "" {
+			p.Target = "http://na.invalid"
+		}
 		if p.Name == "" || p.Target == "" || p.Audience == "" || p.Probe.Path == "" {
 			return fmt.Errorf("config: pair %d needs name, target, audience and probe.path", i)
 		}
@@ -132,6 +181,28 @@ func (c *Config) Validate() error {
 		}
 		if len(p.Scopes) == 0 {
 			return fmt.Errorf("config: pair %q needs at least one scope", p.Name)
+		}
+		if p.NA != "" && p.Probe.Path == "" {
+			p.Probe.Path = "/"
+		}
+		switch p.Posture {
+		case "", "enforcing", "permissive", "auto":
+		default:
+			return fmt.Errorf("config: pair %q posture %q (want enforcing, permissive or auto)", p.Name, p.Posture)
+		}
+		if p.Caller == "" {
+			p.Caller = p.Name
+		}
+		if p.WriteProbe != nil {
+			if p.WriteProbe.Path == "" {
+				return fmt.Errorf("config: pair %q write_probe needs a path", p.Name)
+			}
+			if p.WriteProbe.Method == "" {
+				p.WriteProbe.Method = "POST"
+			}
+			if p.WriteProbe.OKStatus == 0 {
+				p.WriteProbe.OKStatus = 200
+			}
 		}
 		if p.Probe.Method == "" {
 			p.Probe.Method = "GET"
@@ -161,7 +232,12 @@ func (c Config) Bound() time.Duration { return time.Duration(c.RevokeBoundSecond
 // Poll is PollIntervalMillis as a duration.
 func (c Config) Poll() time.Duration { return time.Duration(c.PollIntervalMillis) * time.Millisecond }
 
-func (p Pair) enforcing() bool { return p.Enforcing == nil || *p.Enforcing }
+func (p Pair) enforcing() bool {
+	if p.Posture == "permissive" {
+		return false
+	}
+	return p.Enforcing == nil || *p.Enforcing
+}
 
 // plainURL requires an absolute http(s) URL with no userinfo, query or
 // fragment, so a secret cannot ride in a configured URL into a report or an

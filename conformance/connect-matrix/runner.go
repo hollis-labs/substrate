@@ -18,6 +18,14 @@ const (
 	Skip = "skip"
 )
 
+// Pair statuses, the cells of the matrix.
+const (
+	StatusPass        = "pass"
+	StatusFail        = "fail"
+	StatusNotEnforced = "not-enforced"
+	StatusNA          = "n-a"
+)
+
 // CheckResult is one step of a pair's proof.
 type CheckResult struct {
 	Name    string  `json:"name"`
@@ -29,8 +37,11 @@ type CheckResult struct {
 // PairResult is the outcome for one pair.
 type PairResult struct {
 	Name   string        `json:"name"`
+	Caller string        `json:"caller"`
+	App    string        `json:"app"` // target app name (pair name after "->")
 	Target string        `json:"target"`
-	Pass   bool          `json:"pass"`
+	Status string        `json:"status"` // pass, fail, not-enforced or n-a
+	Pass   bool          `json:"pass"`   // false only for fail
 	Checks []CheckResult `json:"checks"`
 }
 
@@ -88,7 +99,24 @@ func SafeTarget(raw string) string {
 }
 
 func (r *Runner) runPair(ctx context.Context, p Pair) (res PairResult) {
-	res = PairResult{Name: p.Name, Target: SafeTarget(p.Target), Pass: true}
+	res = PairResult{Name: p.Name, Caller: p.Caller, App: p.Name, Target: SafeTarget(p.Target), Pass: true}
+	if i := strings.Index(p.Name, "->"); i >= 0 {
+		res.App = p.Name[i+2:]
+	}
+	defer func() {
+		switch {
+		case !res.Pass:
+			res.Status = StatusFail
+		case p.NA != "":
+			res.Status = StatusNA
+		case res.Status == "":
+			res.Status = StatusPass
+		}
+	}()
+	if p.NA != "" {
+		res.Checks = append(res.Checks, CheckResult{Name: "applicable", Result: Skip, Detail: p.NA})
+		return res
+	}
 	add := func(c CheckResult) bool {
 		res.Checks = append(res.Checks, c)
 		if c.Result == Fail {
@@ -97,7 +125,7 @@ func (r *Runner) runPair(ctx context.Context, p Pair) (res PairResult) {
 		return c.Result != Fail
 	}
 
-	good, err := r.Issuer.Mint(ctx, MintRequest{Name: p.Name, Audience: p.Audience, Scopes: p.Scopes})
+	good, err := r.Issuer.Mint(ctx, MintRequest{Name: p.Name, App: p.Caller, Audience: p.Audience, Scopes: p.Scopes})
 	if !add(check("mint", err, "issuer minted a service token")) {
 		return res
 	}
@@ -117,13 +145,28 @@ func (r *Runner) runPair(ctx context.Context, p Pair) (res PairResult) {
 		return res
 	}
 
-	if !p.enforcing() {
-		add(CheckResult{Name: "wrong_audience", Result: Skip, Detail: "pair is not enforcing"})
-		add(CheckResult{Name: "revoked", Result: Skip, Detail: "pair is not enforcing"})
+	if p.WriteProbe != nil {
+		wp := p
+		wp.Probe = *p.WriteProbe
+		st, err := r.probe(ctx, wp, good.Token)
+		add(expectStatus("write_accepted", st, err, p.WriteProbe.OKStatus))
+	}
+
+	enforcing := p.enforcing()
+	if enforcing && p.Posture == "auto" {
+		// A bogus bearer that is admitted shows the target does not check tokens.
+		if st, err := r.probe(ctx, p, "connect-matrix.not-a.token"); err == nil && st/100 == 2 {
+			enforcing = false
+		}
+	}
+	if !enforcing {
+		add(CheckResult{Name: "wrong_audience", Result: Skip, Detail: "target is not enforcing"})
+		add(CheckResult{Name: "revoked", Result: Skip, Detail: "target is not enforcing"})
+		res.Status = StatusNotEnforced
 		return res
 	}
 
-	other, err := r.Issuer.Mint(ctx, MintRequest{Name: p.Name + "-other", Audience: p.OtherAudience, Scopes: p.Scopes})
+	other, err := r.Issuer.Mint(ctx, MintRequest{Name: p.Name + "-other", App: p.Caller, Audience: p.OtherAudience, Scopes: otherScopes(p)})
 	if err != nil {
 		add(CheckResult{Name: "wrong_audience", Result: Fail, Detail: "could not mint the other-audience token: " + err.Error()})
 	} else {
@@ -200,6 +243,9 @@ func (r *Runner) probe(ctx context.Context, p Pair, token string) (int, error) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
+	if p.Probe.Host != "" {
+		req.Host = p.Probe.Host
+	}
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -237,4 +283,17 @@ func expectRejected(name string, got int, err error) CheckResult {
 		return CheckResult{Name: name, Result: Fail, Detail: fmt.Sprintf("target answered %d, want 401 or 403 (is the target enforcing?)", got)}
 	}
 	return CheckResult{Name: name, Result: Pass, Detail: fmt.Sprintf("target answered %d", got)}
+}
+
+// otherScopes rewrites "<audience>.<verb>" scopes to the other audience, since
+// an issuer only grants scopes that belong to the token's audience.
+func otherScopes(p Pair) []string {
+	out := make([]string, len(p.Scopes))
+	for i, s := range p.Scopes {
+		if v, ok := strings.CutPrefix(s, p.Audience+"."); ok {
+			s = p.OtherAudience + "." + v
+		}
+		out[i] = s
+	}
+	return out
 }

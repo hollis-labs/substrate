@@ -4,6 +4,11 @@ connect-matrix is new software. Releases are tagged `0.x`; there are no compatib
 
 ## Unreleased
 
+### Added
+
+- `cli` issuer (Tether `service-token issue`/`revoke`), matrix mode (`callers` x `targets`, `-matrix` grid, per-pair `status` of pass, fail, not-enforced or n-a, JSON `summary`), `posture: auto` detection, `probe.host`, optional `write_probe`, and `examples/agent-os.json`.
+- The wrong-audience token now carries scopes of its own audience.
+
 ## v0.0.1 - 2026-10-25
 
 First tagged release. Pre-1.0: interfaces can change between 0.x versions.

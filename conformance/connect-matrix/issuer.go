@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 )
@@ -23,6 +24,7 @@ type Minted struct {
 // MintRequest describes the token wanted.
 type MintRequest struct {
 	Name     string   `json:"name"`
+	App      string   `json:"app,omitempty"` // caller identity; Name when empty
 	Audience string   `json:"audience"`
 	Scopes   []string `json:"scopes"`
 	Kind     string   `json:"kind"`
@@ -42,6 +44,8 @@ func NewIssuer(c IssuerConfig, client *http.Client) (Issuer, error) {
 	switch c.Type {
 	case "mock":
 		return &httpIssuer{client: client, mint: strings.TrimRight(c.URL, "/") + "/mock/mint", revoke: strings.TrimRight(c.URL, "/") + "/mock/revoke"}, nil
+	case "cli":
+		return &cliIssuer{cmd: c.Command, global: c.GlobalArgs}, nil
 	case "http":
 		return &httpIssuer{client: client, mint: c.MintURL, revoke: c.RevokeURL, credFile: c.CredentialFile}, nil
 	}
@@ -128,4 +132,62 @@ func sameOrigin(c *http.Client, first *url.URL) *http.Client {
 		return nil
 	}
 	return &cc
+}
+
+// cliIssuer drives the Tether operator CLI. Exec without a shell; the token is
+// read from stdout and never appears in an error.
+type cliIssuer struct {
+	cmd    string
+	global []string
+}
+
+func (c *cliIssuer) Mint(ctx context.Context, r MintRequest) (Minted, error) {
+	app := r.App
+	if app == "" {
+		app = r.Name
+	}
+	args := append([]string{"service-token", "issue"}, c.global...)
+	args = append(args, "--app", app, "--audience", r.Audience, "--label", "connect-matrix", "--json")
+	for _, s := range r.Scopes {
+		args = append(args, "--scope", s)
+	}
+	var out, errb bytes.Buffer
+	cmd := exec.CommandContext(ctx, c.cmd, args...) // #nosec G204 -- operator-configured command, no shell
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		return Minted{}, errors.New("issuer command failed: " + firstLine(errb.String()))
+	}
+	var d struct {
+		Token string `json:"token"`
+		JTI   string `json:"jti"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &d); err != nil || d.Token == "" || d.JTI == "" {
+		return Minted{}, errors.New("issuer command reply lacks token or jti")
+	}
+	return Minted{Token: d.Token, ID: d.JTI}, nil
+}
+
+func (c *cliIssuer) Revoke(ctx context.Context, m Minted) error {
+	args := append([]string{"service-token", "revoke", m.ID}, c.global...)
+	var errb bytes.Buffer
+	cmd := exec.CommandContext(ctx, c.cmd, args...) // #nosec G204
+	cmd.Stderr = &errb
+	if err := cmd.Run(); err != nil {
+		return errors.New("issuer revoke failed: " + firstLine(errb.String()))
+	}
+	return nil
+}
+
+func firstLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		s = s[:i]
+	}
+	if len(s) > 200 {
+		s = s[:200]
+	}
+	if s == "" {
+		return "no output"
+	}
+	return s
 }

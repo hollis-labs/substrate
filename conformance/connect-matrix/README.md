@@ -36,6 +36,21 @@ Exit status is 0 when every pair passes, 1 when a pair fails, 2 for a usage or c
 - `mock`: a `connect-matrix mock-issuer` instance. Its service tokens are Ed25519 JWTs with `kind=service` and an `exp` ten years out (the go-auth verifier requires `exp`, so "no expiry" is a distant one), revoked through its deny-list. State is in memory.
 - `http`: a real issuer. `mint_url` receives `POST {"name","audience","scopes","kind":"service"}` and answers `{"token","id"}`; `revoke_url` receives `POST {"id"}`; both send `Authorization: Bearer <contents of credential_file>`. These shapes are a placeholder until Tether's service-token issuing command exists; only the issuer adapter changes then, not the pair definitions.
 
+- `cli`: the Tether operator CLI on the same machine (`tether service-token issue --json` / `revoke JTI`). Set `issuer.command` and `issuer.global_args` (for example `["--catalog", "/var/lib/fabric/tether/catalog"]`). The token is read from stdout and never reported. Run the harness on the host that has the CLI (agent-os); the issuer principal is `msg://service/<caller>/dev`.
+
+## Matrix mode
+
+`callers` x `targets` in the config expand to one pair per (caller, target), named `caller->target`. `connect-matrix run -matrix` prints a caller by target grid with one status per cell:
+
+| status | meaning |
+| --- | --- |
+| `pass` | token minted, accepted, wrong audience refused, revoke took effect |
+| `fail` | any check failed (the table below the grid says which and why) |
+| `not-enforced` | the target admitted the token but also admits a bogus bearer (`posture: auto`, the default in matrix mode) or is declared `permissive`; rejection checks are skipped, nothing is enforced |
+| `n-a` | same app, or the target has `"na": "reason"` (no usable read endpoint) |
+
+The JSON report carries `status` per pair and a `summary` count. A target may set `probe.host` (Host header), a harmless `write_probe` (checked as `write_accepted`), and `other_audience` (a real audience the issuer knows; its scopes are rewritten to that audience). `examples/agent-os.json` is the live agent-os matrix.
+
 ## Config
 
 See `examples/pairs.json`. Unknown fields are rejected. Targets and issuer URLs must be absolute http(s) URLs with no userinfo, query or fragment (a secret cannot ride in a URL into a report or error; reports show scheme and host only). `probe.ok_status` must be a 2xx status: `accepted` has to show the target admitted the token, so a target that answers 401 to everything cannot pass. A pair needs `name`, `target`, `audience`, at least one scope and `probe.path`; `probe.method` defaults to GET and `probe.ok_status` to 200. `other_audience` (default `connect-matrix-other`) is the audience of the wrong-audience token.
