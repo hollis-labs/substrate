@@ -18,6 +18,7 @@ import (
 	_ "github.com/hollis-labs/substrate/modules/capabilities"
 	_ "github.com/hollis-labs/substrate/modules/cli"
 	_ "github.com/hollis-labs/substrate/modules/config"
+	_ "github.com/hollis-labs/substrate/modules/events"
 	_ "github.com/hollis-labs/substrate/modules/health"
 	_ "github.com/hollis-labs/substrate/modules/httphost"
 	_ "github.com/hollis-labs/substrate/modules/logging"

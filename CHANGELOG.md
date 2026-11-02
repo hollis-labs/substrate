@@ -5,6 +5,15 @@ minor releases may break APIs.
 
 ## [Unreleased]
 
+### Added
+
+- UI contribution manifest (`ui/`, v0): a module that implements `module.UIContributor` returns an embedded `ui.json` (nav, settings, panels, widgets, envelopes, routes), validated against a pluggable `ui.Vocabulary` (the design team owns the names). Package versions are never written there; `package.version_ref` points into the BOM.
+- Declared routes: `module.AddRoutes` binds each route in `ui.json` to a handler and a scope (`{app}`, `authenticated`, or the module's `scope` config), and httphost mounts and scope-maps them, so a route cannot be left unmapped. Paths outside `/api/` (such as `/admin/...`) are mounted exactly under the same guard. `capabilities` now uses it.
+- `GET /api/me` (auth): the caller's principal and the guard mode, for any verified caller.
+- `apierr`: one flat error body `{code, message, details?}` for everything Substrate serves; httphost rewrites the auth guard's nested body to it, because the app-runtime client reads `message` at the top level.
+- `events` module: replayable SSE at `GET /api/events?topic=` over libs `streamhub` and `ssekit`, with Last-Event-ID resume, an explicit `gap` frame, heartbeats, a per-app topic authorizer and `events.UseLog` for a durable log. Scope `<app>.events`.
+- Conformance: every contribution validates, and every declared route is mapped and served in enforce mode.
+
 ## [0.1.0] - 2026-11-02
 
 First tagged release.

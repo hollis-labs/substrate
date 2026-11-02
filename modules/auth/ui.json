@@ -1,0 +1,7 @@
+{
+  "schema_version": 0,
+  "module": "auth",
+  "routes": [
+    { "method": "GET", "path": "/api/me", "scope": "authenticated" }
+  ]
+}

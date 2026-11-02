@@ -4,20 +4,16 @@ package capabilities
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"net/http"
 
 	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/ui"
 )
 
-// Keys under which the report http.Handler and its auth scope are published.
-// httphost mounts the handler at GET /api/capabilities and, when the auth module
-// is started, maps that route to the scope so enforce mode does not fail it
-// closed as unmapped.
-const (
-	Key      = "capabilities.handler"
-	ScopeKey = "capabilities.scope"
-)
+//go:embed ui.json
+var uiJSON []byte
 
 func init() { module.Register(mod{}) }
 
@@ -25,23 +21,20 @@ type mod struct{}
 
 func (mod) Name() string { return "capabilities" }
 
-func (mod) Start(_ context.Context, app *module.App) error {
-	// Config under "capabilities": scope, the scope required in enforce mode
-	// (default "<app>.read").
-	scope := app.Name + ".read"
-	if cfg, ok := app.Config["capabilities"].(map[string]any); ok {
-		if s, ok := cfg["scope"].(string); ok && s != "" {
-			scope = s
-		}
-	}
-	app.Set(ScopeKey, scope)
-	app.Set(Key, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"app": app.Name, "started": app.Started, "linked": module.Linked(),
-		})
-	}))
-	return nil
+// UI declares GET /api/capabilities, scope "<app>.read" unless the app sets
+// capabilities.scope in config. httphost mounts it and maps the scope when auth
+// is started, so enforce mode does not fail it closed as unmapped.
+func (mod) UI() ui.Contribution { return ui.MustParse(uiJSON) }
+
+func (m mod) Start(_ context.Context, app *module.App) error {
+	return module.AddRoutes(app, m.UI(), map[string]http.Handler{
+		"GET /api/capabilities": http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"app": app.Name, "started": app.Started, "linked": module.Linked(),
+			})
+		}),
+	})
 }
 
 func (mod) Stop(context.Context) error { return nil }

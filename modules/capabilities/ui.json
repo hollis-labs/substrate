@@ -1,0 +1,7 @@
+{
+  "schema_version": 0,
+  "module": "capabilities",
+  "routes": [
+    { "method": "GET", "path": "/api/capabilities", "scope": "{app}.read" }
+  ]
+}

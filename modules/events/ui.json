@@ -1,0 +1,7 @@
+{
+  "schema_version": 0,
+  "module": "events",
+  "routes": [
+    { "method": "GET", "path": "/api/events", "scope": "{app}.events" }
+  ]
+}

@@ -3,8 +3,11 @@ package module
 import (
 	"context"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/hollis-labs/substrate/ui"
 )
 
 type probe struct {
@@ -110,4 +113,60 @@ func TestDuplicateRegistrationPanics(t *testing.T) {
 		}
 	}()
 	Register(probe{name: "a", log: &log})
+}
+
+func contribution(routes ...ui.Route) ui.Contribution {
+	return ui.Contribution{Module: "demo", Routes: routes}
+}
+
+func h(name string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(name)) })
+}
+
+func TestAddRoutesExpandsAndRegisters(t *testing.T) {
+	app := newApp()
+	app.Name = "hello"
+	c := contribution(
+		ui.Route{Method: "GET", Path: "/api/a", Scope: "{app}.read"},
+		ui.Route{Method: "GET", Path: "/api/b", Scope: ui.Authenticated},
+	)
+	if err := AddRoutes(app, c, map[string]http.Handler{"GET /api/a": h("a"), "GET /api/b": h("b")}); err != nil {
+		t.Fatal(err)
+	}
+	rs := Routes(app)
+	if len(rs) != 2 || rs[0].Scope != "hello.read" || rs[1].Scope != "" {
+		t.Fatalf("routes = %+v", rs)
+	}
+	if rs[0].Pattern() != "GET /api/a" {
+		t.Errorf("pattern %q", rs[0].Pattern())
+	}
+}
+
+func TestAddRoutesConfigOverridesScope(t *testing.T) {
+	app := newApp()
+	app.Config["demo"] = map[string]any{"scope": "ops.inspect"}
+	c := contribution(ui.Route{Method: "GET", Path: "/api/a", Scope: "{app}.read"})
+	if err := AddRoutes(app, c, map[string]http.Handler{"GET /api/a": h("a")}); err != nil {
+		t.Fatal(err)
+	}
+	if got := Routes(app)[0].Scope; got != "ops.inspect" {
+		t.Fatalf("scope %q", got)
+	}
+}
+
+func TestAddRoutesRefusesAMismatchBetweenDeclarationAndHandlers(t *testing.T) {
+	c := contribution(ui.Route{Method: "GET", Path: "/api/a", Scope: "x"})
+	if err := AddRoutes(newApp(), c, map[string]http.Handler{}); err == nil || !strings.Contains(err.Error(), "no handler") {
+		t.Errorf("declared route without a handler: %v", err)
+	}
+	if err := AddRoutes(newApp(), c, map[string]http.Handler{"GET /api/a": h("a"), "GET /api/z": h("z")}); err == nil || !strings.Contains(err.Error(), "does not declare") {
+		t.Errorf("handler without a declaration: %v", err)
+	}
+	app := newApp()
+	if err := AddRoutes(app, c, map[string]http.Handler{"GET /api/a": h("a")}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddRoutes(app, c, map[string]http.Handler{"GET /api/a": h("a")}); err == nil || !strings.Contains(err.Error(), "already served") {
+		t.Errorf("duplicate route across modules: %v", err)
+	}
 }

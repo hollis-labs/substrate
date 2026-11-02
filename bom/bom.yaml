@@ -23,6 +23,7 @@ libs:
   github.com/hollis-labs/libs/security/policy: v0.1.0
   github.com/hollis-labs/libs/security/secrets: v0.1.0
   github.com/hollis-labs/libs/security/redact: v0.2.0
+  github.com/hollis-labs/libs/ui/ui-go: v0.1.0
 third_party:
   github.com/spf13/cobra: v1.10.2   # CLI standard (matches torque, tether, hadron, cerberus)
   gopkg.in/yaml.v3: v3.0.1          # manifest and BOM parsing

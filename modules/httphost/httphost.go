@@ -6,10 +6,12 @@ import (
 	"context"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	apphost "github.com/hollis-labs/libs/app/app-host/host"
 	libauth "github.com/hollis-labs/libs/security/auth"
 
+	"github.com/hollis-labs/substrate/apierr"
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/health"
 )
@@ -49,26 +51,33 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 			api.Handle("/api/plugins/", h)
 		}
 	}
-	if v, ok := app.Value("capabilities.handler"); ok {
-		api.Handle("GET /api/capabilities", v.(http.Handler))
-		// With auth started, map the route so enforce mode does not 403 it as
-		// unmapped. Read by key so httphost does not import auth or capabilities.
-		if t, ok := app.Values["auth.scopes"].(*libauth.ScopeTable); ok {
-			if scope, ok := app.Values["capabilities.scope"].(string); ok {
-				t.Route("GET", "/api/capabilities", scope)
-			}
-		}
-	}
 	// When the auth module is started, its guard wraps /api/ (never /healthz or
 	// the SPA). Read by key so httphost does not import auth.
-	var apiHandler http.Handler = api
+	guard := func(h http.Handler) http.Handler { return h }
 	if v, ok := app.Value("auth.guard"); ok {
 		if g, ok := v.(interface {
 			Middleware(http.Handler) http.Handler
 		}); ok {
-			apiHandler = g.Middleware(api)
+			guard = g.Middleware
 		}
 	}
+	// Routes modules declared (module.AddRoutes) are mounted here, and mapped to
+	// their scope when auth is started, so none can be left unmapped. /api/ routes
+	// go under the /api/ guard; other declared paths (such as /admin/...) are
+	// mounted exactly, guarded the same way, so the SPA's own routes still fall through.
+	table, _ := app.Values["auth.scopes"].(*libauth.ScopeTable)
+	outerRoutes := http.NewServeMux()
+	for _, r := range module.Routes(app) {
+		if table != nil {
+			table.Route(r.Method, r.Path, r.Scope)
+		}
+		if strings.HasPrefix(r.Path, "/api/") {
+			api.Handle(r.Pattern(), r.Handler)
+		} else {
+			outerRoutes.Handle(r.Pattern(), apierr.Normalize(guard(r.Handler)))
+		}
+	}
+	apiHandler := apierr.Normalize(guard(api))
 	h, err := apphost.New(apphost.Config{Name: app.Name, Assets: o.Assets, Routes: apiHandler})
 	if err != nil {
 		return nil, err
@@ -81,6 +90,13 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	outer.Handle("GET /healthz", health.From(app).Handler())
+	if len(module.Routes(app)) > 0 {
+		for _, r := range module.Routes(app) {
+			if !strings.HasPrefix(r.Path, "/api/") {
+				outer.Handle(r.Pattern(), outerRoutes)
+			}
+		}
+	}
 	outer.Handle("/", h.Handler())
 	return outer, nil
 }

@@ -6,8 +6,12 @@ package module
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"sort"
+	"strings"
 	"sync"
+
+	"github.com/hollis-labs/substrate/ui"
 )
 
 // Module is one optional capability.
@@ -19,6 +23,13 @@ type Module interface {
 	Start(ctx context.Context, app *App) error
 	// Stop releases anything Start acquired.
 	Stop(ctx context.Context) error
+}
+
+// UIContributor is optionally implemented by a module that contributes UI. The
+// builder reads it to generate the frontend manifest; modules that do not
+// implement it contribute nothing, and minimal builds are unaffected.
+type UIContributor interface {
+	UI() ui.Contribution
 }
 
 // App is the shared surface modules wire into.
@@ -48,6 +59,14 @@ func Register(m Module) {
 		panic("substrate: duplicate module " + m.Name())
 	}
 	registry[m.Name()] = m
+}
+
+// Lookup returns the registered module with name.
+func Lookup(name string) (Module, bool) {
+	mu.RLock()
+	defer mu.RUnlock()
+	m, ok := registry[name]
+	return m, ok
 }
 
 // Linked returns the sorted names of modules compiled into this binary.
@@ -101,4 +120,67 @@ func (r *Runtime) stopLocked(ctx context.Context) error {
 	}
 	r.started = nil
 	return first
+}
+
+// RoutesKey is where AddRoutes accumulates the routes modules serve; httphost
+// mounts them after every module has started.
+const RoutesKey = "http.routes"
+
+// Route is a declared endpoint with the scope it requires and its handler.
+// Scope "" means authentication only.
+type Route struct {
+	Method, Path, Scope string
+	Handler             http.Handler
+}
+
+// Pattern is the net/http mux pattern for the route.
+func (r Route) Pattern() string { return r.Method + " " + r.Path }
+
+// AddRoutes publishes the routes c declares, binding each to its handler by
+// "METHOD /path". Every declared route needs a handler and every handler a
+// declared route, so a route cannot exist without a scope. "{app}" in a scope
+// expands to the app name, "authenticated" means authentication only, and a
+// string config value "scope" under the module's name overrides every scope.
+func AddRoutes(app *App, c ui.Contribution, handlers map[string]http.Handler) error {
+	override := ""
+	if cfg, ok := app.Config[c.Module].(map[string]any); ok {
+		override, _ = cfg["scope"].(string)
+	}
+	have := map[string]Route{}
+	for _, r := range Routes(app) {
+		have[r.Pattern()] = r
+	}
+	used := map[string]bool{}
+	for _, d := range c.Routes {
+		key := d.Method + " " + d.Path
+		h, ok := handlers[key]
+		if !ok {
+			return fmt.Errorf("module %s declares route %q but gave no handler", c.Module, key)
+		}
+		if _, dup := have[key]; dup {
+			return fmt.Errorf("module %s: route %q is already served by another module", c.Module, key)
+		}
+		used[key] = true
+		scope := d.Scope
+		if override != "" {
+			scope = override
+		}
+		scope = strings.ReplaceAll(scope, "{app}", app.Name)
+		if scope == ui.Authenticated {
+			scope = ""
+		}
+		app.Values[RoutesKey] = append(Routes(app), Route{Method: d.Method, Path: d.Path, Scope: scope, Handler: h})
+	}
+	for k := range handlers {
+		if !used[k] {
+			return fmt.Errorf("module %s gave a handler for %q, which ui.json does not declare", c.Module, k)
+		}
+	}
+	return nil
+}
+
+// Routes returns the routes modules have published so far.
+func Routes(app *App) []Route {
+	rs, _ := app.Values[RoutesKey].([]Route)
+	return rs
 }

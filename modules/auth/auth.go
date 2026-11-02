@@ -18,13 +18,36 @@ package auth
 
 import (
 	"context"
+	_ "embed"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/ui"
 )
+
+//go:embed ui.json
+var uiJSON []byte
+
+// UI declares GET /api/me: the caller's own identity, for any verified caller.
+func (*mod) UI() ui.Contribution { return ui.MustParse(uiJSON) }
+
+// me answers who the caller is and which mode the guard is in. A permissive or
+// off-mode caller without a token is reported as unauthenticated, not as an error.
+func me(g *libauth.Guard) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		out := map[string]any{"mode": string(g.Mode()), "authenticated": false}
+		if p, ok := libauth.FromContext(r.Context()); ok {
+			out["authenticated"], out["principal"] = p.Verified, p
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		_ = json.NewEncoder(w).Encode(out)
+	})
+}
 
 // Keys under which the guard and scope table are published. httphost reads
 // GuardKey by name, so it does not import this package.
@@ -102,6 +125,10 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	m.cancel = cancel
 	app.Set(GuardKey, g)
 	app.Set(ScopeKey, scopes)
+	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/me": me(g)}); err != nil {
+		cancel()
+		return err
+	}
 	return nil
 }
 

@@ -2,8 +2,10 @@ package auth_test
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
@@ -138,5 +140,73 @@ func TestCapabilitiesScopeIsConfigurable(t *testing.T) {
 	h.ServeHTTP(w, r)
 	if w.Code != 200 {
 		t.Fatalf("got %d want 200", w.Code)
+	}
+}
+
+func get(t *testing.T, h http.Handler, path, bearer string) *httptest.ResponseRecorder {
+	t.Helper()
+	r := httptest.NewRequest("GET", path, nil)
+	if bearer != "" {
+		r.Header.Set("Authorization", "Bearer "+bearer)
+	}
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+func TestMeReportsTheCallerInEnforceMode(t *testing.T) {
+	key := "me-key"
+	run := start(t, `{"auth":{"mode":"enforce","api_keys":[{"id":"svc/me","hash":"`+libauth.HashKey(key)+`","scopes":["t.read"]}]}}`)
+	h, err := httphost.Handler(run.App, httphost.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := get(t, h, "/api/me", key)
+	if w.Code != 200 {
+		t.Fatalf("status %d: %s", w.Code, w.Body)
+	}
+	var out struct {
+		Mode          string `json:"mode"`
+		Authenticated bool   `json:"authenticated"`
+		Principal     struct {
+			ID     string   `json:"id"`
+			Scopes []string `json:"scopes"`
+		} `json:"principal"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Mode != "enforce" || !out.Authenticated || out.Principal.ID != "svc/me" || len(out.Principal.Scopes) != 1 {
+		t.Fatalf("me = %+v", out)
+	}
+	if got := get(t, h, "/api/me", "").Code; got != 401 {
+		t.Errorf("no token: %d, want 401", got)
+	}
+}
+
+func TestMeInOffModeAnswersWithoutAToken(t *testing.T) {
+	t.Setenv("HOLLIS_AUTH", "")
+	run := start(t, `{}`)
+	h, _ := httphost.Handler(run.App, httphost.Options{})
+	w := get(t, h, "/api/me", "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"mode":"off"`) {
+		t.Fatalf("%d %s", w.Code, w.Body)
+	}
+}
+
+// The app-runtime client reads `message` at the top level of an error body.
+func TestGuardDenialsUseTheFlatErrorBody(t *testing.T) {
+	key := "flat-key"
+	run := start(t, `{"auth":{"mode":"enforce","api_keys":[{"id":"svc/f","hash":"`+libauth.HashKey(key)+`","scopes":["t.read"]}]}}`)
+	h, _ := httphost.Handler(run.App, httphost.Options{})
+	for _, c := range []struct{ name, path, bearer, code string }{
+		{"unauthenticated", "/api/me", "", "unauthorized"},
+		{"unmapped route", "/api/nope", key, "route_not_mapped"},
+	} {
+		w := get(t, h, c.path, c.bearer)
+		var b struct{ Code, Message string }
+		if err := json.Unmarshal(w.Body.Bytes(), &b); err != nil || b.Code != c.code || b.Message == "" {
+			t.Errorf("%s: %d %s (want flat code %q with a message)", c.name, w.Code, w.Body, c.code)
+		}
 	}
 }
