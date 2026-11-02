@@ -215,9 +215,11 @@ make install    # go install ./cmd/folio
 CI runs `go test -race`, `go vet`, `golangci-lint`, `govulncheck` and the pins
 drift check on push and pull requests to `main`.
 
-`platform-pins.yaml` is the single canonical source for the portfolio's version
-pins (Go floor, `actions/checkout`, `actions/setup-go`, golangci-lint action and
-binary, govulncheck). It does not drive rendering yet: the presets still carry
+`platform-pins.yaml` mirrors the portfolio's version pins (Go floor,
+`actions/checkout`, `actions/setup-go`, golangci-lint action and binary,
+govulncheck) from `bom/bom.yaml` in github.com/hollis-labs/substrate, the source.
+Do not edit it by hand: change the BOM and run `substrate pins sync --folio <this
+dir>` from a Substrate checkout. It does not drive rendering yet: the presets still carry
 the literals, and `scripts/check-platform-pins-drift.sh` fails when any of them —
 preset `go_version` defaults, rendered workflow templates, folio's own CI, the
 conformance script's floor, or (with `--checklist FILE`) the ratified lib
