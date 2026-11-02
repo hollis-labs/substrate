@@ -7,6 +7,9 @@ minor releases may break APIs.
 
 ### Added
 
+- `auth` module over libs `security/auth` (mode dial, JWT and API-key verifiers, scope table, bind validation); httphost wraps `/api/` with the guard when started. Unmapped routes fail closed in enforce mode, including `/api/capabilities` until the app maps it.
+- `policy` module over libs `security/policy` (shadow by default, fail closed, slog audit). The app registers its PDP with `policy.UsePDP`; starting without one is an error. `policy.AllowAll` is an explicit dev PDP.
+
 - `sqlite` module over libs `core/store` (goose migrations via `sqlite.UseMigrations`, health check, `schema_mode`).
 - Lint cleanup: errcheck findings from the first CI run.
 

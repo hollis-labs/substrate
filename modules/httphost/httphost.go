@@ -44,7 +44,17 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	if v, ok := app.Value("capabilities.handler"); ok {
 		api.Handle("GET /api/capabilities", v.(http.Handler))
 	}
-	h, err := apphost.New(apphost.Config{Name: app.Name, Assets: o.Assets, Routes: api})
+	// When the auth module is started, its guard wraps /api/ (never /healthz or
+	// the SPA). Read by key so httphost does not import auth.
+	var apiHandler http.Handler = api
+	if v, ok := app.Value("auth.guard"); ok {
+		if g, ok := v.(interface {
+			Middleware(http.Handler) http.Handler
+		}); ok {
+			apiHandler = g.Middleware(api)
+		}
+	}
+	h, err := apphost.New(apphost.Config{Name: app.Name, Assets: o.Assets, Routes: apiHandler})
 	if err != nil {
 		return nil, err
 	}

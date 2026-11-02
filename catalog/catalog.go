@@ -18,7 +18,8 @@ var Modules = []Module{
 	{Name: "capabilities", Import: "github.com/hollis-labs/substrate/modules/capabilities", Requires: []string{"health"}, Status: "ready"},
 	// Step 3 of the build order; selectable in the catalogue, not yet buildable.
 	{Name: "mcp", Status: "planned"},
-	{Name: "auth", Status: "planned"},
+	{Name: "policy", Import: "github.com/hollis-labs/substrate/modules/policy", Status: "ready"},
+	{Name: "auth", Import: "github.com/hollis-labs/substrate/modules/auth", Status: "ready"},
 	{Name: "secrets", Status: "planned"},
 	{Name: "sqlite", Import: "github.com/hollis-labs/substrate/modules/sqlite", Requires: []string{"health"}, Status: "ready"},
 	{Name: "pluginhost", Status: "planned"},

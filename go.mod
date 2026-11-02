@@ -5,6 +5,8 @@ go 1.26.10
 require (
 	github.com/hollis-labs/libs/app/app-host v0.1.0
 	github.com/hollis-labs/libs/core/store v0.1.0
+	github.com/hollis-labs/libs/security/auth v0.3.0
+	github.com/hollis-labs/libs/security/policy v0.1.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
