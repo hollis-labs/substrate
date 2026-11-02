@@ -1,0 +1,7 @@
+app: hello-agentic
+variant: app-host
+profiles: [agentic]
+config:
+  logging: { level: info, format: text }
+  auth:
+    mode: off          # dev; set enforce with api_keys or jwks_url for real use

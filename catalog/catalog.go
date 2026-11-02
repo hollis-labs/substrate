@@ -30,8 +30,11 @@ var Modules = []Module{
 // point pending Chrispian's decision.
 var Profiles = map[string][]string{
 	"minimal": {"config", "logging", "health"},
-	// agentic grows to mcp, auth, user, api in build-order step 3.
-	"agentic": {"config", "logging", "health", "capabilities"},
+	// agentic: minimal plus the capability report, secrets, identity and MCP.
+	// policy, sqlite and pluginhost are not in it: policy needs the app's PDP,
+	// sqlite and pluginhost own app data and plugins. Apps add them under
+	// modules.add. mcp pulls in httphost, so agentic needs an HTTP-capable binary.
+	"agentic": {"config", "logging", "health", "capabilities", "secrets", "auth", "mcp"},
 }
 
 // Variants say what the binary is.

@@ -7,12 +7,12 @@ Pre-release; not tagged.
 - Manifest schema + validator, builder (`validate`, `modules`, `generate`, `build`), module registry.
 - Modules: config, logging, health, httphost (over libs app-host), capabilities, sqlite, auth, policy,
   secrets, cli, mcp, pluginhost. Every catalogue module is `ready`.
-- Examples: hello-service, hello-app-host, hello-cli. Acceptance: flag test (minimal vs agentic, `e2e/`).
+- Profiles: `minimal` (config, logging, health) and `agentic` (adds capabilities, secrets, auth, mcp, with httphost).
+- Examples: hello-service, hello-app-host, hello-cli, hello-agentic. Acceptance: flag test (`e2e/`) compares the
+  linked modules and size of minimal vs agentic from one source (about 9.4 MB vs 13.7 MB on arm64 macOS).
 
 ## Next
 
-- Grow the `agentic` profile with the new modules and add `hello-agentic` (it is still
-  `minimal + capabilities`), then extend the flag test to compare real module sets.
 - Reconcile `bom/bom.yaml` with Folio's `platform-pins.yaml` (one source); Go floor is 1.26.10.
 - v0.1.0: per-module and per-profile conformance suites, bump test, tag (a maintainer's call).
 - `gui-shell` profile in a sibling repo; Hadron as the first real app.

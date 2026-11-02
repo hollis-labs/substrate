@@ -7,6 +7,8 @@ minor releases may break APIs.
 
 ### Added
 
+- `agentic` profile is now `minimal` + capabilities, secrets, auth, mcp (httphost comes via mcp). `policy`, `sqlite` and `pluginhost` stay opt-in under `modules.add`. `examples/hello-agentic` registers one MCP tool; e2e tests assert the linked module sets of minimal vs agentic and call the tool over MCP.
+
 - `pluginhost` module over libs app-host `plugins.Inventory`: the app registers its reviewed Specs with `pluginhost.UseSpecs`; plugins start all-or-nothing, stop in reverse, report a `plugins` health check, and httphost mounts `/api/plugins/{id}/...` under the auth guard (unmapped, so denied in enforce mode until the app maps scopes). Tested against a real subprocess plugin.
 
 - `mcp` module over libs `mcp/plugin-mcp` go-mcp (v0.6.0): server created from config, Streamable HTTP mounted at `/mcp` by httphost, guarded by the auth module (scope `<app>.mcp`) regardless of module order; `mcp.Authorize` for per-tool scopes. Apps register tools on `mcp.Server(app)`. Requires httphost.

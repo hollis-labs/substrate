@@ -3,6 +3,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -66,6 +67,10 @@ func buildProfile(t *testing.T, profile string) (bin string, pkgs []string, size
 }
 
 func get(t *testing.T, bin, path string) (int, []byte) {
+	return request(t, bin, "GET", path, "")
+}
+
+func request(t *testing.T, bin, method, path, body string) (int, []byte) {
 	t.Helper()
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
@@ -79,7 +84,10 @@ func get(t *testing.T, bin, path string) (int, []byte) {
 	var resp *http.Response
 	var err error
 	for i := 0; i < 50; i++ {
-		resp, err = http.Get("http://" + addr + path)
+		req, _ := http.NewRequest(method, "http://"+addr+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		resp, err = http.DefaultClient.Do(req)
 		if err == nil {
 			break
 		}
@@ -109,11 +117,20 @@ func TestFlag(t *testing.T) {
 		}
 		return false
 	}
-	if has(minPkgs, "capabilities") {
-		t.Fatal("minimal links capabilities")
+	agenticOnly := []string{"capabilities", "secrets", "auth", "mcp"}
+	for _, m := range agenticOnly {
+		if has(minPkgs, m) {
+			t.Errorf("minimal links %s", m)
+		}
+		if !has(agPkgs, m) {
+			t.Errorf("agentic does not link %s", m)
+		}
 	}
-	if !has(agPkgs, "capabilities") {
-		t.Fatal("agentic does not link capabilities")
+	// Modules in neither profile must not be linked by either.
+	for _, m := range []string{"policy", "sqlite", "pluginhost", "cli"} {
+		if has(minPkgs, m) || has(agPkgs, m) {
+			t.Errorf("%s linked but selected by neither profile", m)
+		}
 	}
 	if agSize <= minSize {
 		t.Errorf("agentic binary (%d) not larger than minimal (%d)", agSize, minSize)
@@ -122,15 +139,71 @@ func TestFlag(t *testing.T) {
 	if code, _ := get(t, minBin, "/api/capabilities"); code != http.StatusNotFound {
 		t.Errorf("minimal /api/capabilities = %d, want 404", code)
 	}
+	// The SPA fallback answers unmapped paths, so absence of MCP shows as no JSON-RPC reply.
+	rpc := `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`
+	if _, b := request(t, minBin, "POST", "/mcp", rpc); strings.Contains(string(b), `"jsonrpc"`) {
+		t.Errorf("minimal answered MCP: %s", b)
+	}
+	if _, b := request(t, agBin, "POST", "/mcp", rpc); !strings.Contains(string(b), `"jsonrpc"`) {
+		t.Errorf("agentic did not answer MCP: %s", b)
+	}
 	code, body := get(t, agBin, "/api/capabilities")
 	if code != 200 {
 		t.Fatalf("agentic /api/capabilities = %d", code)
 	}
 	var rep struct{ Started []string }
-	if err := json.Unmarshal(body, &rep); err != nil || !has(rep.Started, "capabilities") {
+	if err := json.Unmarshal(body, &rep); err != nil || !has(rep.Started, "mcp") {
 		t.Errorf("bad report %s", body)
 	}
 	if code, _ := get(t, agBin, "/healthz"); code != 200 {
 		t.Errorf("/healthz = %d", code)
+	}
+}
+
+// TestHelloAgentic builds the real example from its manifest, then lists and
+// calls its one tool over MCP.
+func TestHelloAgentic(t *testing.T) {
+	r := root(t)
+	cli := filepath.Join(t.TempDir(), "substrate")
+	run(t, r, "go", "build", "-o", cli, "./cmd/substrate")
+	bin := filepath.Join(t.TempDir(), "hello-agentic")
+	run(t, r, cli, "build", "-f", "examples/hello-agentic/substrate.yaml", "-o", bin)
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	c := exec.Command(bin)
+	c.Env = append(os.Environ(), "ADDR="+addr)
+	if err := c.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = c.Process.Kill(); _ = c.Wait() }()
+
+	post := func(body string) string {
+		req, _ := http.NewRequest("POST", "http://"+addr+"/mcp", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		var resp *http.Response
+		var err error
+		for i := 0; i < 50; i++ {
+			resp, err = http.DefaultClient.Do(req.Clone(context.Background()))
+			if err == nil {
+				break
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		var b bytes.Buffer
+		_, _ = b.ReadFrom(resp.Body)
+		return b.String()
+	}
+	if out := post(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`); !strings.Contains(out, `"hello"`) {
+		t.Errorf("tools/list missing hello: %s", out)
+	}
+	if out := post(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hello","arguments":{}}}`); !strings.Contains(out, "hello") {
+		t.Errorf("tools/call: %s", out)
 	}
 }
