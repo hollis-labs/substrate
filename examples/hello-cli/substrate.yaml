@@ -1,0 +1,5 @@
+app: hello-cli
+variant: cli
+profiles: [minimal]
+config:
+  logging: { level: warn, format: text }

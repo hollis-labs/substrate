@@ -39,3 +39,17 @@ func TestValidateRejects(t *testing.T) {
 		}
 	}
 }
+
+func TestCLIVariantIncludesCLIModule(t *testing.T) {
+	m, err := Parse([]byte("app: a\nvariant: cli\nprofiles: [minimal]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := m.Resolve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(got, ","), "cli") {
+		t.Fatalf("cli variant must start the cli module: %v", got)
+	}
+}

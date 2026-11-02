@@ -29,31 +29,46 @@ func (r *Registry) Add(name string, c Check) {
 	r.checks[name] = c
 }
 
-// Handler serves {"status":"ok"|"degraded","checks":{name:"ok"|error}}; 503 when degraded.
+// Report is the health convention: status "ok" or "degraded", one entry per check.
+type Report struct {
+	Status string            `json:"status"`
+	Checks map[string]string `json:"checks"`
+}
+
+// Report runs every check and returns the result.
+func (r *Registry) Report(ctx context.Context) Report {
+	r.mu.RLock()
+	names := make([]string, 0, len(r.checks))
+	for n := range r.checks {
+		names = append(names, n)
+	}
+	r.mu.RUnlock()
+	sort.Strings(names)
+	rep := Report{Status: "ok", Checks: map[string]string{}}
+	for _, n := range names {
+		r.mu.RLock()
+		c := r.checks[n]
+		r.mu.RUnlock()
+		if err := c(ctx); err != nil {
+			rep.Checks[n], rep.Status = err.Error(), "degraded"
+		} else {
+			rep.Checks[n] = "ok"
+		}
+	}
+	return rep
+}
+
+// Handler serves the Report as JSON; 503 when degraded.
 func (r *Registry) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		r.mu.RLock()
-		names := make([]string, 0, len(r.checks))
-		for n := range r.checks {
-			names = append(names, n)
-		}
-		r.mu.RUnlock()
-		sort.Strings(names)
-		status, code := "ok", http.StatusOK
-		res := map[string]string{}
-		for _, n := range names {
-			r.mu.RLock()
-			c := r.checks[n]
-			r.mu.RUnlock()
-			if err := c(req.Context()); err != nil {
-				res[n], status, code = err.Error(), "degraded", http.StatusServiceUnavailable
-			} else {
-				res[n] = "ok"
-			}
+		rep := r.Report(req.Context())
+		code := http.StatusOK
+		if rep.Status != "ok" {
+			code = http.StatusServiceUnavailable
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(code)
-		_ = json.NewEncoder(w).Encode(map[string]any{"status": status, "checks": res})
+		_ = json.NewEncoder(w).Encode(rep)
 	})
 }
 

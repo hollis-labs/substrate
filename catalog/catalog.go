@@ -23,7 +23,7 @@ var Modules = []Module{
 	{Name: "secrets", Import: "github.com/hollis-labs/substrate/modules/secrets", Requires: []string{"logging"}, Status: "ready"},
 	{Name: "sqlite", Import: "github.com/hollis-labs/substrate/modules/sqlite", Requires: []string{"health"}, Status: "ready"},
 	{Name: "pluginhost", Status: "planned"},
-	{Name: "cli", Status: "planned"},
+	{Name: "cli", Import: "github.com/hollis-labs/substrate/modules/cli", Requires: []string{"health"}, Status: "ready"},
 }
 
 // Profiles are composable module bundles. Names and boundaries are a starting
@@ -39,7 +39,7 @@ var Variants = map[string]struct{ Needs []string }{
 	"service":      {},
 	"headless":     {},
 	"app-host":     {Needs: []string{"httphost"}},
-	"cli":          {},
+	"cli":          {Needs: []string{"cli"}},
 	"microservice": {Needs: []string{"httphost"}},
 }
 

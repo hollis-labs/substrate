@@ -18,4 +18,6 @@ libs:
   github.com/hollis-labs/libs/security/policy: v0.1.0
   github.com/hollis-labs/libs/security/secrets: v0.1.0
   github.com/hollis-labs/libs/security/redact: v0.2.0
+third_party:
+  github.com/spf13/cobra: v1.10.2   # CLI standard (matches torque, tether, hadron, cerberus)
 kits: {}                  # design-kit packages arrive with the gui-shell profile
