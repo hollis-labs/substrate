@@ -44,11 +44,15 @@ func buildProfile(t *testing.T, profile string) (bin string, pkgs []string, size
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	src, _ := os.ReadFile(filepath.Join(r, "examples/hello-app-host/main.go"))
-	os.WriteFile(filepath.Join(dir, "main.go"), src, 0o644)
-	os.WriteFile(filepath.Join(dir, "substrate.yaml"),
-		[]byte("app: flag-"+profile+"\nvariant: app-host\nprofiles: ["+profile+"]\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), src, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := "app: flag-" + profile + "\nvariant: app-host\nprofiles: [" + profile + "]\n"
+	if err := os.WriteFile(filepath.Join(dir, "substrate.yaml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	bin = filepath.Join(dir, "app")
 	run(t, r, cli, "build", "-f", filepath.Join(dir, "substrate.yaml"), "-o", bin)
 	deps := run(t, dir, "go", "list", "-deps", "-f", "{{.ImportPath}}", ".")
@@ -65,13 +69,13 @@ func get(t *testing.T, bin, path string) (int, []byte) {
 	t.Helper()
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	addr := ln.Addr().String()
-	ln.Close()
+	_ = ln.Close()
 	c := exec.Command(bin)
 	c.Env = append(os.Environ(), "ADDR="+addr)
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { c.Process.Kill(); c.Wait() }()
+	defer func() { _ = c.Process.Kill(); _ = c.Wait() }()
 	var resp *http.Response
 	var err error
 	for i := 0; i < 50; i++ {
@@ -84,9 +88,9 @@ func get(t *testing.T, bin, path string) (int, []byte) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var b bytes.Buffer
-	b.ReadFrom(resp.Body)
+	_, _ = b.ReadFrom(resp.Body)
 	return resp.StatusCode, b.Bytes()
 }
 

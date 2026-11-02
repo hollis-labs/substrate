@@ -20,7 +20,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	defer run.Stop(context.Background())
+	defer func() { _ = run.Stop(context.Background()) }()
 	h, err := httphost.Handler(run.App, httphost.Options{})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -36,6 +36,6 @@ func main() {
 		os.Exit(1)
 	}
 	srv := &http.Server{Handler: h}
-	go func() { <-ctx.Done(); srv.Close() }()
+	go func() { <-ctx.Done(); _ = srv.Close() }()
 	_ = srv.Serve(ln)
 }

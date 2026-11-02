@@ -7,6 +7,9 @@ minor releases may break APIs.
 
 ### Added
 
+- `sqlite` module over libs `core/store` (goose migrations via `sqlite.UseMigrations`, health check, `schema_mode`).
+- Lint cleanup: errcheck findings from the first CI run.
+
 - Manifest schema (`substrate.yaml`), validator and module resolver.
 - Builder CLI: `validate`, `modules`, `generate`, `build`.
 - Module registry and the config, logging, health, httphost (over libs app-host) and capabilities modules.

@@ -4,7 +4,7 @@
 # Folio with this file (one source) is an open decision.
 substrate: v0.0.0-dev
 toolchain:
-  go: "1.26.9"            # app-host requires 1.26.9; folio floor is 1.26.6 (to reconcile)
+  go: "1.26.10"           # core/store requires 1.26.10; folio floor is 1.26.6 (to reconcile)
 ci:
   actions_checkout: "v5"
   actions_setup_go: "v6"
@@ -13,4 +13,5 @@ ci:
   govulncheck_version: "v1.8.0"
 libs:
   github.com/hollis-labs/libs/app/app-host: v0.1.0
+  github.com/hollis-labs/libs/core/store: v0.1.0
 kits: {}                  # design-kit packages arrive with the gui-shell profile

@@ -72,11 +72,11 @@ func (r *Runtime) Start(ctx context.Context, app *App, names []string) error {
 	for _, n := range names {
 		m, ok := registry[n]
 		if !ok {
-			r.stopLocked(ctx)
+			_ = r.stopLocked(ctx)
 			return fmt.Errorf("substrate: module %q is not linked into this binary", n)
 		}
 		if err := m.Start(ctx, app); err != nil {
-			r.stopLocked(ctx)
+			_ = r.stopLocked(ctx)
 			return fmt.Errorf("substrate: start %s: %w", n, err)
 		}
 		r.started = append(r.started, m)
