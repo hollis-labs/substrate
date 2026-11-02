@@ -1,0 +1,5 @@
+app: hello-service
+variant: service
+profiles: [minimal]
+config:
+  logging: { level: info, format: text }

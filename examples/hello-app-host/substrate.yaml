@@ -1,0 +1,5 @@
+app: hello-app-host
+variant: app-host
+profiles: [minimal]
+config:
+  logging: { level: info, format: text }

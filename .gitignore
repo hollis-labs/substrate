@@ -1,0 +1,3 @@
+.flag-*/
+/examples/*/hello-*
+*.test

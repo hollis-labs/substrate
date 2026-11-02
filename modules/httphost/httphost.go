@@ -1,0 +1,55 @@
+// Package httphost wraps libs app-host: SPA assets, /api/ routes, /plugins/, and
+// the health registry served on /healthz. The app owns listeners and policy.
+package httphost
+
+import (
+	"context"
+	"io/fs"
+	"net/http"
+
+	apphost "github.com/hollis-labs/libs/app/app-host/host"
+
+	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/health"
+)
+
+func init() { module.Register(mod{}) }
+
+type mod struct{}
+
+func (mod) Name() string { return "httphost" }
+
+func (mod) Start(_ context.Context, app *module.App) error {
+	if health.From(app) == nil {
+		return http.ErrNotSupported // unreachable via builder: health is required
+	}
+	return nil
+}
+
+func (mod) Stop(context.Context) error { return nil }
+
+// Options are the app-owned inputs to the host.
+type Options struct {
+	Assets fs.FS          // embedded SPA, may be nil
+	Routes *http.ServeMux // app routes mounted under /api/, may be nil
+}
+
+// Handler builds the app handler after all modules have started, so modules
+// that published handlers (health, capabilities) are mounted.
+func Handler(app *module.App, o Options) (http.Handler, error) {
+	api := http.NewServeMux()
+	if o.Routes != nil {
+		api.Handle("/api/", o.Routes)
+	}
+	if v, ok := app.Value("capabilities.handler"); ok {
+		api.Handle("GET /api/capabilities", v.(http.Handler))
+	}
+	h, err := apphost.New(apphost.Config{Name: app.Name, Assets: o.Assets, Routes: api})
+	if err != nil {
+		return nil, err
+	}
+	outer := http.NewServeMux()
+	outer.Handle("GET /healthz", health.From(app).Handler())
+	outer.Handle("/", h.Handler())
+	return outer, nil
+}

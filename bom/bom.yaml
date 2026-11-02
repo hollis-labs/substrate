@@ -1,0 +1,16 @@
+# Substrate BOM: the single place pins live. An app depends on a Substrate
+# version only; this file says what that version pins. Scaffold: pins below are
+# seeded from folio platform-pins.yaml and this module's go.mod. Reconciling
+# Folio with this file (one source) is an open decision.
+substrate: v0.0.0-dev
+toolchain:
+  go: "1.26.9"            # app-host requires 1.26.9; folio floor is 1.26.6 (to reconcile)
+ci:
+  actions_checkout: "v5"
+  actions_setup_go: "v6"
+  golangci_lint_action: "v7"
+  golangci_lint_version: "v2.11.4"
+  govulncheck_version: "v1.8.0"
+libs:
+  github.com/hollis-labs/libs/app/app-host: v0.1.0
+kits: {}                  # design-kit packages arrive with the gui-shell profile
