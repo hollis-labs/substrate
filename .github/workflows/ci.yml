@@ -1,17 +1,27 @@
 name: ci
 on:
-  push: { branches: [main] }
+  push:
+    branches: [main]
   pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      GOPRIVATE: github.com/hollis-labs/*
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # public-hygiene scan reads history
       - uses: actions/setup-go@v6
-        with: { go-version-file: go.mod }
+        with:
+          go-version-file: go.mod
       - run: go vet ./...
       - run: go test ./...
       - uses: golangci/golangci-lint-action@v7
-        with: { version: v2.11.4 }
+        with:
+          version: v2.11.4
+      - name: public hygiene (secrets, hosts, private paths; tree and history)
+        run: python3 scripts/scan-public --ref HEAD
