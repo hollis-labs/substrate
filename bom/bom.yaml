@@ -1,11 +1,16 @@
-# Substrate BOM: the single place pins live. An app depends on a Substrate
-# version only; this file says what that version pins. Scaffold: pins below are
-# seeded from folio platform-pins.yaml and this module's go.mod. Reconciling
-# Folio with this file (one source) is an open decision.
+# Substrate BOM: the single place Substrate-specific pins live. An app depends
+# on a Substrate version only; this file says what that version pins.
+#
+# Ownership split (decided 2026-11-02): Folio's platform-pins.yaml is canonical
+# for portfolio-wide pins (the Go floor and the `ci` block). The `ci` block here
+# mirrors it and must not diverge; scripts/check-bom-drift verifies that against
+# a Folio checkout. Everything else (go_min, libs, third_party, kits) is owned
+# here.
 substrate: v0.0.0-dev
 toolchain:
-  go: "1.26.10"           # core/store requires 1.26.10; folio floor is 1.26.6 (to reconcile)
-ci:
+  go_min: "1.26.10"       # Substrate's own minimum (core/store requires it); above the
+                          # portfolio floor in Folio's platform-pins.yaml, never below
+ci:                       # mirrors Folio platform-pins.yaml ci (canonical there)
   actions_checkout: "v5"
   actions_setup_go: "v6"
   golangci_lint_action: "v7"

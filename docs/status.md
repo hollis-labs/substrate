@@ -13,7 +13,6 @@ Pre-release; not tagged.
 
 ## Next
 
-- Reconcile `bom/bom.yaml` with Folio's `platform-pins.yaml` (one source); Go floor is 1.26.10.
 - v0.1.0: per-module and per-profile conformance suites, bump test, tag (a maintainer's call).
 - `gui-shell` profile in a sibling repo; Hadron as the first real app.
 

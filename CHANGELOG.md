@@ -28,3 +28,4 @@ minor releases may break APIs.
 - Module registry and the config, logging, health, httphost (over libs app-host) and capabilities modules.
 - `hello-service` and `hello-app-host` examples; end-to-end flag test (minimal vs agentic).
 - `bom/bom.yaml` pin scaffold, CI workflow, `scripts/scan-public`.
+- BOM ownership split with Folio: `platform-pins.yaml` is canonical for portfolio pins, the BOM `ci` block mirrors it, `toolchain.go` is now `go_min`; `scripts/check-bom-drift` verifies.
