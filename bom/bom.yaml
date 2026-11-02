@@ -14,6 +14,7 @@ ci:
 libs:
   github.com/hollis-labs/libs/app/app-host: v0.1.0
   github.com/hollis-labs/libs/core/store: v0.1.0
+  github.com/hollis-labs/libs/mcp/plugin-mcp: v0.6.0   # apps are on v0.3-v0.6; v0.6.0 is the train
   github.com/hollis-labs/libs/security/auth: v0.3.0
   github.com/hollis-labs/libs/security/policy: v0.1.0
   github.com/hollis-labs/libs/security/secrets: v0.1.0

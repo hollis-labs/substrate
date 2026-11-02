@@ -7,6 +7,8 @@ minor releases may break APIs.
 
 ### Added
 
+- `mcp` module over libs `mcp/plugin-mcp` go-mcp (v0.6.0): server created from config, Streamable HTTP mounted at `/mcp` by httphost, guarded by the auth module (scope `<app>.mcp`) regardless of module order; `mcp.Authorize` for per-tool scopes. Apps register tools on `mcp.Server(app)`. Requires httphost.
+
 - `cli` module (cobra skeleton: `version`, `config` (redacted when secrets is started), `health`); the `cli` variant now starts it. `examples/hello-cli`. `health.Registry.Report` is shared by `/healthz` and the CLI.
 
 - `secrets` module over libs `security/secrets` and `security/redact`: references resolved on demand, resolved values fed to a redaction scope, and the logging module's logger wrapped so they never reach log output. `env://` is off unless `secrets.env: true`. Requires `logging`.

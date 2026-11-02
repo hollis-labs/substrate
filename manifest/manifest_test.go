@@ -25,7 +25,7 @@ func TestValidateRejects(t *testing.T) {
 		"unknown variant":      "app: a\nvariant: nope\nprofiles: [minimal]\n",
 		"unknown profile":      "app: a\nvariant: service\nprofiles: [nope]\n",
 		"unknown module":       "app: a\nvariant: service\nprofiles: [minimal]\nmodules: {add: [nope]}\n",
-		"planned module":       "app: a\nvariant: service\nprofiles: [minimal]\nmodules: {add: [mcp]}\n",
+		"planned module":       "app: a\nvariant: service\nprofiles: [minimal]\nmodules: {add: [pluginhost]}\n",
 		"no app":               "variant: service\nprofiles: [minimal]\n",
 		"removed but required": "app: a\nvariant: app-host\nprofiles: [minimal]\nmodules: {remove: [httphost]}\n",
 	}

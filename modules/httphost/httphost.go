@@ -59,6 +59,12 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		return nil, err
 	}
 	outer := http.NewServeMux()
+	// The mcp module publishes a mount; read by key so httphost does not import it.
+	if v, ok := app.Value("mcp.mount"); ok {
+		if m, ok := v.(interface{ MCPHandler() http.Handler }); ok {
+			outer.Handle("/mcp", m.MCPHandler())
+		}
+	}
 	outer.Handle("GET /healthz", health.From(app).Handler())
 	outer.Handle("/", h.Handler())
 	return outer, nil

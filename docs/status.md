@@ -1,10 +1,10 @@
 # Status
 
 Done: manifest schema + validator, builder (validate/modules/generate/build), module registry,
-core modules (config, logging, health, sqlite, auth, policy, secrets, cli, httphost over libs app-host), capabilities module,
+core modules (config, logging, health, sqlite, auth, policy, secrets, cli, mcp, httphost over libs app-host), capabilities module,
 hello-service, hello-app-host, flag test (minimal vs agentic).
 
-Placeholders: catalogue entries with status `planned` (mcp, pluginhost) are
+Placeholders: catalogue entries with status `planned` (pluginhost) are
 rejected by the validator. The `agentic` profile is only `minimal + capabilities` until step 3.
 
 Awaiting decisions: standards table (CLI, router, migrations, health, config format, default auth/policy),
