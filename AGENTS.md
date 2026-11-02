@@ -29,4 +29,5 @@ python3 scripts/scan-public --ref HEAD     # secrets / hosts / private paths, tr
 - Pins are hand-edited only in `bom/bom.yaml`. `substrate pins sync` writes `go.mod` and the CI workflow from it (and, with `--folio <dir>`, the generated mirror `folio/platform-pins.yaml` in the hollis-labs/tools monorepo); `substrate pins check` verifies. Never edit those copies by hand.
 - Scope is Go backend plus TypeScript frontend. Other stacks are a seam, not built.
 - The repo is public. No secrets, internal hosts, internal addresses or personal paths in files, commits or CI. Tags are a maintainer's decision.
+- The hollis-labs org is monorepos: Folio is `hollis-labs/tools` under `folio/`, libs is `hollis-labs/libs`. Old standalone clones under `~/dev/hollis-labs/` may point at deleted remotes; work in a fresh clone of the monorepo (Tesseract `project/hollis-labs/knowledge/orientation`).
 - This repo reuses the name of an older libs-era `substrate` repo that was deleted in the 2026-10-19 reorg; stale `github.com/hollis-labs/substrate/<mesh|agent|harness|llm-core>` paths elsewhere are that old code and are not this module.
