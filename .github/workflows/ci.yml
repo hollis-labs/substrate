@@ -20,6 +20,8 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test ./...
+      - name: pins match the BOM (go.mod, this workflow)
+        run: go run ./cmd/substrate pins check
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4

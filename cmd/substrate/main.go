@@ -23,6 +23,9 @@ const usage = `substrate <command> [flags]
   modules  -f substrate.yaml            print the resolved module list
   generate -f substrate.yaml [-pkg main] write substrate_wiring.go next to the manifest
   build    -f substrate.yaml [-o out]   generate, then go build the manifest's directory
+  pins check|sync [--root .] [--folio dir|file|url]
+                                        verify or rewrite go.mod, the CI workflow and
+                                        Folio's platform-pins.yaml from bom/bom.yaml
 `
 
 func main() {
@@ -31,6 +34,10 @@ func main() {
 		os.Exit(2)
 	}
 	cmd, args := os.Args[1], os.Args[2:]
+	if cmd == "pins" {
+		pins(args)
+		return
+	}
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
 	file := fs.String("f", "substrate.yaml", "manifest path")
 	pkg := fs.String("pkg", "main", "package name of the generated wiring file")

@@ -1,0 +1,18 @@
+name: pins-folio
+# Folio's platform-pins.yaml is a generated mirror of the BOM. Check it nightly
+# instead of on every PR, so another repo's lag never blocks a change here.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+      - run: go run ./cmd/substrate pins check --folio https://raw.githubusercontent.com/hollis-labs/tools/main/folio/platform-pins.yaml

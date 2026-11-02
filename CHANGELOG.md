@@ -29,5 +29,5 @@ minor releases may break APIs.
 - `hello-service` and `hello-app-host` examples; end-to-end flag test (minimal vs agentic).
 - `bom/bom.yaml` pin scaffold, CI workflow, `scripts/scan-public`.
 - `GET /api/capabilities` is mapped to a scope when auth is started (config `capabilities.scope`, default `<app>.read`), so enforce mode no longer fails it closed as unmapped.
-- Conformance suite (`conformance/`): catalogue consistency, every module and every profile under every variant start and stop cleanly (including restart), plus runtime ordering tests in `module/`. Bump tests assert the BOM agrees with `go.mod` and `ci.yml`. Runs in CI with `go test ./...`.
-- BOM is the source of every pin: `toolchain.go` becomes `go_floor` (portfolio floor) plus `go_min` (Substrate's minimum); Folio's `platform-pins.yaml` mirrors `go_floor` and `ci`; `scripts/check-bom-drift` verifies the mirror.
+- Conformance suite (`conformance/`): catalogue consistency, every module and every profile under every variant start and stop cleanly (including restart), plus runtime ordering tests in `module/`. Runs in CI with `go test ./...`.
+- BOM is the source of every pin: `toolchain.go` becomes `go_floor` (portfolio floor) plus `go_min` (Substrate's minimum); Folio's `platform-pins.yaml` mirrors `go_floor` and `ci`; `substrate pins sync|check` writes and verifies go.mod, the CI workflow and the Folio mirror from it (replaces the earlier bump tests and drift scripts).
