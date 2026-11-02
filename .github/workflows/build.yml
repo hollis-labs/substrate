@@ -1,0 +1,42 @@
+name: build
+# Builds the substrate CLI on build-1 for pushes to main only. Fork PRs never
+# reach this workflow. No tag or release is created: artifacts are attached to
+# the run, with sha256 sums.
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: build-main
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: [self-hosted, Linux, X64, build-1]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: use the go.mod toolchain, not the box's system Go
+        run: echo "GOTOOLCHAIN=go$(awk '/^go /{print $2}' go.mod)" >> "$GITHUB_ENV"
+      - run: go vet ./...
+      - run: go test ./...
+      - name: cross-build (CGO off)
+        run: |
+          set -eu
+          v="$(git rev-parse --short=12 HEAD)"
+          mkdir -p dist
+          for target in linux/amd64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            stage="$(mktemp -d)"
+            CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath -o "$stage/substrate" ./cmd/substrate
+            tar -C "$stage" -czf "dist/substrate_${v}_${os}_${arch}.tar.gz" substrate
+            rm -rf "$stage"
+          done
+          (cd dist && sha256sum ./*.tar.gz > "substrate_${v}_SHA256SUMS")
+          cat "dist/substrate_${v}_SHA256SUMS"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: substrate-${{ github.sha }}
+          path: dist/
+          retention-days: 30

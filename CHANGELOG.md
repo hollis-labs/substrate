@@ -28,6 +28,7 @@ minor releases may break APIs.
 - Module registry and the config, logging, health, httphost (over libs app-host) and capabilities modules.
 - `hello-service` and `hello-app-host` examples; end-to-end flag test (minimal vs agentic).
 - `bom/bom.yaml` pin scaffold, CI workflow, `scripts/scan-public`.
+- `build.yml`: pushes to main cross-build the `substrate` CLI (linux/amd64, darwin/arm64, CGO off) on build-1 after vet and test, and attach tarballs with a sha256 file to the run. No tag or release is created.
 - `GET /api/capabilities` is mapped to a scope when auth is started (config `capabilities.scope`, default `<app>.read`), so enforce mode no longer fails it closed as unmapped.
 - Conformance suite (`conformance/`): catalogue consistency, every module and every profile under every variant start and stop cleanly (including restart), plus runtime ordering tests in `module/`. Runs in CI with `go test ./...`.
 - BOM is the source of every pin: `toolchain.go` becomes `go_floor` (portfolio floor) plus `go_min` (Substrate's minimum); Folio's `platform-pins.yaml` mirrors `go_floor` and `ci`; `substrate pins sync|check` writes and verifies go.mod, the CI workflow and the Folio mirror from it (replaces the earlier bump tests and drift scripts).

@@ -27,8 +27,11 @@ func pins(args []string) {
 		fail(err)
 	}
 	t := bom.Targets{
-		GoMod:    filepath.Join(*root, "go.mod"),
-		Workflow: filepath.Join(*root, ".github", "workflows", "ci.yml"),
+		GoMod: filepath.Join(*root, "go.mod"),
+		Workflows: []string{
+			filepath.Join(*root, ".github", "workflows", "ci.yml"),
+			filepath.Join(*root, ".github", "workflows", "build.yml"),
+		},
 	}
 	if *folio != "" {
 		t.Folio = bom.FolioFile(*folio)

@@ -15,6 +15,7 @@ ci:
   golangci_lint_action: "v7"
   golangci_lint_version: "v2.11.4"
   govulncheck_version: "v1.8.0"
+  actions_upload_artifact: "v4"
 libs:
   github.com/hollis-labs/libs/core/store: v0.1.0
 third_party:
@@ -39,6 +40,7 @@ const workflow = `steps:
   - uses: golangci/golangci-lint-action@v7
     with:
       version: v2.11.4
+  - uses: actions/upload-artifact@v4
 `
 
 const folio = `# header
@@ -70,7 +72,7 @@ func fixture(t *testing.T, mod, wf string) (*BOM, Targets) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return b, Targets{GoMod: put("go.mod", mod), Workflow: put("ci.yml", wf), Folio: put("platform-pins.yaml", folio)}
+	return b, Targets{GoMod: put("go.mod", mod), Workflows: []string{put("ci.yml", wf)}, Folio: put("platform-pins.yaml", folio)}
 }
 
 func mustCheck(t *testing.T, b *BOM, tg Targets) []Diff {
@@ -111,6 +113,7 @@ func TestDriftIsDetectedAndFixed(t *testing.T) {
 		{"lib bump", strings.Replace(goMod, "core/store v0.1.0", "core/store v0.2.0", 1), workflow, "core/store is v0.2.0, bom pins v0.1.0"},
 		{"go directive", strings.Replace(goMod, "go 1.26.10", "go 1.26.9", 1), workflow, "go directive is 1.26.9"},
 		{"action pin", goMod, strings.Replace(workflow, "checkout@v5", "checkout@v4", 1), "ci.actions_checkout"},
+		{"upload-artifact", goMod, strings.Replace(workflow, "upload-artifact@v4", "upload-artifact@v3", 1), "ci.actions_upload_artifact"},
 		{"lint version", goMod, strings.Replace(workflow, "version: v2.11.4", "version: v2.9.0", 1), "ci.golangci_lint_version"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

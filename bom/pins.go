@@ -66,9 +66,9 @@ func (d Diff) String() string { return d.File + ": " + d.Msg }
 
 // Targets say which consumers to examine. Empty fields are skipped.
 type Targets struct {
-	GoMod    string // path to go.mod
-	Workflow string // path to the CI workflow
-	Folio    string // path to Folio's platform-pins.yaml, or an http(s) URL (check only)
+	GoMod     string   // path to go.mod
+	Workflows []string // paths to CI workflows
+	Folio     string   // path to Folio's platform-pins.yaml, or an http(s) URL (check only)
 }
 
 // Check returns every disagreement between the BOM and the targets.
@@ -82,13 +82,13 @@ func Check(b *BOM, t Targets) ([]Diff, error) {
 		_, d := editGoMod(b, string(src))
 		ds = append(ds, tag(t.GoMod, d)...)
 	}
-	if t.Workflow != "" {
-		src, err := os.ReadFile(t.Workflow)
+	for _, w := range t.Workflows {
+		src, err := os.ReadFile(w)
 		if err != nil {
 			return nil, err
 		}
 		_, d := editWorkflow(b, string(src))
-		ds = append(ds, tag(t.Workflow, d)...)
+		ds = append(ds, tag(w, d)...)
 	}
 	if t.Folio != "" {
 		cur, err := readFolio(t.Folio)
@@ -126,13 +126,13 @@ func Sync(b *BOM, t Targets) ([]string, error) {
 			return changed, fmt.Errorf("%s: %s", t.GoMod, strings.Join(rest, "; "))
 		}
 	}
-	if t.Workflow != "" {
-		src, err := os.ReadFile(t.Workflow)
+	for _, w := range t.Workflows {
+		src, err := os.ReadFile(w)
 		if err != nil {
 			return nil, err
 		}
 		out, _ := editWorkflow(b, string(src))
-		if err := write(t.Workflow, string(src), out); err != nil {
+		if err := write(w, string(src), out); err != nil {
 			return nil, err
 		}
 	}
@@ -245,6 +245,7 @@ var workflowPins = []struct {
 }{
 	{"actions_checkout", regexp.MustCompile(`(actions/checkout@)\S+`)},
 	{"actions_setup_go", regexp.MustCompile(`(actions/setup-go@)\S+`)},
+	{"actions_upload_artifact", regexp.MustCompile(`(actions/upload-artifact@)\S+`)}, // optional; not mirrored to Folio
 	{"golangci_lint_action", regexp.MustCompile(`(golangci/golangci-lint-action@)\S+`)},
 	// The lint binary version is the `version:` input on the line after the action.
 	{"golangci_lint_version", regexp.MustCompile(`(golangci/golangci-lint-action@\S+\s+with:\s+version: )\S+`)},
@@ -255,6 +256,9 @@ func editWorkflow(b *BOM, src string) (string, []string) {
 	out := src
 	for _, p := range workflowPins {
 		want := b.CI[p.key]
+		if want == "" { // optional pin the BOM does not set
+			continue
+		}
 		out = p.re.ReplaceAllStringFunc(out, func(m string) string {
 			sub := p.re.FindStringSubmatch(m)
 			if sub[0] != sub[1]+want {
