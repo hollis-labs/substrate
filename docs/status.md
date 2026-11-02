@@ -1,6 +1,6 @@
 # Status
 
-Pre-release; not tagged.
+v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor releases.
 
 ## Built
 
@@ -13,11 +13,18 @@ Pre-release; not tagged.
 
 ## Next
 
-- v0.1.0: tag (a maintainer's call). Conformance suites and the BOM bump test are in `conformance/`.
-- `gui-shell` profile in a sibling repo; Hadron as the first real app.
+- `gui-shell` profile (frontend; repo location to be settled) and Hadron as the first real app.
+- Cosign keyless signing of release artifacts (optional; checksums ship today).
+
+## Known limitations
+
+- **Postgres** is not exposed by the `sqlite` module. libs `core/store` supports it and the Hollis Labs
+  fleet runs a Postgres, so add a `postgres` module (or a driver option) when the first app needs it, not before.
+- `pluginhost` routes are unmapped in auth enforce mode until the app maps scopes for them.
 
 ## Decided
 
 Standards: cobra, stdlib mux, goose via libs core/store, `/healthz` `{status, checks}`, YAML config,
-security/auth + security/policy as defaults. BOM is the single pin source; the builder emits the
+security/auth + security/policy as defaults. `bom/bom.yaml` is the only hand-edited pin source
+(`substrate pins sync|check` keeps `go.mod`, the CI workflows and Folio's mirror in step); the builder emits the
 wiring file only. Tasks live in Torque project Substrate (PRJ-20261102-0001).

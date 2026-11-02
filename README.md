@@ -7,9 +7,9 @@ manifest (`substrate.yaml`) plus its own engine; updating the framework is one v
 listeners, and every module is optional: the manifest picks a variant and profiles, the builder generates
 a wiring file that imports only what was selected, and `go build` does the rest.
 
-> **Status: pre-release.** Config, logging, health, HTTP host and a capability report exist. Auth,
-> secrets, SQLite/migrations, MCP and the plugin host are planned. See [`docs/status.md`](docs/status.md).
-> Not yet tagged; APIs and the manifest schema will change.
+> **Status: v0.1.0.** Config, logging, health, HTTP host, capability report, auth, policy, secrets,
+> SQLite/migrations, MCP, the plugin host and a CLI skeleton exist. See [`docs/status.md`](docs/status.md).
+> Pre-1.0: APIs and the manifest schema may change in minor releases.
 
 ## Example
 
@@ -33,9 +33,9 @@ go run ./cmd/substrate build    -f examples/hello-app-host/substrate.yaml
 | Term | Meaning |
 |---|---|
 | Module | One optional capability: `modules/<name>`, registered in `catalog/catalog.go`. |
-| Profile | A composable module bundle (`minimal`, `agentic`; more planned). |
+| Profile | A composable module bundle (`minimal`, `agentic`; more planned). `policy`, `sqlite` and `pluginhost` are opt-in under `modules.add`. |
 | Variant | What the binary is: `service`, `app-host`, `headless`, `cli`, `microservice`. |
-| BOM | `bom/bom.yaml`, the one place version pins live. |
+| BOM | `bom/bom.yaml`, the one place version pins live; `substrate pins sync` writes `go.mod` and the CI workflows from it. |
 
 Modules wrap and pin [`libs`](https://github.com/hollis-labs/libs); they do not copy it.
 
@@ -43,6 +43,7 @@ Modules wrap and pin [`libs`](https://github.com/hollis-labs/libs); they do not 
 
 ```sh
 go vet ./... && go test ./...
+go run ./cmd/substrate pins check
 python3 scripts/scan-public --ref HEAD
 ```
 
