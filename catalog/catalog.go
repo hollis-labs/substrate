@@ -22,7 +22,7 @@ var Modules = []Module{
 	{Name: "auth", Import: "github.com/hollis-labs/substrate/modules/auth", Status: "ready"},
 	{Name: "secrets", Import: "github.com/hollis-labs/substrate/modules/secrets", Requires: []string{"logging"}, Status: "ready"},
 	{Name: "sqlite", Import: "github.com/hollis-labs/substrate/modules/sqlite", Requires: []string{"health"}, Status: "ready"},
-	{Name: "pluginhost", Status: "planned"},
+	{Name: "pluginhost", Import: "github.com/hollis-labs/substrate/modules/pluginhost", Requires: []string{"health"}, Status: "ready"},
 	{Name: "cli", Import: "github.com/hollis-labs/substrate/modules/cli", Requires: []string{"health"}, Status: "ready"},
 }
 

@@ -7,6 +7,8 @@ minor releases may break APIs.
 
 ### Added
 
+- `pluginhost` module over libs app-host `plugins.Inventory`: the app registers its reviewed Specs with `pluginhost.UseSpecs`; plugins start all-or-nothing, stop in reverse, report a `plugins` health check, and httphost mounts `/api/plugins/{id}/...` under the auth guard (unmapped, so denied in enforce mode until the app maps scopes). Tested against a real subprocess plugin.
+
 - `mcp` module over libs `mcp/plugin-mcp` go-mcp (v0.6.0): server created from config, Streamable HTTP mounted at `/mcp` by httphost, guarded by the auth module (scope `<app>.mcp`) regardless of module order; `mcp.Authorize` for per-tool scopes. Apps register tools on `mcp.Server(app)`. Requires httphost.
 
 - `cli` module (cobra skeleton: `version`, `config` (redacted when secrets is started), `health`); the `cli` variant now starts it. `examples/hello-cli`. `health.Registry.Report` is shared by `/healthz` and the CLI.

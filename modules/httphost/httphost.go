@@ -41,6 +41,13 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	if o.Routes != nil {
 		api.Handle("/api/", o.Routes)
 	}
+	// The pluginhost module publishes the plugin forwarding routes; read by
+	// key so httphost does not import it.
+	if v, ok := app.Value("pluginhost.routes"); ok {
+		if h, ok := v.(http.Handler); ok {
+			api.Handle("/api/plugins/", h)
+		}
+	}
 	if v, ok := app.Value("capabilities.handler"); ok {
 		api.Handle("GET /api/capabilities", v.(http.Handler))
 	}

@@ -3,6 +3,8 @@ package manifest
 import (
 	"strings"
 	"testing"
+
+	"github.com/hollis-labs/substrate/catalog"
 )
 
 func TestResolveMinimalAppHost(t *testing.T) {
@@ -20,12 +22,15 @@ func TestResolveMinimalAppHost(t *testing.T) {
 }
 
 func TestValidateRejects(t *testing.T) {
+	// Every catalogue module is ready today; keep the planned-module rule covered.
+	catalog.Modules = append(catalog.Modules, catalog.Module{Name: "not_built_yet", Status: "planned"})
+	defer func() { catalog.Modules = catalog.Modules[:len(catalog.Modules)-1] }()
 	cases := map[string]string{
 		"unknown field":        "app: a\nvariant: service\nprofiles: [minimal]\nbogus: 1\n",
 		"unknown variant":      "app: a\nvariant: nope\nprofiles: [minimal]\n",
 		"unknown profile":      "app: a\nvariant: service\nprofiles: [nope]\n",
 		"unknown module":       "app: a\nvariant: service\nprofiles: [minimal]\nmodules: {add: [nope]}\n",
-		"planned module":       "app: a\nvariant: service\nprofiles: [minimal]\nmodules: {add: [pluginhost]}\n",
+		"planned module":       "app: a\nvariant: service\nprofiles: [minimal]\nmodules: {add: [not_built_yet]}\n",
 		"no app":               "variant: service\nprofiles: [minimal]\n",
 		"removed but required": "app: a\nvariant: app-host\nprofiles: [minimal]\nmodules: {remove: [httphost]}\n",
 	}
