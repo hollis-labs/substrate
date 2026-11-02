@@ -33,4 +33,4 @@ number appears, put the command that produced it beside it.
   manifest, not the file.
 - **Excluded means not linked.** The builder only imports selected modules; do not import a module from
   another module's non-test code unless the catalogue lists it under `Requires`.
-- **Pins live in `bom/bom.yaml`.** Do not pin versions anywhere else. The `ci` block mirrors Folio's `platform-pins.yaml` (canonical); run `scripts/check-bom-drift <folio-dir>` after changing either.
+- **Pins live in `bom/bom.yaml`.** Do not pin versions anywhere else. Folio's `platform-pins.yaml` mirrors `go_floor` and the `ci` block: after changing them, run Folio's `scripts/sync-platform-pins.sh` and then `scripts/check-bom-drift <folio-dir>`.

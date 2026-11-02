@@ -26,7 +26,7 @@ python3 scripts/scan-public --ref HEAD     # secrets / hosts / private paths, tr
 
 - Layering: Substrate sits above `github.com/hollis-labs/libs` and may import any of it; nothing in libs imports Substrate. Wrap and pin libs code; never copy it.
 - Every module is optional. Selected modules are linked by the generated wiring file only; `go build` of generated output must work without the substrate CLI.
-- Substrate-specific pins live only in `bom/bom.yaml`. Folio's `platform-pins.yaml` is canonical for portfolio-wide pins (Go floor, `ci` block); the BOM's `ci` block mirrors it and `scripts/check-bom-drift <folio-dir>` verifies that.
+- Pins live only in `bom/bom.yaml`. Folio's `platform-pins.yaml` is a generated mirror of `toolchain.go_floor` and the `ci` block (Folio's `scripts/sync-platform-pins.sh`); `scripts/check-bom-drift <folio-dir>` verifies it.
 - Scope is Go backend plus TypeScript frontend. Other stacks are a seam, not built.
 - The repo is public. No secrets, internal hosts, internal addresses or personal paths in files, commits or CI. Tags are a maintainer's decision.
 - This repo reuses the name of an older libs-era `substrate` repo that was deleted in the 2026-10-19 reorg; stale `github.com/hollis-labs/substrate/<mesh|agent|harness|llm-core>` paths elsewhere are that old code and are not this module.

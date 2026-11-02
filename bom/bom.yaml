@@ -1,16 +1,14 @@
-# Substrate BOM: the single place Substrate-specific pins live. An app depends
-# on a Substrate version only; this file says what that version pins.
+# Substrate BOM: the single place version pins live. An app depends on a
+# Substrate version only; this file says what that version pins.
 #
-# Ownership split (decided 2026-11-02): Folio's platform-pins.yaml is canonical
-# for portfolio-wide pins (the Go floor and the `ci` block). The `ci` block here
-# mirrors it and must not diverge; scripts/check-bom-drift verifies that against
-# a Folio checkout. Everything else (go_min, libs, third_party, kits) is owned
-# here.
-substrate: v0.0.0-dev
+# Ownership (decided 2026-11-02): this file is the source. Folio's
+# platform-pins.yaml is a mirror of toolchain.go_floor and the ci block, written
+# by Folio's scripts/sync-platform-pins.sh from this file and never edited by
+# hand. scripts/check-bom-drift verifies the mirror against a Folio checkout.
 toolchain:
-  go_min: "1.26.10"       # Substrate's own minimum (core/store requires it); above the
-                          # portfolio floor in Folio's platform-pins.yaml, never below
-ci:                       # mirrors Folio platform-pins.yaml ci (canonical there)
+  go_floor: "1.26.6"      # portfolio floor, mirrored to Folio (go_floor_1_26_6_everywhere)
+  go_min: "1.26.10"       # Substrate's own minimum (core/store requires it); never below go_floor
+ci:                       # mirrored to Folio platform-pins.yaml
   actions_checkout: "v5"
   actions_setup_go: "v6"
   golangci_lint_action: "v7"
