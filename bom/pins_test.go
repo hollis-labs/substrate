@@ -1,6 +1,8 @@
 package bom
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -166,6 +168,39 @@ func TestUnpinnedAndMissingNeedAHuman(t *testing.T) {
 	b2, tg2 := fixture(t, strings.Replace(goMod, "\tgithub.com/spf13/cobra v1.10.2\n", "", 1), workflow)
 	if ds := mustCheck(t, b2, tg2); !strings.Contains(ds[0].String(), "missing:") {
 		t.Fatalf("pinned module absent from go.mod was not reported: %v", ds)
+	}
+}
+
+func TestKitPinsMustBeExactScopedVersions(t *testing.T) {
+	for name, kits := range map[string]string{
+		"range":    "kits:\n  \"@s/a\": ^1.0.0\n",
+		"unscoped": "kits:\n  a: 1.0.0\n",
+	} {
+		p := filepath.Join(t.TempDir(), "bom.yaml")
+		_ = os.WriteFile(p, []byte(bomYAML+kits), 0o644)
+		if _, err := Load(p); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	good := filepath.Join(t.TempDir(), "bom.yaml")
+	_ = os.WriteFile(good, []byte(bomYAML+"kits:\n  \"@s/a\": 1.0.0\n"), 0o644)
+	if _, err := Load(good); err != nil {
+		t.Errorf("exact scoped pin refused: %v", err)
+	}
+}
+
+func TestCheckNPMReportsUnpublishedVersions(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/@s/a/1.0.0" {
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer srv.Close()
+	b := &BOM{Kits: map[string]string{"@s/a": "1.0.0", "@s/b": "2.0.0"}}
+	ds, err := CheckNPM(b, srv.URL)
+	if err != nil || len(ds) != 1 || !strings.Contains(ds[0].Msg, "@s/b@2.0.0 is not published") {
+		t.Fatalf("diffs = %v, err = %v", ds, err)
 	}
 }
 

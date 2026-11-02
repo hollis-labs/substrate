@@ -27,6 +27,7 @@ type BOM struct {
 	CI         map[string]string `yaml:"ci"`
 	Libs       map[string]string `yaml:"libs"`
 	ThirdParty map[string]string `yaml:"third_party"`
+	Kits       map[string]string `yaml:"kits"` // npm packages the frontend manifest may name, by full name
 }
 
 var ciKeys = []string{"actions_checkout", "actions_setup_go", "golangci_lint_action", "golangci_lint_version", "govulncheck_version"}
@@ -56,7 +57,45 @@ func (b *BOM) validate() error {
 			return fmt.Errorf("bom: ci.%s is required", k)
 		}
 	}
+	for name, v := range b.Kits {
+		if !strings.HasPrefix(name, "@") || !strings.Contains(name, "/") {
+			return fmt.Errorf("bom: kits.%s must be a scoped npm name", name)
+		}
+		if !semverRe.MatchString(v) {
+			return fmt.Errorf("bom: kits.%s %q must be an exact version, not a range", name, v)
+		}
+	}
 	return nil
+}
+
+var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
+
+// CheckNPM reports every pinned kit version the registry does not have. It
+// needs the network, so it runs on request and nightly, not on every change.
+func CheckNPM(b *BOM, registry string) ([]Diff, error) {
+	if registry == "" {
+		registry = "https://registry.npmjs.org"
+	}
+	c := http.Client{Timeout: 20 * time.Second}
+	names := make([]string, 0, len(b.Kits))
+	for n := range b.Kits {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	var ds []Diff
+	for _, n := range names {
+		resp, err := c.Get(registry + "/" + n + "/" + b.Kits[n])
+		if err != nil {
+			return nil, err
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusNotFound {
+			ds = append(ds, Diff{"bom/bom.yaml", fmt.Sprintf("kits: %s@%s is not published on the registry", n, b.Kits[n])})
+		} else if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("%s@%s: registry answered %s", n, b.Kits[n], resp.Status)
+		}
+	}
+	return ds, nil
 }
 
 // Diff is one place a consumer disagrees with the BOM.

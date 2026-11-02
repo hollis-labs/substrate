@@ -1,6 +1,7 @@
 name: pins-folio
-# Folio's platform-pins.yaml is a generated mirror of the BOM. Check it nightly
-# instead of on every PR, so another repo's lag never blocks a change here.
+# Folio's platform-pins.yaml is a generated mirror of the BOM, and every pinned
+# kit version must be published on npm. Both need the network and another
+# party's state, so they run nightly instead of on every PR.
 on:
   schedule:
     - cron: "17 6 * * *"
@@ -15,4 +16,4 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go run ./cmd/substrate pins check --folio https://raw.githubusercontent.com/hollis-labs/tools/main/folio/platform-pins.yaml
+      - run: go run ./cmd/substrate pins check --npm --folio https://raw.githubusercontent.com/hollis-labs/tools/main/folio/platform-pins.yaml

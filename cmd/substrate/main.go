@@ -23,6 +23,7 @@ const usage = `substrate <command> [flags]
   modules  -f substrate.yaml            print the resolved module list
   generate -f substrate.yaml [-pkg main] write substrate_wiring.go next to the manifest
   build    -f substrate.yaml [-o out]   generate, then go build the manifest's directory
+  frontend -f substrate.yaml [-o dir]   write frontend.manifest.json: the selected modules' UI contributions and BOM-pinned kits
   pins check|sync [--root .] [--folio dir|file|url]
                                         verify or rewrite go.mod, the CI workflow and
                                         Folio's platform-pins.yaml from bom/bom.yaml
@@ -65,6 +66,14 @@ func main() {
 		fmt.Println(strings.Join(mods, "\n"))
 	case "generate":
 		if _, err := generate(m, *file, *pkg); err != nil {
+			fail(err)
+		}
+	case "frontend":
+		dir := *out
+		if dir == "" {
+			dir = filepath.Dir(*file)
+		}
+		if err := writeFrontend(m, filepath.Dir(*file), dir); err != nil {
 			fail(err)
 		}
 	case "build":

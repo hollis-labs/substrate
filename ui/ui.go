@@ -30,10 +30,9 @@ type Contribution struct {
 }
 
 // Package names the companion TS package. Its version is never written here:
-// VersionRef points into the BOM's kits section ("kits.<name>").
+// the BOM's kits section pins it by this name.
 type Package struct {
-	Name       string `json:"name"`
-	VersionRef string `json:"version_ref"`
+	Name string `json:"name"`
 }
 
 // NavEntry is a nav.group or nav.item.
@@ -101,7 +100,7 @@ var (
 	keyRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
 	methods  = map[string]bool{"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
 	scopeKds = map[string]bool{"app": true, "plugin": true, "project": true, "user": true}
-	verRef   = regexp.MustCompile(`^kits\.[a-z0-9][a-z0-9_.-]*$`)
+	npmName  = regexp.MustCompile(`^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$`)
 )
 
 // Parse strictly decodes a contribution (unknown fields are errors).
@@ -138,11 +137,8 @@ func Validate(c Contribution, v Vocabulary) []error {
 		bad("module %q is not a valid name", c.Module)
 	}
 	if p := c.Package; p != nil {
-		if p.Name == "" || !strings.HasPrefix(p.Name, "@") {
-			bad("package.name %q must be a scoped npm name", p.Name)
-		}
-		if !verRef.MatchString(p.VersionRef) {
-			bad("package.version_ref %q must be kits.<name>: versions live in the BOM only", p.VersionRef)
+		if !npmName.MatchString(p.Name) {
+			bad("package.name %q must be a scoped npm name such as @scope/name (versions live in the BOM only)", p.Name)
 		}
 	}
 	in := func(list []string, s string) bool {

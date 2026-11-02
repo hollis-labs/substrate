@@ -7,7 +7,7 @@ import (
 
 const good = `{
   "schema_version": 0, "module": "demo",
-  "package": {"name": "@hollis-labs/kit-demo", "version_ref": "kits.kit-demo"},
+  "package": {"name": "@hollis-labs/kit-demo"},
   "nav": [{"kind":"nav.group","key":"access","label":"Access"},
           {"kind":"nav.item","key":"keys","label":"Keys","group":"access","route":"/keys","scope":"{app}.admin"}],
   "settings": [{"id":"demo","scope_kind":"app"}],
@@ -34,7 +34,7 @@ func TestStrictParseRejectsUnknownFields(t *testing.T) {
 
 func TestEachRuleFires(t *testing.T) {
 	for _, c := range []struct{ name, from, to, want string }{
-		{"version literal", `"kits.kit-demo"`, `"1.2.3"`, "versions live in the BOM only"},
+		{"unscoped package", `"@hollis-labs/kit-demo"`, `"kit-demo"`, "must be a scoped npm name"},
 		{"unscoped route", `"scope":"authenticated"`, `"scope":""`, "scope is required"},
 		{"route outside api", `/api/demo`, `/other/demo`, "must be under /api/ or /admin/"},
 		{"bad method", `"GET"`, `"TRACE"`, "method must be"},

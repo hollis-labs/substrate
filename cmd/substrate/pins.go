@@ -19,6 +19,7 @@ func pins(args []string) {
 	verb := args[0]
 	fs := flag.NewFlagSet("pins "+verb, flag.ExitOnError)
 	root := fs.String("root", ".", "substrate repo root (holds bom/bom.yaml, go.mod, .github/workflows/ci.yml)")
+	npm := fs.Bool("npm", false, "check also that every pinned kit version is published (network)")
 	folio := fs.String("folio", "", "Folio's platform-pins.yaml: a directory or file (check also accepts an http(s) URL)")
 	_ = fs.Parse(args[1:])
 
@@ -57,6 +58,13 @@ func pins(args []string) {
 	ds, err := bom.Check(b, t)
 	if err != nil {
 		fail(err)
+	}
+	if *npm {
+		nd, err := bom.CheckNPM(b, "")
+		if err != nil {
+			fail(err)
+		}
+		ds = append(ds, nd...)
 	}
 	for _, d := range ds {
 		fmt.Fprintln(os.Stderr, d)
