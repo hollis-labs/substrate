@@ -7,6 +7,8 @@ minor releases may break APIs.
 
 ### Added
 
+- `secrets` module over libs `security/secrets` and `security/redact`: references resolved on demand, resolved values fed to a redaction scope, and the logging module's logger wrapped so they never reach log output. `env://` is off unless `secrets.env: true`. Requires `logging`.
+
 - `auth` module over libs `security/auth` (mode dial, JWT and API-key verifiers, scope table, bind validation); httphost wraps `/api/` with the guard when started. Unmapped routes fail closed in enforce mode, including `/api/capabilities` until the app maps it.
 - `policy` module over libs `security/policy` (shadow by default, fail closed, slog audit). The app registers its PDP with `policy.UsePDP`; starting without one is an error. `policy.AllowAll` is an explicit dev PDP.
 

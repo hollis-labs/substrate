@@ -20,7 +20,7 @@ var Modules = []Module{
 	{Name: "mcp", Status: "planned"},
 	{Name: "policy", Import: "github.com/hollis-labs/substrate/modules/policy", Status: "ready"},
 	{Name: "auth", Import: "github.com/hollis-labs/substrate/modules/auth", Status: "ready"},
-	{Name: "secrets", Status: "planned"},
+	{Name: "secrets", Import: "github.com/hollis-labs/substrate/modules/secrets", Requires: []string{"logging"}, Status: "ready"},
 	{Name: "sqlite", Import: "github.com/hollis-labs/substrate/modules/sqlite", Requires: []string{"health"}, Status: "ready"},
 	{Name: "pluginhost", Status: "planned"},
 	{Name: "cli", Status: "planned"},

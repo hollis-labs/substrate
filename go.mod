@@ -7,11 +7,15 @@ require (
 	github.com/hollis-labs/libs/core/store v0.1.0
 	github.com/hollis-labs/libs/security/auth v0.3.0
 	github.com/hollis-labs/libs/security/policy v0.1.0
+	github.com/hollis-labs/libs/security/redact v0.2.0
+	github.com/hollis-labs/libs/security/secrets v0.1.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
+	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
+	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hollis-labs/libs/core/panics v0.1.0 // indirect
 	github.com/hollis-labs/libs/core/util v0.6.0 // indirect
@@ -28,6 +32,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect
+	github.com/zalando/go-keyring v0.2.8 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
