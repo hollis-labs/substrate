@@ -10,6 +10,7 @@ import (
 
 	"github.com/hollis-labs/substrate/boot"
 	"github.com/hollis-labs/substrate/modules/auth"
+	_ "github.com/hollis-labs/substrate/modules/capabilities"
 	_ "github.com/hollis-labs/substrate/modules/health"
 	"github.com/hollis-labs/substrate/modules/httphost"
 )
@@ -80,5 +81,62 @@ func TestOffModeAllowsAndBindIsValidated(t *testing.T) {
 	}
 	if err := auth.ValidateBind(run.App, "127.0.0.1:8080"); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestCapabilitiesIsMappedInEnforceMode(t *testing.T) {
+	read, other := "read-key", "other-key"
+	cfg := `{"auth":{"mode":"enforce","api_keys":[` +
+		`{"id":"svc/r","hash":"` + libauth.HashKey(read) + `","scopes":["t.read"]},` +
+		`{"id":"svc/o","hash":"` + libauth.HashKey(other) + `","scopes":["t.write"]}]}}`
+	run, err := boot.Start(context.Background(), "t", []string{"health", "capabilities", "auth"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	h, err := httphost.Handler(run.App, httphost.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	do := func(bearer string) int {
+		r := httptest.NewRequest("GET", "/api/capabilities", nil)
+		if bearer != "" {
+			r.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	// Default scope is "<app>.read" (app is "t").
+	for _, c := range []struct {
+		name, bearer string
+		want         int
+	}{
+		{"no token", "", 401},
+		{"wrong scope", other, 403},
+		{"read scope", read, 200},
+	} {
+		if got := do(c.bearer); got != c.want {
+			t.Errorf("%s: got %d want %d", c.name, got, c.want)
+		}
+	}
+}
+
+func TestCapabilitiesScopeIsConfigurable(t *testing.T) {
+	key := "k"
+	cfg := `{"capabilities":{"scope":"ops.inspect"},"auth":{"mode":"enforce","api_keys":[` +
+		`{"id":"svc/o","hash":"` + libauth.HashKey(key) + `","scopes":["ops.inspect"]}]}}`
+	run, err := boot.Start(context.Background(), "t", []string{"health", "capabilities", "auth"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	h, _ := httphost.Handler(run.App, httphost.Options{})
+	r := httptest.NewRequest("GET", "/api/capabilities", nil)
+	r.Header.Set("Authorization", "Bearer "+key)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("got %d want 200", w.Code)
 	}
 }

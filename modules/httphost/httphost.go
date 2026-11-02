@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	apphost "github.com/hollis-labs/libs/app/app-host/host"
+	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/health"
@@ -50,6 +51,13 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	}
 	if v, ok := app.Value("capabilities.handler"); ok {
 		api.Handle("GET /api/capabilities", v.(http.Handler))
+		// With auth started, map the route so enforce mode does not 403 it as
+		// unmapped. Read by key so httphost does not import auth or capabilities.
+		if t, ok := app.Values["auth.scopes"].(*libauth.ScopeTable); ok {
+			if scope, ok := app.Values["capabilities.scope"].(string); ok {
+				t.Route("GET", "/api/capabilities", scope)
+			}
+		}
 	}
 	// When the auth module is started, its guard wraps /api/ (never /healthz or
 	// the SPA). Read by key so httphost does not import auth.
