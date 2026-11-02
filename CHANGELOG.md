@@ -28,4 +28,5 @@ minor releases may break APIs.
 - Module registry and the config, logging, health, httphost (over libs app-host) and capabilities modules.
 - `hello-service` and `hello-app-host` examples; end-to-end flag test (minimal vs agentic).
 - `bom/bom.yaml` pin scaffold, CI workflow, `scripts/scan-public`.
+- Conformance suite (`conformance/`): catalogue consistency, every module and every profile under every variant start and stop cleanly (including restart), plus runtime ordering tests in `module/`. Bump tests assert the BOM agrees with `go.mod` and `ci.yml`. Runs in CI with `go test ./...`.
 - BOM is the source of every pin: `toolchain.go` becomes `go_floor` (portfolio floor) plus `go_min` (Substrate's minimum); Folio's `platform-pins.yaml` mirrors `go_floor` and `ci`; `scripts/check-bom-drift` verifies the mirror.

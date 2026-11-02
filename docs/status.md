@@ -13,7 +13,7 @@ Pre-release; not tagged.
 
 ## Next
 
-- v0.1.0: per-module and per-profile conformance suites, bump test, tag (a maintainer's call).
+- v0.1.0: tag (a maintainer's call). Conformance suites and the BOM bump test are in `conformance/`.
 - `gui-shell` profile in a sibling repo; Hadron as the first real app.
 
 ## Decided
