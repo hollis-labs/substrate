@@ -15,6 +15,9 @@ minor releases may break APIs.
 - BOM `kits:` pins the npm packages the frontend may name (public registry, `@hollis-labs`, exact versions). `substrate pins check --npm` verifies each is published (nightly).
 - `substrate frontend -f substrate.yaml [-o dir]` writes `frontend.manifest.json`: the merged contributions of exactly the modules the manifest selects (nav with group checks, settings, routes) and the BOM-pinned kits, with the base design kits added when anything contributes UI. Removing a module removes its UI. Envelope TS types and the binding-table input follow the S0 consolidation.
 - `pluginhost` routes are declared in `ui.json` (any method, subtree `/api/plugins/`) with scope `<app>.plugins`; an app maps finer per-plugin scopes on the scope table and those win. `pluginhost.RoutesKey` is removed. Declared routes may now use method `*` and subtree paths.
+- `substrate upgrade [-dir] [-to] [-dry-run] [-allow-unmigrated]` (`upgrade/`): reports the BOM pin changes and changelog between two releases, applies registered mechanical migrations, moves the one Substrate requirement, validates the manifest with the target release's CLI, builds, and restores `go.mod`, `go.sum` and migrated files on any failure. Refuses downgrades, local `replace`, unmigrated breaking changes and unreleased targets without `-allow-unmigrated`. `docs/compat-policy.md` defines what is covered, what breaks, and the `### Breaking` / `(migration: id|none)` changelog convention.
+- App-level bump test (`e2e/`): an app that requires Substrate only resolves every BOM pin exactly, at v0.1.0 and at this tree. An end-to-end upgrade test moves a real app from v0.1.0 to the proxy's main.
+- `docs/writing-a-module.md`.
 - Conformance: every contribution validates, and every declared route is mapped and served in enforce mode.
 
 ## [0.1.0] - 2026-11-02

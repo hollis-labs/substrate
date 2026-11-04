@@ -1,6 +1,7 @@
 # Contributing
 
-`README.md` says what Substrate is; `AGENTS.md` is the fastest orientation to the layout and the
+`docs/writing-a-module.md` is the guide for adding a capability and `docs/compat-policy.md` says what a release
+promises. `README.md` says what Substrate is; `AGENTS.md` is the fastest orientation to the layout and the
 boundaries that are not obvious from the code.
 
 ## Setup

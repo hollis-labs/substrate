@@ -24,6 +24,9 @@ const usage = `substrate <command> [flags]
   generate -f substrate.yaml [-pkg main] write substrate_wiring.go next to the manifest
   build    -f substrate.yaml [-o out]   generate, then go build the manifest's directory
   frontend -f substrate.yaml [-o dir]   write frontend.manifest.json: the selected modules' UI contributions and BOM-pinned kits
+  upgrade [-dir .] [-to vX.Y.Z] [-dry-run] [-allow-unmigrated]
+                                        move an app to another Substrate release: report pin
+                                        changes, apply migrations, verify, restore on failure
   pins check|sync [--root .] [--folio dir|file|url]
                                         verify or rewrite go.mod, the CI workflow and
                                         Folio's platform-pins.yaml from bom/bom.yaml
@@ -37,6 +40,10 @@ func main() {
 	cmd, args := os.Args[1], os.Args[2:]
 	if cmd == "pins" {
 		pins(args)
+		return
+	}
+	if cmd == "upgrade" {
+		upgradeCmd(args)
 		return
 	}
 	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
