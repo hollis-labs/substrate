@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
@@ -12,6 +13,7 @@ import (
 	"github.com/hollis-labs/substrate/catalog"
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/httphost"
+	_ "github.com/hollis-labs/substrate/modules/pluginhost"
 	"github.com/hollis-labs/substrate/ui"
 )
 
@@ -53,7 +55,7 @@ func TestEveryContributionIsValid(t *testing.T) {
 // (never 403 route_not_mapped, never 404). This is the property that broke
 // /api/capabilities once.
 func TestEveryDeclaredRouteIsMappedAndServed(t *testing.T) {
-	selected := []string{"config", "logging", "health", "httphost", "capabilities", "auth", "events"}
+	selected := []string{"config", "logging", "health", "httphost", "capabilities", "auth", "events", "pluginhost"}
 	key := "conformance-key"
 	cfg := `{"auth":{"mode":"enforce","api_keys":[{"id":"svc/c","hash":"` + libauth.HashKey(key) + `","scopes":["*"]}]}}`
 	run, err := boot.Start(context.Background(), "conformance", selected, cfg)
@@ -73,9 +75,16 @@ func TestEveryDeclaredRouteIsMappedAndServed(t *testing.T) {
 		for _, r := range c.UI().Routes {
 			declared++
 			t.Run(name+" "+r.Method+" "+r.Path, func(t *testing.T) {
+				path, method := r.Path, r.Method
+				if strings.HasSuffix(path, "/") { // a subtree: probe something under it
+					path += "probe"
+				}
+				if method == "*" {
+					method = "GET"
+				}
 				req := func(bearer string) int {
 					w := httptest.NewRecorder()
-					rq := httptest.NewRequest(r.Method, r.Path, nil)
+					rq := httptest.NewRequest(method, path, nil)
 					if bearer != "" {
 						rq.Header.Set("Authorization", "Bearer "+bearer)
 					}
@@ -85,7 +94,9 @@ func TestEveryDeclaredRouteIsMappedAndServed(t *testing.T) {
 				if got := req(""); got != http.StatusUnauthorized {
 					t.Errorf("no token: %d, want 401", got)
 				}
-				if got := req(key); got == http.StatusForbidden || got == http.StatusNotFound || got >= 500 {
+				// A subtree's handler may legitimately answer 404 for the unknown
+				// thing under it; 403 is what an unmapped route looks like.
+				if got := req(key); got == http.StatusForbidden || (got == http.StatusNotFound && !strings.HasSuffix(r.Path, "/")) || got >= 500 {
 					t.Errorf("wildcard-scope caller: %d, want the handler to answer", got)
 				}
 			})

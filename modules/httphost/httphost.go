@@ -44,13 +44,6 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	if o.Routes != nil {
 		api.Handle("/api/", o.Routes)
 	}
-	// The pluginhost module publishes the plugin forwarding routes; read by
-	// key so httphost does not import it.
-	if v, ok := app.Value("pluginhost.routes"); ok {
-		if h, ok := v.(http.Handler); ok {
-			api.Handle("/api/plugins/", h)
-		}
-	}
 	// When the auth module is started, its guard wraps /api/ (never /healthz or
 	// the SPA). Read by key so httphost does not import auth.
 	guard := func(h http.Handler) http.Handler { return h }
@@ -69,7 +62,7 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	outerRoutes := http.NewServeMux()
 	for _, r := range module.Routes(app) {
 		if table != nil {
-			table.Route(r.Method, r.Path, r.Scope)
+			table.Route(r.Method, r.ScopePattern(), r.Scope)
 		}
 		if strings.HasPrefix(r.Path, "/api/") {
 			api.Handle(r.Pattern(), r.Handler)

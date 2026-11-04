@@ -1,0 +1,7 @@
+{
+  "schema_version": 0,
+  "module": "pluginhost",
+  "routes": [
+    { "method": "*", "path": "/api/plugins/", "scope": "{app}.plugins" }
+  ]
+}

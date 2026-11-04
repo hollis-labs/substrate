@@ -66,9 +66,11 @@ type Envelopes struct {
 	AcceptsActions []string `json:"accepts_actions,omitempty"`
 }
 
-// Route is an HTTP endpoint the module serves. Scope is a scope name that may
-// contain "{app}", or the word "authenticated" for authentication only. There
-// is deliberately no way to leave it out: an unmapped route fails closed.
+// Route is an HTTP endpoint the module serves. Method "*" means any method. A
+// Path ending in "/" is a subtree (everything under it), as in net/http. Scope
+// is a scope name that may contain "{app}", or the word "authenticated" for
+// authentication only. There is deliberately no way to leave it out: an
+// unmapped route fails closed.
 type Route struct {
 	Method string `json:"method"`
 	Path   string `json:"path"`
@@ -98,7 +100,7 @@ var Default = Vocabulary{
 
 var (
 	keyRe    = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
-	methods  = map[string]bool{"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
+	methods  = map[string]bool{"*": true, "GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
 	scopeKds = map[string]bool{"app": true, "plugin": true, "project": true, "user": true}
 	npmName  = regexp.MustCompile(`^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$`)
 )
@@ -212,10 +214,13 @@ func Validate(c Contribution, v Vocabulary) []error {
 	for _, r := range c.Routes {
 		id := r.Method + " " + r.Path
 		if !methods[r.Method] {
-			bad("route %q: method must be GET, POST, PUT, PATCH or DELETE", id)
+			bad("route %q: method must be *, GET, POST, PUT, PATCH or DELETE", id)
 		}
 		if !strings.HasPrefix(r.Path, "/api/") && !strings.HasPrefix(r.Path, "/admin/") {
 			bad("route %q: path must be under /api/ or /admin/", id)
+		}
+		if r.Path == "/api/" || r.Path == "/admin/" {
+			bad("route %q: a subtree must name something under the prefix", id)
 		}
 		if strings.Contains(r.Path, "..") || strings.ContainsAny(r.Path, "?#") {
 			bad("route %q: path must be a plain absolute path", id)

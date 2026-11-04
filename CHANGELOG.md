@@ -14,6 +14,7 @@ minor releases may break APIs.
 - `events` module: replayable SSE at `GET /api/events?topic=` over libs `streamhub` and `ssekit`, with Last-Event-ID resume, an explicit `gap` frame, heartbeats, a per-app topic authorizer and `events.UseLog` for a durable log. Scope `<app>.events`.
 - BOM `kits:` pins the npm packages the frontend may name (public registry, `@hollis-labs`, exact versions). `substrate pins check --npm` verifies each is published (nightly).
 - `substrate frontend -f substrate.yaml [-o dir]` writes `frontend.manifest.json`: the merged contributions of exactly the modules the manifest selects (nav with group checks, settings, routes) and the BOM-pinned kits, with the base design kits added when anything contributes UI. Removing a module removes its UI. Envelope TS types and the binding-table input follow the S0 consolidation.
+- `pluginhost` routes are declared in `ui.json` (any method, subtree `/api/plugins/`) with scope `<app>.plugins`; an app maps finer per-plugin scopes on the scope table and those win. `pluginhost.RoutesKey` is removed. Declared routes may now use method `*` and subtree paths.
 - Conformance: every contribution validates, and every declared route is mapped and served in enforce mode.
 
 ## [0.1.0] - 2026-11-02

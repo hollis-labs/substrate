@@ -38,6 +38,7 @@ func TestEachRuleFires(t *testing.T) {
 		{"unscoped route", `"scope":"authenticated"`, `"scope":""`, "scope is required"},
 		{"route outside api", `/api/demo`, `/other/demo`, "must be under /api/ or /admin/"},
 		{"bad method", `"GET"`, `"TRACE"`, "method must be"},
+		{"bare api subtree", `/api/demo`, `/api/`, "must name something"},
 		{"unknown nav kind", `"nav.group"`, `"nav.tree"`, "not in the vocabulary"},
 		{"item without route", `"route":"/keys",`, ``, "needs a route"},
 		{"bad settings scope", `"scope_kind":"app"`, `"scope_kind":"galaxy"`, "scope_kind"},

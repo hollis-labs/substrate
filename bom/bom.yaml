@@ -29,13 +29,15 @@ third_party:
   gopkg.in/yaml.v3: v3.0.1          # manifest and BOM parsing
 kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
   "@hollis-labs/design-tokens": 0.5.0
-  "@hollis-labs/design-components": 0.5.0
+  "@hollis-labs/design-components": 0.5.1
   "@hollis-labs/design-app-runtime": 0.5.0
   "@hollis-labs/design-bindings": 0.1.0
   "@hollis-labs/kit-settings": 0.2.0
-  "@hollis-labs/kit-admin": 0.1.0
-  "@hollis-labs/kit-chat": 0.5.0
-  "@hollis-labs/kit-observe": 0.1.1
-  "@hollis-labs/kit-dashboard": 0.5.0
+  "@hollis-labs/kit-admin": 0.2.0
+  "@hollis-labs/kit-chat": 0.6.0
+  "@hollis-labs/kit-cards": 0.1.0
+  "@hollis-labs/kit-account": 0.1.0
+  # kit-observe is not pinned: 0.1.1 has a peer range that breaks install with kit-dashboard 0.6.0; pin 0.1.2 once published
+  "@hollis-labs/kit-dashboard": 0.6.0
   "@hollis-labs/plugin-host-ui": 0.2.0
   "@hollis-labs/plugin-registry": 0.2.0

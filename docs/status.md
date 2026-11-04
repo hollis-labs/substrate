@@ -20,7 +20,6 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 
 - **Postgres** is not exposed by the `sqlite` module. libs `core/store` supports it and the Hollis Labs
   fleet runs a Postgres, so add a `postgres` module (or a driver option) when the first app needs it, not before.
-- `pluginhost` routes are unmapped in auth enforce mode until the app maps scopes for them.
 
 ## Decided
 

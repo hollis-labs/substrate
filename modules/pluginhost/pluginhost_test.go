@@ -11,8 +11,10 @@ import (
 	libhost "github.com/hollis-labs/libs/mcp/plugin-mcp/plugin-host"
 	"github.com/hollis-labs/libs/mcp/plugin-mcp/plugin-sdk/capability"
 	"github.com/hollis-labs/libs/mcp/plugin-mcp/plugin-sdk/subprocess"
+	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"github.com/hollis-labs/substrate/boot"
+	"github.com/hollis-labs/substrate/modules/auth"
 	"github.com/hollis-labs/substrate/modules/health"
 	"github.com/hollis-labs/substrate/modules/httphost"
 	"github.com/hollis-labs/substrate/modules/pluginhost"
@@ -83,5 +85,48 @@ func TestBadSpecFailsStart(t *testing.T) {
 	defer pluginhost.UseSpecs()
 	if _, err := boot.Start(context.Background(), "t", []string{"health", "pluginhost"}, ""); err == nil {
 		t.Fatal("expected start failure for a plugin that cannot spawn")
+	}
+}
+
+func TestPluginRoutesAreScopedAndTheAppCanBeFiner(t *testing.T) {
+	defer pluginhost.UseSpecs()
+	broad, narrow := "broad-key", "narrow-key"
+	cfg := `{"auth":{"mode":"enforce","api_keys":[` +
+		`{"id":"svc/b","hash":"` + libauth.HashKey(broad) + `","scopes":["t.plugins"]},` +
+		`{"id":"svc/n","hash":"` + libauth.HashKey(narrow) + `","scopes":["t.foo"]}]}}`
+	run, err := boot.Start(context.Background(), "t", []string{"health", "auth", "httphost", "pluginhost"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	// The app maps a finer scope for one plugin before the host builds its
+	// handler; it is consulted before the module's broad "<app>.plugins".
+	auth.ScopeTable(run.App).Route("*", "/api/plugins/foo/*", "t.foo")
+	h, err := httphost.Handler(run.App, httphost.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := func(path, key string) int {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", path, nil)
+		if key != "" {
+			r.Header.Set("Authorization", "Bearer "+key)
+		}
+		h.ServeHTTP(w, r)
+		return w.Code
+	}
+	for _, c := range []struct {
+		name, path, key string
+		want            int
+	}{
+		{"no token", "/api/plugins/foo/x", "", 401},
+		{"broad scope reaches any plugin", "/api/plugins/bar/x", broad, 404}, // admitted; no such plugin
+		{"finer app scope reaches its plugin", "/api/plugins/foo/x", narrow, 404},
+		{"finer scope does not reach others", "/api/plugins/bar/x", narrow, 403},
+		{"broad scope no longer reaches the finer plugin", "/api/plugins/foo/x", broad, 403},
+	} {
+		if got := status(c.path, c.key); got != c.want {
+			t.Errorf("%s: got %d want %d", c.name, got, c.want)
+		}
 	}
 }

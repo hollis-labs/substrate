@@ -133,8 +133,22 @@ type Route struct {
 	Handler             http.Handler
 }
 
-// Pattern is the net/http mux pattern for the route.
-func (r Route) Pattern() string { return r.Method + " " + r.Path }
+// Pattern is the net/http mux pattern for the route; method "*" matches any.
+func (r Route) Pattern() string {
+	if r.Method == "*" {
+		return r.Path
+	}
+	return r.Method + " " + r.Path
+}
+
+// ScopePattern is the auth scope-table pattern: "{name}" segments are kept and a
+// subtree path ("/api/x/") becomes "/api/x/*".
+func (r Route) ScopePattern() string {
+	if strings.HasSuffix(r.Path, "/") {
+		return r.Path + "*"
+	}
+	return r.Path
+}
 
 // AddRoutes publishes the routes c declares, binding each to its handler by
 // "METHOD /path". Every declared route needs a handler and every handler a

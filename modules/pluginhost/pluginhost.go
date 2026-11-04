@@ -8,14 +8,18 @@
 //
 //	pluginhost.UseSpecs(spec1, spec2)
 //
-// The routes (/api/plugins/{id}/...) are mounted by httphost under /api/, so
-// the auth guard covers them. They are unmapped in the scope table, so in
-// enforce mode the app maps the scopes it wants and everything else is denied.
+// The forwarding routes (/api/plugins/{id}/..., any method) are declared in
+// ui.json and mounted by httphost under /api/, so the auth guard covers them.
+// Their scope is "<app>.plugins" (config pluginhost.scope replaces it). An app
+// that wants finer scopes per plugin maps its own routes on auth.ScopeTable
+// after boot.Start; those are consulted first.
 package pluginhost
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/hollis-labs/libs/app/app-host/plugins"
@@ -23,14 +27,17 @@ import (
 
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/health"
+	"github.com/hollis-labs/substrate/ui"
 )
 
-// Keys under which the inventory and routes handler are published. httphost
-// reads RoutesKey by name, so it does not import this package.
-const (
-	InventoryKey = "pluginhost.inventory"
-	RoutesKey    = "pluginhost.routes"
-)
+//go:embed ui.json
+var uiJSON []byte
+
+// UI declares the plugin forwarding routes.
+func (*mod) UI() ui.Contribution { return ui.MustParse(uiJSON) }
+
+// InventoryKey is where the *plugins.Inventory is published.
+const InventoryKey = "pluginhost.inventory"
 
 var (
 	mu    sync.Mutex
@@ -62,7 +69,11 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	}
 	m.inv = inv
 	app.Set(InventoryKey, inv)
-	app.Set(RoutesKey, inv.APIRoutes())
+	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"* /api/plugins/": inv.APIRoutes()}); err != nil {
+		_ = inv.Stop(ctx)
+		m.inv = nil
+		return err
+	}
 	if reg := health.From(app); reg != nil {
 		reg.Add("plugins", func(context.Context) error {
 			for _, s := range list {
