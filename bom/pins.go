@@ -27,7 +27,11 @@ type BOM struct {
 	CI         map[string]string `yaml:"ci"`
 	Libs       map[string]string `yaml:"libs"`
 	ThirdParty map[string]string `yaml:"third_party"`
-	Kits       map[string]string `yaml:"kits"` // npm packages the frontend manifest may name, by full name
+	// AppLibs pins the libs an app may import directly that Substrate does not
+	// itself require (for example the workflow engine). An app's go.mod is held to
+	// libs, third_party and app_libs together; see CheckApp.
+	AppLibs map[string]string `yaml:"app_libs"`
+	Kits    map[string]string `yaml:"kits"` // npm packages the frontend manifest may name, by full name
 }
 
 var ciKeys = []string{"actions_checkout", "actions_setup_go", "golangci_lint_action", "golangci_lint_version", "govulncheck_version"}
@@ -55,6 +59,17 @@ func (b *BOM) validate() error {
 	for _, k := range ciKeys {
 		if b.CI[k] == "" {
 			return fmt.Errorf("bom: ci.%s is required", k)
+		}
+	}
+	for name, v := range b.AppLibs {
+		if !strings.HasPrefix(name, "github.com/hollis-labs/libs/") {
+			return fmt.Errorf("bom: app_libs.%s must be a libs module", name)
+		}
+		if _, dup := b.Libs[name]; dup {
+			return fmt.Errorf("bom: %s is in both libs and app_libs", name)
+		}
+		if !strings.HasPrefix(v, "v") || !semverRe.MatchString(strings.TrimPrefix(v, "v")) {
+			return fmt.Errorf("bom: app_libs.%s %q must be an exact version like v1.2.3", name, v)
 		}
 	}
 	for name, v := range b.Kits {
@@ -379,4 +394,63 @@ func versionLess(a, b string) bool {
 		}
 	}
 	return len(pa) < len(pb)
+}
+
+// CheckApp reports where an app's go.mod disagrees with the BOM: a pinned module
+// at another version, and any libs module the BOM does not pin at all. Modules
+// the BOM does not name and that are not libs are the app's own business.
+func CheckApp(b *BOM, goMod string) ([]Diff, error) {
+	src, err := os.ReadFile(goMod)
+	if err != nil {
+		return nil, err
+	}
+	_, d := editAppGoMod(b, string(src))
+	return tag(goMod, d), nil
+}
+
+// SyncApp rewrites pinned versions in an app's go.mod to the BOM's. Unpinned
+// libs modules need a human: add them to the BOM's app_libs, or drop the import.
+func SyncApp(b *BOM, goMod string) (changed bool, err error) {
+	src, err := os.ReadFile(goMod)
+	if err != nil {
+		return false, err
+	}
+	out, d := editAppGoMod(b, string(src))
+	if out != string(src) {
+		if err := os.WriteFile(goMod, []byte(out), 0o644); err != nil {
+			return false, err
+		}
+		changed = true
+	}
+	if rest := unfixable(d); len(rest) > 0 {
+		return changed, fmt.Errorf("%s: %s", goMod, strings.Join(rest, "; "))
+	}
+	return changed, nil
+}
+
+func editAppGoMod(b *BOM, src string) (string, []string) {
+	var diffs []string
+	pins := map[string]string{}
+	for _, m := range []map[string]string{b.Libs, b.AppLibs, b.ThirdParty} {
+		for k, v := range m {
+			pins[k] = v
+		}
+	}
+	out := requireLine.ReplaceAllStringFunc(src, func(line string) string {
+		m := requireLine.FindStringSubmatch(line)
+		path, have := m[2], m[3]
+		if path == "module" || path == "go" || path == "toolchain" || path == "github.com/hollis-labs/substrate" {
+			return line
+		}
+		want, pinned := pins[path]
+		switch {
+		case pinned && have != want:
+			diffs = append(diffs, fmt.Sprintf("%s is %s, bom pins %s", path, have, want))
+			return m[1] + path + " " + want + m[4]
+		case !pinned && strings.HasPrefix(path, "github.com/hollis-labs/libs/"):
+			diffs = append(diffs, "unpinned: "+path+" is a libs module the bom does not pin (add it to app_libs or drop the import)")
+		}
+		return line
+	})
+	return out, diffs
 }

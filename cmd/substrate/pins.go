@@ -20,9 +20,14 @@ func pins(args []string) {
 	fs := flag.NewFlagSet("pins "+verb, flag.ExitOnError)
 	root := fs.String("root", ".", "substrate repo root (holds bom/bom.yaml, go.mod, .github/workflows/ci.yml)")
 	npm := fs.Bool("npm", false, "check also that every pinned kit version is published (network)")
+	app := fs.String("app", "", "check or sync an app's go.mod (directory) against this BOM; the BOM comes from the Substrate version the app requires")
 	folio := fs.String("folio", "", "Folio's platform-pins.yaml: a directory or file (check also accepts an http(s) URL)")
 	_ = fs.Parse(args[1:])
 
+	if *app != "" {
+		pinsApp(verb, *app)
+		return
+	}
 	b, err := bom.Load(filepath.Join(*root, "bom", "bom.yaml"))
 	if err != nil {
 		fail(err)
@@ -73,4 +78,41 @@ func pins(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println("pins match the bom")
+}
+
+// pinsApp holds an app's go.mod to the BOM of the Substrate release it requires.
+func pinsApp(verb, dir string) {
+	root, err := goList(dir, "-m", "-f", "{{.Dir}}", "github.com/hollis-labs/substrate")
+	if err != nil || root == "" {
+		fail(fmt.Errorf("find the substrate module the app requires: %v", err))
+	}
+	b, err := bom.Load(filepath.Join(root, "bom", "bom.yaml"))
+	if err != nil {
+		fail(err)
+	}
+	goMod := filepath.Join(dir, "go.mod")
+	if verb == "sync" {
+		changed, err := bom.SyncApp(b, goMod)
+		if changed {
+			fmt.Println("updated", goMod, "(run `go mod tidy`)")
+		}
+		if err != nil {
+			fail(err)
+		}
+		if !changed {
+			fmt.Println("already in step with the bom")
+		}
+		return
+	}
+	ds, err := bom.CheckApp(b, goMod)
+	if err != nil {
+		fail(err)
+	}
+	for _, d := range ds {
+		fmt.Fprintln(os.Stderr, d)
+	}
+	if len(ds) > 0 {
+		os.Exit(1)
+	}
+	fmt.Println("app pins match the bom")
 }

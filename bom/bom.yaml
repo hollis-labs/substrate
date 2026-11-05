@@ -26,6 +26,8 @@ libs:
   github.com/hollis-labs/libs/security/secrets: v0.1.0
   github.com/hollis-labs/libs/security/redact: v0.2.0
   github.com/hollis-labs/libs/ui/ui-go: v0.1.0
+app_libs:                 # libs an app may import that Substrate itself does not require
+  github.com/hollis-labs/libs/workflow/engine: v0.2.0
 third_party:
   github.com/spf13/cobra: v1.10.2   # CLI standard (matches torque, tether, hadron, cerberus)
   gopkg.in/yaml.v3: v3.0.1          # manifest and BOM parsing

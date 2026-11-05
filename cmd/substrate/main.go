@@ -27,7 +27,7 @@ const usage = `substrate <command> [flags]
   upgrade [-dir .] [-to vX.Y.Z] [-dry-run] [-allow-unmigrated]
                                         move an app to another Substrate release: report pin
                                         changes, apply migrations, verify, restore on failure
-  pins check|sync [--root .] [--folio dir|file|url]
+  pins check|sync [--root .] [--folio dir|file|url] [--app dir]
                                         verify or rewrite go.mod, the CI workflow and
                                         Folio's platform-pins.yaml from bom/bom.yaml
 `

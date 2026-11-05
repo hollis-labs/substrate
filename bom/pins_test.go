@@ -216,3 +216,96 @@ func TestBOMValidation(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+const appBOM = bomYAML + `
+app_libs:
+  github.com/hollis-labs/libs/workflow/engine: v0.2.0
+`
+
+func appFixture(t *testing.T, goMod string) (*BOM, string) {
+	t.Helper()
+	dir := t.TempDir()
+	bp := filepath.Join(dir, "bom.yaml")
+	if err := os.WriteFile(bp, []byte(appBOM), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b, err := Load(bp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gp := filepath.Join(dir, "go.mod")
+	if err := os.WriteFile(gp, []byte(goMod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return b, gp
+}
+
+const appGoMod = `module example.com/app
+
+go 1.26.10
+
+require (
+	github.com/hollis-labs/substrate v0.2.0
+	github.com/hollis-labs/libs/workflow/engine v0.1.0
+	github.com/spf13/cobra v1.9.0
+	github.com/some/other v1.0.0
+)
+
+require github.com/hollis-labs/libs/core/store v0.0.9 // indirect
+`
+
+func TestCheckAppHoldsLibsAndPinnedThirdPartyToTheBOM(t *testing.T) {
+	b, gp := appFixture(t, appGoMod)
+	ds, err := CheckApp(b, gp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var all []string
+	for _, d := range ds {
+		all = append(all, d.Msg)
+	}
+	got := strings.Join(all, "\n")
+	for _, want := range []string{"workflow/engine is v0.1.0, bom pins v0.2.0", "cobra is v1.9.0, bom pins v1.10.2", "core/store is v0.0.9, bom pins v0.1.0"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "some/other") || strings.Contains(got, "substrate") {
+		t.Errorf("the app's own modules and the substrate requirement must not be reported:\n%s", got)
+	}
+	changed, err := SyncApp(b, gp)
+	if err != nil || !changed {
+		t.Fatalf("sync: changed=%v err=%v", changed, err)
+	}
+	if ds, _ := CheckApp(b, gp); len(ds) != 0 {
+		t.Fatalf("still drifting after sync: %v", ds)
+	}
+	if src, _ := os.ReadFile(gp); !strings.Contains(string(src), "github.com/some/other v1.0.0") {
+		t.Error("sync touched a module the BOM does not pin")
+	}
+}
+
+func TestCheckAppRefusesAnUnpinnedLibsModule(t *testing.T) {
+	b, gp := appFixture(t, "module example.com/app\n\ngo 1.26.10\n\nrequire github.com/hollis-labs/libs/mesh/core v0.8.0\n")
+	ds, _ := CheckApp(b, gp)
+	if len(ds) != 1 || !strings.Contains(ds[0].Msg, "unpinned: github.com/hollis-labs/libs/mesh/core") {
+		t.Fatalf("diffs = %v", ds)
+	}
+	if _, err := SyncApp(b, gp); err == nil {
+		t.Error("sync must not paper over an unpinned libs module")
+	}
+}
+
+func TestAppLibsMustBeLibsAndNotDuplicated(t *testing.T) {
+	for name, extra := range map[string]string{
+		"not a libs module": "app_libs:\n  github.com/other/x: v1.0.0\n",
+		"duplicate":         "app_libs:\n  github.com/hollis-labs/libs/core/store: v0.1.0\n",
+		"range":             "app_libs:\n  github.com/hollis-labs/libs/x/y: ^1.0.0\n",
+	} {
+		p := filepath.Join(t.TempDir(), "bom.yaml")
+		_ = os.WriteFile(p, []byte(bomYAML+extra), 0o644)
+		if _, err := Load(p); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
