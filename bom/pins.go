@@ -285,6 +285,7 @@ var workflowPins = []struct {
 	{"actions_checkout", regexp.MustCompile(`(actions/checkout@)\S+`)},
 	{"actions_setup_go", regexp.MustCompile(`(actions/setup-go@)\S+`)},
 	{"actions_upload_artifact", regexp.MustCompile(`(actions/upload-artifact@)\S+`)}, // optional; not mirrored to Folio
+	{"postgres_image", regexp.MustCompile(`(image: )postgres:\S+`)},                  // optional; the CI database service
 	{"golangci_lint_action", regexp.MustCompile(`(golangci/golangci-lint-action@)\S+`)},
 	// The lint binary version is the `version:` input on the line after the action.
 	{"golangci_lint_version", regexp.MustCompile(`(golangci/golangci-lint-action@\S+\s+with:\s+version: )\S+`)},

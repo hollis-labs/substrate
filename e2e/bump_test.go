@@ -66,7 +66,7 @@ func assertResolvesToBOM(t *testing.T, b *bom.BOM, resolved map[string]string) {
 	}
 }
 
-var allModules = []string{"config", "logging", "health", "httphost", "capabilities", "auth", "policy", "secrets", "sqlite", "mcp", "pluginhost", "cli", "events"}
+var allModules = []string{"config", "logging", "health", "httphost", "capabilities", "auth", "policy", "secrets", "database", "mcp", "pluginhost", "cli", "events"}
 
 func TestAppDependsOnSubstrateOnlyAndResolvesToTheBOM(t *testing.T) {
 	r := root(t)
@@ -90,9 +90,14 @@ func TestBumpingTheSubstrateVersionMovesEveryPin(t *testing.T) {
 		t.Skip("SUBSTRATE_E2E_OFFLINE=1")
 	}
 	r := root(t)
-	released := []string{"config", "logging", "health", "httphost", "capabilities", "auth", "policy", "secrets", "sqlite", "mcp", "pluginhost", "cli"} // v0.1.0 has no events
+	// The same app against two releases. v0.1.0 has the sqlite module and no events;
+	// this tree has database instead. That rename is itself a breaking change the
+	// upgrade has to survive, so each side imports what its release ships.
+	common := []string{"config", "logging", "health", "httphost", "capabilities", "auth", "policy", "secrets", "mcp", "pluginhost", "cli"}
+	released := append(append([]string{}, common...), "sqlite")
+	current := append(append([]string{}, common...), "database")
 	oldDirect, oldResolved := appFor(t, "v0.1.0", "", released)
-	newDirect, newResolved := appFor(t, "v0.0.0", r, released)
+	newDirect, newResolved := appFor(t, "v0.0.0", r, current)
 
 	if strings.Join(oldDirect, ",") != strings.Join(newDirect, ",") {
 		t.Errorf("direct requirements differ across the bump: %v vs %v", oldDirect, newDirect)

@@ -5,7 +5,7 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 ## Built
 
 - Manifest schema + validator, builder (`validate`, `modules`, `generate`, `build`), module registry.
-- Modules: config, logging, health, httphost (over libs app-host), capabilities, sqlite, auth, policy,
+- Modules: config, logging, health, httphost (over libs app-host), capabilities, database (SQLite or Postgres), auth, policy,
   secrets, cli, mcp, pluginhost. Every catalogue module is `ready`.
 - Profiles: `minimal` (config, logging, health) and `agentic` (adds capabilities, secrets, auth, mcp, with httphost).
 - Examples: hello-service, hello-app-host, hello-cli, hello-agentic. Acceptance: flag test (`e2e/`) compares the
@@ -18,8 +18,7 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 
 ## Known limitations
 
-- **Postgres** is not exposed by the `sqlite` module. libs `core/store` supports it and the Hollis Labs
-  fleet runs a Postgres, so add a `postgres` module (or a driver option) when the first app needs it, not before.
+- The Postgres path needs a live server to test; CI provides one (`SUBSTRATE_TEST_POSTGRES_DSN`), a plain local run skips it.
 
 ## Decided
 

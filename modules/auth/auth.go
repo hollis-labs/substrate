@@ -11,6 +11,22 @@
 //	bootstrap_key_file: JWKS JSON or PEM public key used until the first fetch.
 //	api_keys:           [{id, hash, scopes: [..]}] static service keys; hash is
 //	                    the hex sha256 of the key (never the raw key).
+//	denylist_url:       the issuer's deny-list endpoint (revoked jti, sub, sid), polled
+//	                    with ETag revalidation; needs the JWT verifier.
+//	denylist_interval_seconds: poll interval (default 30).
+//
+// Outbound (the app or its CLI calling another service, or its own daemon):
+//
+//	token_file:           a file holding a non-expiring service token, re-read on
+//	                      every use so a rotated file is picked up.
+//	mint_url:             an issuer endpoint minting short-lived tokens (Tether's
+//	                      POST /auth/token); the token is refreshed at two thirds of
+//	                      its life. Needs mint_credential_file.
+//	mint_credential_file: the parent bearer credential presented to mint_url.
+//	mint_body:            the JSON object sent to mint_url.
+//
+// auth.Token, auth.Transport and auth.HTTPClient attach the configured token. With
+// neither token_file nor mint_url set (the dev default) they attach nothing.
 //
 // After boot.Start, the app registers routes and tools on ScopeTable(app).
 // httphost wraps /api/ with the guard when this module is started.
@@ -22,6 +38,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
 
@@ -54,6 +71,7 @@ func me(g *libauth.Guard) http.Handler {
 const (
 	GuardKey = "auth.guard"
 	ScopeKey = "auth.scopes"
+	TokenKey = "auth.token_source"
 )
 
 func init() { module.Register(&mod{}) }
@@ -83,12 +101,28 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	var verifiers []libauth.Verifier
-	if url, file := str("jwks_url", ""), str("bootstrap_key_file", ""); url != "" || file != "" {
+	dlURL := str("denylist_url", "")
+	url, file := str("jwks_url", ""), str("bootstrap_key_file", "")
+	if dlURL != "" && url == "" && file == "" {
+		cancel()
+		return fmt.Errorf("denylist_url needs the JWT verifier: set jwks_url or bootstrap_key_file")
+	}
+	if url != "" || file != "" {
+		var deny *libauth.DenyList
+		if dlURL != "" {
+			deny = libauth.NewDenyList()
+			iv := 30 * time.Second
+			if n, ok := cfg["denylist_interval_seconds"].(float64); ok && n > 0 {
+				iv = time.Duration(n * float64(time.Second))
+			}
+			go (&libauth.DenyListPoller{URL: dlURL, List: deny, Interval: iv}).Run(runCtx)
+		}
 		jv, err := libauth.NewJWTVerifier(libauth.JWTConfig{
 			Issuer:           str("issuer", ""),
 			Audience:         str("audience", app.Name),
 			JWKSURL:          url,
 			BootstrapKeyFile: file,
+			DenyList:         deny,
 		})
 		if err != nil {
 			cancel()
@@ -123,8 +157,16 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 		return fmt.Errorf("guard: %w", err)
 	}
 	m.cancel = cancel
+	ts, err := tokenSource(runCtx, cfg)
+	if err != nil {
+		cancel()
+		return err
+	}
 	app.Set(GuardKey, g)
 	app.Set(ScopeKey, scopes)
+	if ts != nil {
+		app.Set(TokenKey, ts)
+	}
 	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/me": me(g)}); err != nil {
 		cancel()
 		return err

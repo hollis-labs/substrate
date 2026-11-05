@@ -18,6 +18,7 @@ ci:
   golangci_lint_version: "v2.11.4"
   govulncheck_version: "v1.8.0"
   actions_upload_artifact: "v4"
+  postgres_image: "postgres:17"
 libs:
   github.com/hollis-labs/libs/core/store: v0.1.0
 third_party:
@@ -43,6 +44,7 @@ const workflow = `steps:
     with:
       version: v2.11.4
   - uses: actions/upload-artifact@v4
+  - image: postgres:17
 `
 
 const folio = `# header
@@ -116,6 +118,7 @@ func TestDriftIsDetectedAndFixed(t *testing.T) {
 		{"go directive", strings.Replace(goMod, "go 1.26.10", "go 1.26.9", 1), workflow, "go directive is 1.26.9"},
 		{"action pin", goMod, strings.Replace(workflow, "checkout@v5", "checkout@v4", 1), "ci.actions_checkout"},
 		{"upload-artifact", goMod, strings.Replace(workflow, "upload-artifact@v4", "upload-artifact@v3", 1), "ci.actions_upload_artifact"},
+		{"postgres image", goMod, strings.Replace(workflow, "postgres:17", "postgres:16", 1), "ci.postgres_image"},
 		{"lint version", goMod, strings.Replace(workflow, "version: v2.11.4", "version: v2.9.0", 1), "ci.golangci_lint_version"},
 	} {
 		t.Run(c.name, func(t *testing.T) {

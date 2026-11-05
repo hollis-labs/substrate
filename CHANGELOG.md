@@ -5,7 +5,14 @@ minor releases may break APIs.
 
 ## [Unreleased]
 
+### Breaking
+
+- The `sqlite` module is now `database`, on libs `core/store` with a `driver` of `sqlite` (default) or `postgres`. Config moves from `sqlite.*` to `database.sqlite.*`; `sqlite.UseMigrations` and `sqlite.From` become `database.UseMigrations` and `database.From`. Postgres connection strings are secrets: `dsn_file`/`dsn_env` (and `migrate_dsn_*`), never written in config. (migration: none; pre-release, no consumers)
+
 ### Added
+
+- `auth` plumbing from libs `go-auth`: `denylist_url` polls the issuer's revocation list so a revoked jti, principal or session stops working within the poll interval; `token_file` (a non-expiring service token, re-read on use) or `mint_url` (a refreshed short-lived token) give an app, or its CLI, an outbound credential via `auth.Token`, `auth.Transport` and `auth.HTTPClient`, with an optional host allowlist so the token cannot leak to other hosts. Nothing is attached when neither is set (the dev default).
+- CI runs a Postgres service (`ci.postgres_image` in the BOM) so the database module's Postgres path is tested for real.
 
 - UI contribution manifest (`ui/`, v0): a module that implements `module.UIContributor` returns an embedded `ui.json` (contributions, envelopes, routes), validated against the design team's approved vocabulary v0.3 (`nav.item`, `nav.group`, `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`). `settings.region` references admin-manifest groups and never defines them; frontend routes may not equal a backend path; the generated manifest checks nav groups, slot targets and route clashes across modules. Package versions are never written there; `package.version_ref` points into the BOM.
 - Declared routes: `module.AddRoutes` binds each route in `ui.json` to a handler and a scope (`{app}`, `authenticated`, or the module's `scope` config), and httphost mounts and scope-maps them, so a route cannot be left unmapped. Paths outside `/api/` (such as `/admin/...`) are mounted exactly under the same guard. `capabilities` now uses it.

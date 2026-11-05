@@ -18,6 +18,7 @@ import (
 	_ "github.com/hollis-labs/substrate/modules/capabilities"
 	_ "github.com/hollis-labs/substrate/modules/cli"
 	_ "github.com/hollis-labs/substrate/modules/config"
+	_ "github.com/hollis-labs/substrate/modules/database"
 	_ "github.com/hollis-labs/substrate/modules/events"
 	_ "github.com/hollis-labs/substrate/modules/health"
 	_ "github.com/hollis-labs/substrate/modules/httphost"
@@ -25,7 +26,6 @@ import (
 	_ "github.com/hollis-labs/substrate/modules/mcp"
 	_ "github.com/hollis-labs/substrate/modules/pluginhost"
 	_ "github.com/hollis-labs/substrate/modules/secrets"
-	_ "github.com/hollis-labs/substrate/modules/sqlite"
 )
 
 func newApp(t *testing.T) *module.App {
@@ -35,7 +35,7 @@ func newApp(t *testing.T) *module.App {
 		Values: map[string]any{},
 		Config: map[string]any{
 			// Modules that touch disk get a private location.
-			"sqlite": map[string]any{"path": filepath.Join(t.TempDir(), "c.db")},
+			"database": map[string]any{"sqlite": map[string]any{"path": filepath.Join(t.TempDir(), "c.db")}},
 		},
 	}
 }

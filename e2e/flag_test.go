@@ -127,7 +127,7 @@ func TestFlag(t *testing.T) {
 		}
 	}
 	// Modules in neither profile must not be linked by either.
-	for _, m := range []string{"policy", "sqlite", "pluginhost", "cli"} {
+	for _, m := range []string{"policy", "database", "pluginhost", "cli"} {
 		if has(minPkgs, m) || has(agPkgs, m) {
 			t.Errorf("%s linked but selected by neither profile", m)
 		}

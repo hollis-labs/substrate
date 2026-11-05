@@ -15,6 +15,7 @@ ci:                       # mirrored to Folio platform-pins.yaml
   golangci_lint_version: "v2.11.4"
   govulncheck_version: "v1.8.0"
   actions_upload_artifact: "v4"   # build.yml only; not mirrored to Folio
+  postgres_image: "postgres:17"   # ci.yml database service; not mirrored to Folio
 libs:
   github.com/hollis-labs/libs/app/app-host: v0.1.0
   github.com/hollis-labs/libs/core/store: v0.1.0

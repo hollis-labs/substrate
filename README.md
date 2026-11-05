@@ -33,7 +33,7 @@ go run ./cmd/substrate build    -f examples/hello-app-host/substrate.yaml
 | Term | Meaning |
 |---|---|
 | Module | One optional capability: `modules/<name>`, registered in `catalog/catalog.go`. |
-| Profile | A composable module bundle (`minimal`, `agentic`; more planned). `policy`, `sqlite` and `pluginhost` are opt-in under `modules.add`. |
+| Profile | A composable module bundle (`minimal`, `agentic`; more planned). `policy`, `database` and `pluginhost` are opt-in under `modules.add`. |
 | Variant | What the binary is: `service`, `app-host`, `headless`, `cli`, `microservice`. |
 | BOM | `bom/bom.yaml`, the one place version pins live; `substrate pins sync` writes `go.mod` and the CI workflows from it. |
 
