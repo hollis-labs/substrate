@@ -115,3 +115,17 @@ func TestPostgresMigratesAndReportsHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestUseMigrationFSMatchesUseMigrations(t *testing.T) {
+	database.UseMigrationFS(testdata, "testdata")
+	t.Cleanup(func() { database.UseMigrations(migrate.Source{}) })
+	ctx := context.Background()
+	run, err := boot.Start(ctx, "t", []string{"health", "database"}, `{"database":{"sqlite":{"path":":memory:"}}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = run.Stop(ctx) }()
+	if _, err := database.From(run.App).ExecContext(ctx, `INSERT INTO notes (body) VALUES ('hi')`); err != nil {
+		t.Fatalf("migrations from the file system did not run: %v", err)
+	}
+}

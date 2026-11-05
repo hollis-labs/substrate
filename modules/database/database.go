@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 	"sync"
@@ -41,13 +42,20 @@ var (
 	migrations *migrate.Source
 )
 
-// UseMigrations registers the app's migration source. Call it before
+// UseMigrations registers the app's migration source (see UseMigrationFS). Call it before
 // boot.Start; with none registered the module opens the store and skips schema
 // management.
 func UseMigrations(src migrate.Source) {
 	mu.Lock()
 	defer mu.Unlock()
 	migrations = &src
+}
+
+// UseMigrationFS registers migrations from an embedded file system whose Root
+// holds one directory per dialect (root/sqlite, root/postgres). It is
+// UseMigrations without making the app import libs for migrate.Source.
+func UseMigrationFS(fsys fs.FS, root string) {
+	UseMigrations(migrate.Source{FS: fsys, Root: root})
 }
 
 func init() { module.Register(&mod{}) }
