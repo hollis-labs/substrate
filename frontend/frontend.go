@@ -7,6 +7,7 @@ package frontend
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/hollis-labs/substrate/bom"
 	"github.com/hollis-labs/substrate/manifest"
@@ -32,21 +33,19 @@ type Manifest struct {
 	Profiles        []string          `json:"profiles"`
 	Modules         []string          `json:"modules"`
 	Contributions   []ui.Contribution `json:"contributions"`
-	Nav             []Nav             `json:"nav"`
-	Settings        []Settings        `json:"settings"`
-	Routes          []Route           `json:"routes"`
-	Kits            []Kit             `json:"kits"`
+	// Items are every selected module's UI contributions, merged and ordered
+	// by priority (default 10), then module, then key. Shared nav groups appear once.
+	Items  []Item  `json:"items"`
+	Routes []Route `json:"routes"`
+	Kits   []Kit   `json:"kits"`
 }
 
-// Nav is a merged navigation entry, tagged with the module that contributed it.
-type Nav struct {
-	ui.NavEntry
-	Module string `json:"module"`
-}
+// DefaultPriority orders contributions that name none.
+const DefaultPriority = 10
 
-// Settings is a settings group, tagged with its module.
-type Settings struct {
-	ui.Settings
+// Item is a contribution tagged with the module that made it.
+type Item struct {
+	ui.Item
 	Module string `json:"module"`
 }
 
@@ -73,10 +72,10 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	}
 	out := &Manifest{
 		ManifestVersion: ManifestVersion, App: m.App, Variant: m.Variant, Profiles: m.Profiles, Modules: mods,
-		Contributions: []ui.Contribution{}, Nav: []Nav{}, Settings: []Settings{}, Routes: []Route{}, Kits: []Kit{},
+		Contributions: []ui.Contribution{}, Items: []Item{}, Routes: []Route{}, Kits: []Kit{},
 	}
 	want := map[string]bool{}
-	hasUI := false
+	var items []Item
 	for _, name := range mods {
 		data, ok, err := load(name)
 		if err != nil {
@@ -96,11 +95,8 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 			return nil, errs[0]
 		}
 		out.Contributions = append(out.Contributions, c)
-		for _, n := range c.Nav {
-			out.Nav = append(out.Nav, Nav{n, name})
-		}
-		for _, s := range c.Settings {
-			out.Settings = append(out.Settings, Settings{s, name})
+		for _, it := range c.Contributions {
+			items = append(items, Item{it, name})
 		}
 		for _, r := range c.Routes {
 			out.Routes = append(out.Routes, Route{r, name})
@@ -108,25 +104,14 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 		if c.Package != nil {
 			want[c.Package.Name] = true
 		}
-		if len(c.Nav)+len(c.Settings)+len(c.Panels)+len(c.Widgets) > 0 || c.Package != nil {
-			hasUI = true
+		if len(c.Contributions) > 0 || c.Package != nil {
+			for _, k := range BaseKits {
+				want[k] = true
+			}
 		}
 	}
-	if out.Nav, err = mergeNav(out.Nav); err != nil {
+	if out.Items, err = merge(items, out.Routes); err != nil {
 		return nil, err
-	}
-	seen := map[string]string{}
-	for _, r := range out.Routes {
-		id := r.Method + " " + r.Path
-		if prev, dup := seen[id]; dup {
-			return nil, fmt.Errorf("route %s is declared by both %s and %s", id, prev, r.Module)
-		}
-		seen[id] = r.Module
-	}
-	if hasUI {
-		for _, k := range BaseKits {
-			want[k] = true
-		}
 	}
 	names := make([]string, 0, len(want))
 	for n := range want {
@@ -143,52 +128,80 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	return out, nil
 }
 
-// mergeNav checks that every item's group exists and that two modules naming
-// the same group agree on its label (it is then listed once), and orders the
-// result by order, then module and key, so output is stable.
-func mergeNav(in []Nav) ([]Nav, error) {
-	groups := map[string]Nav{}
-	var out []Nav
-	for _, n := range in {
-		if n.Kind == "nav.group" {
-			if g, dup := groups[n.Key]; dup {
-				if g.Label != n.Label {
-					return nil, fmt.Errorf("nav group %q is labelled %q by %s and %q by %s", n.Key, g.Label, g.Module, n.Label, n.Module)
-				}
-				if n.Order != 0 && g.Order == 0 {
-					groups[n.Key] = n
-				}
-				continue
-			}
-			groups[n.Key] = n
+// merge checks the cross-module rules and returns the items in display order:
+// nav items sit in groups that exist, two modules naming a group agree on its
+// label (it is listed once), a slot opens a dock.tab that exists, and no
+// frontend route equals a backend path or another frontend route.
+func merge(in []Item, routes []Route) ([]Item, error) {
+	backend := map[string]string{}
+	seen := map[string]string{}
+	for _, r := range routes {
+		id := r.Method + " " + r.Path
+		if prev, dup := seen[id]; dup {
+			return nil, fmt.Errorf("route %s is declared by both %s and %s", id, prev, r.Module)
 		}
+		seen[id] = r.Module
+		backend[strings.TrimSuffix(r.Path, "/")] = r.Module
 	}
-	for _, n := range in {
+
+	groups := map[string]Item{}
+	docks := map[string]bool{}
+	front := map[string]string{}
+	var out []Item
+	for _, it := range in {
+		switch it.Kind {
+		case "nav.group":
+			if g, dup := groups[it.Key]; dup {
+				if g.Label != it.Label {
+					return nil, fmt.Errorf("nav group %q is labelled %q by %s and %q by %s", it.Key, g.Label, g.Module, it.Label, it.Module)
+				}
+				continue // already listed
+			}
+			groups[it.Key] = it
+		case "dock.tab":
+			docks[it.Key] = true
+		}
+		if it.Route != "" && (it.Kind == "nav.item" || it.Kind == "surface") {
+			path := strings.TrimSuffix(it.Route, "/")
+			if m, clash := backend[path]; clash {
+				return nil, fmt.Errorf("%s %q (%s) uses route %s, which is a backend path served by %s", it.Kind, it.Key, it.Module, it.Route, m)
+			}
+			if it.Kind == "surface" {
+				if prev, dup := front[path]; dup {
+					return nil, fmt.Errorf("surface %q (%s) and %s both claim route %s", it.Key, it.Module, prev, it.Route)
+				}
+				front[path] = it.Module + "/" + it.Key
+			}
+		}
+		out = append(out, it)
+	}
+	for _, it := range out {
 		switch {
-		case n.Kind == "nav.group":
-			continue
-		case n.Group != "":
-			if _, ok := groups[n.Group]; !ok {
-				return nil, fmt.Errorf("nav item %q (%s) names group %q, which no selected module declares", n.Key, n.Module, n.Group)
+		case it.Kind == "nav.item" && strings.HasPrefix(it.EffectiveRegion(), ui.RegionNavGroupPrefix):
+			g := strings.TrimPrefix(it.EffectiveRegion(), ui.RegionNavGroupPrefix)
+			if _, ok := groups[g]; !ok {
+				return nil, fmt.Errorf("nav.item %q (%s) is in group %q, which no selected module declares", it.Key, it.Module, g)
 			}
+		case it.Kind == "slot" && it.Opens != "" && !docks[it.Opens]:
+			return nil, fmt.Errorf("slot %q (%s) opens dock.tab %q, which no selected module declares", it.Key, it.Module, it.Opens)
 		}
-		out = append(out, n)
-	}
-	for _, g := range groups {
-		out = append(out, g)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		if a.Order != b.Order {
-			return a.Order < b.Order
+		pa, pb := a.Priority, b.Priority
+		if pa == 0 {
+			pa = DefaultPriority
 		}
-		if a.Module != b.Module {
+		if pb == 0 {
+			pb = DefaultPriority
+		}
+		switch {
+		case pa != pb:
+			return pa < pb
+		case a.Module != b.Module:
 			return a.Module < b.Module
 		}
 		return a.Key < b.Key
 	})
-	if out == nil {
-		out = []Nav{}
-	}
 	return out, nil
 }

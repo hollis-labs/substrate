@@ -77,7 +77,7 @@ func TestKitsComeFromTheBOMAndOnlyWhenThereIsUI(t *testing.T) {
 			return nil, false, nil
 		}
 		return []byte(`{"schema_version":0,"module":"auth","package":{"name":"@hollis-labs/kit-admin"},
-			"nav":[{"kind":"nav.item","key":"keys","label":"Keys","route":"/keys"}]}`), true, nil
+			"contributions":[{"kind":"nav.item","key":"keys","label":"Keys","route":"/keys"}]}`), true, nil
 	}
 	fm, err := Build(mf("minimal", "auth"), b, ui.Default, load)
 	if err != nil {
@@ -87,8 +87,9 @@ func TestKitsComeFromTheBOMAndOnlyWhenThereIsUI(t *testing.T) {
 	for _, k := range fm.Kits {
 		got = append(got, k.Name+"@"+k.Version)
 	}
-	want := "@hollis-labs/design-app-runtime@" + b.Kits["@hollis-labs/design-app-runtime"]
-	if len(got) != 4 || !strings.Contains(strings.Join(got, " "), want) || !strings.Contains(strings.Join(got, " "), "@hollis-labs/kit-admin@"+b.Kits["@hollis-labs/kit-admin"]) {
+	all := strings.Join(got, " ")
+	if len(got) != 4 || !strings.Contains(all, "@hollis-labs/design-app-runtime@"+b.Kits["@hollis-labs/design-app-runtime"]) ||
+		!strings.Contains(all, "@hollis-labs/kit-admin@"+b.Kits["@hollis-labs/kit-admin"]) {
 		t.Fatalf("kits = %v", got)
 	}
 	b.Kits = map[string]string{}
@@ -97,41 +98,95 @@ func TestKitsComeFromTheBOMAndOnlyWhenThereIsUI(t *testing.T) {
 	}
 }
 
-func TestNavGroupsMergeAndMustExist(t *testing.T) {
-	b := realBOM(t)
-	two := func(groupB, labelB, itemGroup string) Load {
-		return func(name string) ([]byte, bool, error) {
-			switch name {
-			case "auth":
-				return []byte(`{"schema_version":0,"module":"auth","nav":[
-					{"kind":"nav.group","key":"access","label":"Access","order":20},
-					{"kind":"nav.item","key":"keys","label":"Keys","group":"` + itemGroup + `","route":"/keys"}]}`), true, nil
-			case "events":
-				return []byte(`{"schema_version":0,"module":"events","nav":[
-					{"kind":"nav.group","key":"` + groupB + `","label":"` + labelB + `","order":20},
-					{"kind":"nav.item","key":"stream","label":"Stream","group":"` + groupB + `","route":"/stream"}]}`), true, nil
-			}
+// loaders builds a Load from per-module contribution lists.
+func loaders(parts map[string]string) Load {
+	return func(name string) ([]byte, bool, error) {
+		items, ok := parts[name]
+		if !ok {
 			return nil, false, nil
 		}
+		return []byte(`{"schema_version":0,"module":"` + name + `","contributions":[` + items + `]}`), true, nil
 	}
-	fm, err := Build(mf("minimal", "auth", "events"), b, ui.Default, two("access", "Access", "access"))
+}
+
+func TestSharedNavGroupsAreListedOnceAndMustExist(t *testing.T) {
+	b := realBOM(t)
+	group := func(label string) string { return `{"kind":"nav.group","key":"access","label":"` + label + `"}` }
+	item := func(key, region string) string {
+		return `{"kind":"nav.item","key":"` + key + `","label":"X","region":"` + region + `","route":"/` + key + `"}`
+	}
+	fm, err := Build(mf("minimal", "auth", "events"), b, ui.Default, loaders(map[string]string{
+		"auth":   group("Access") + "," + item("keys", "nav.group:access"),
+		"events": group("Access") + "," + item("stream", "nav.group:access"),
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	groups := 0
-	for _, n := range fm.Nav {
-		if n.Kind == "nav.group" {
+	for _, it := range fm.Items {
+		if it.Kind == "nav.group" {
 			groups++
 		}
 	}
-	if groups != 1 || len(fm.Nav) != 3 {
-		t.Fatalf("a shared group should be listed once: %+v", fm.Nav)
+	if groups != 1 || len(fm.Items) != 3 {
+		t.Fatalf("a shared group should be listed once: %+v", fm.Items)
 	}
-	if _, err := Build(mf("minimal", "auth", "events"), b, ui.Default, two("access", "Admin", "access")); err == nil || !strings.Contains(err.Error(), "labelled") {
+	if _, err := Build(mf("minimal", "auth", "events"), b, ui.Default, loaders(map[string]string{
+		"auth": group("Access"), "events": group("Admin"),
+	})); err == nil || !strings.Contains(err.Error(), "labelled") {
 		t.Errorf("modules disagreeing on a group label: %v", err)
 	}
-	if _, err := Build(mf("minimal", "auth", "events"), b, ui.Default, two("other", "Other", "missing")); err == nil || !strings.Contains(err.Error(), "no selected module declares") {
-		t.Errorf("item naming an absent group: %v", err)
+	if _, err := Build(mf("minimal", "auth"), b, ui.Default, loaders(map[string]string{
+		"auth": item("keys", "nav.group:missing"),
+	})); err == nil || !strings.Contains(err.Error(), "no selected module declares") {
+		t.Errorf("item in an absent group: %v", err)
+	}
+}
+
+func TestFrontendRoutesNeverEqualBackendPaths(t *testing.T) {
+	b := realBOM(t)
+	// The events module serves GET /api/events; a frontend nav route may not be that path,
+	// and a /admin/ backend path may not be claimed by a surface.
+	_, err := Build(mf("agentic", "events"), b, ui.Default, func(name string) ([]byte, bool, error) {
+		if name == "events" {
+			return []byte(`{"schema_version":0,"module":"events",
+				"routes":[{"method":"GET","path":"/admin/manifest","scope":"authenticated"}],
+				"contributions":[{"kind":"surface","key":"m","route":"/admin/manifest","layout":"list","title":"M"}]}`), true, nil
+		}
+		return nil, false, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "backend path") {
+		t.Fatalf("a surface on a backend path must be refused: %v", err)
+	}
+}
+
+func TestSlotsMustOpenADockTabThatExists(t *testing.T) {
+	b := realBOM(t)
+	slot := `{"kind":"slot","key":"t","region":"chat.composer","opens":"chat"}`
+	tab := `{"kind":"dock.tab","key":"chat","region":"chat.drawer","view":"chat"}`
+	if _, err := Build(mf("minimal", "auth"), b, ui.Default, loaders(map[string]string{"auth": slot})); err == nil || !strings.Contains(err.Error(), "dock.tab") {
+		t.Errorf("a slot opening nothing: %v", err)
+	}
+	if _, err := Build(mf("minimal", "auth", "events"), b, ui.Default, loaders(map[string]string{"auth": slot, "events": tab})); err != nil {
+		t.Errorf("a slot opening another module's tab: %v", err)
+	}
+}
+
+func TestItemsAreOrderedByPriorityThenModuleThenKey(t *testing.T) {
+	b := realBOM(t)
+	fm, err := Build(mf("minimal", "auth", "events"), b, ui.Default, loaders(map[string]string{
+		"auth":   `{"kind":"widget","key":"b","view":"v"},{"kind":"widget","key":"a","view":"v","priority":5}`,
+		"events": `{"kind":"widget","key":"c","view":"v","priority":5}`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var order []string
+	for _, it := range fm.Items {
+		order = append(order, it.Module+"/"+it.Key)
+	}
+	if got := strings.Join(order, ","); got != "auth/a,events/c,auth/b" {
+		t.Fatalf("order = %s", got)
 	}
 }
 

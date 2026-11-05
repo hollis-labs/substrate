@@ -7,7 +7,7 @@ minor releases may break APIs.
 
 ### Added
 
-- UI contribution manifest (`ui/`, v0): a module that implements `module.UIContributor` returns an embedded `ui.json` (nav, settings, panels, widgets, envelopes, routes), validated against a pluggable `ui.Vocabulary` (the design team owns the names). Package versions are never written there; `package.version_ref` points into the BOM.
+- UI contribution manifest (`ui/`, v0): a module that implements `module.UIContributor` returns an embedded `ui.json` (contributions, envelopes, routes), validated against the design team's approved vocabulary v0.3 (`nav.item`, `nav.group`, `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`). `settings.region` references admin-manifest groups and never defines them; frontend routes may not equal a backend path; the generated manifest checks nav groups, slot targets and route clashes across modules. Package versions are never written there; `package.version_ref` points into the BOM.
 - Declared routes: `module.AddRoutes` binds each route in `ui.json` to a handler and a scope (`{app}`, `authenticated`, or the module's `scope` config), and httphost mounts and scope-maps them, so a route cannot be left unmapped. Paths outside `/api/` (such as `/admin/...`) are mounted exactly under the same guard. `capabilities` now uses it.
 - `GET /api/me` (auth): the caller's principal and the guard mode, for any verified caller.
 - `apierr`: one flat error body `{code, message, details?}` for everything Substrate serves; httphost rewrites the auth guard's nested body to it, because the app-runtime client reads `message` at the top level.

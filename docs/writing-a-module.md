@@ -73,10 +73,18 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
 - Every declared route needs a handler and every handler a declared route; `AddRoutes` fails otherwise.
 - Errors use `apierr.Write(w, status, code, message, details)`, the flat `{code, message, details?}` body the
   frontend reads. Streaming handlers must not buffer; the wrapper in httphost passes `Flush` through.
-- The same file can carry UI contributions (`nav`, `settings`, `panels`, `widgets`, `envelopes`, `package`),
-  validated against `ui.Default`. Names come from the design team's vocabulary; do not invent kinds. A
-  companion npm package is named in `package.name` and must be pinned in the BOM's `kits:` section; the version
-  lives only there.
+- The same file can carry UI `contributions`, `envelopes` and a companion `package`, validated against
+  `ui.Default`. The kinds are the design team's approved vocabulary (SF-2 v0.3): `nav.item`, `nav.group`,
+  `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`; do not invent others. Each kind takes only
+  its own fields (the validator refuses a stray one), and goes in its default region unless it names one
+  (`nav.primary`, `nav.group:<key>`, `nav.footer`, `settings.sections`, `surface.page`, `aside.panels`,
+  `widgets.grid`; `dock.tab` and `slot` name a host-defined region such as `chat.drawer`).
+  - Settings are referenced, never defined: a `settings.region` lists `{id, scope_kind}` groups that the admin
+    manifest serves.
+  - A frontend `route` is a path in the SPA and must never equal a backend path.
+  - A companion npm package is named in `package.name` and must be pinned in the BOM's `kits:` section; the
+    version lives only there.
+  - `plugin-host-ui` 0.2.0 still exports `dock.tab` as `drawer.tab`; hosts map the name until the kit renames it.
 - `substrate frontend` merges the contributions of exactly the modules a manifest selects, so removing your
   module removes its UI.
 
