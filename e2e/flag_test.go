@@ -76,7 +76,7 @@ func request(t *testing.T, bin, method, path, body string) (int, []byte) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	c := exec.Command(bin)
-	c.Env = append(os.Environ(), "ADDR="+addr)
+	c.Env = append(os.Environ(), "SUBSTRATE_CONFIG="+addrConfig(t, addr))
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestHelloAgentic(t *testing.T) {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	c := exec.Command(bin)
-	c.Env = append(os.Environ(), "ADDR="+addr)
+	c.Env = append(os.Environ(), "SUBSTRATE_CONFIG="+addrConfig(t, addr))
 	if err := c.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -206,4 +206,15 @@ func TestHelloAgentic(t *testing.T) {
 	if out := post(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"hello","arguments":{}}}`); !strings.Contains(out, "hello") {
 		t.Errorf("tools/call: %s", out)
 	}
+}
+
+// addrConfig writes the standard config-file override that sets httphost.addr
+// and returns its path, which is how every Substrate app is told where to listen.
+func addrConfig(t *testing.T, addr string) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "addr.yaml")
+	if err := os.WriteFile(p, []byte("httphost:\n  addr: \""+addr+"\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return p
 }

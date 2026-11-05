@@ -1,13 +1,16 @@
-// Package httphost wraps libs app-host: SPA assets, /api/ routes, /plugins/, and
+// Package httphost wraps libs app-host: SPA assets, /api/ routes, declared module routes, app mounts, and
 // the health registry served on /healthz. The app owns listeners and policy.
 package httphost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	apphost "github.com/hollis-labs/libs/app/app-host/host"
 	libauth "github.com/hollis-labs/libs/security/auth"
@@ -152,5 +155,70 @@ func handle(mux *http.ServeMux, pattern string, h http.Handler) (err error) {
 		}
 	}()
 	mux.Handle(pattern, h)
+	return nil
+}
+
+// ServeOptions configure Serve.
+type ServeOptions struct {
+	// Addr overrides config httphost.addr (default "127.0.0.1:8080").
+	Addr string
+	// Ready, if set, is called with the bound address once the listener is up
+	// (useful with port 0).
+	Ready func(net.Addr)
+	// GracePeriod bounds graceful shutdown (default 10s); in-flight requests get
+	// that long to finish.
+	GracePeriod time.Duration
+}
+
+// Serve listens, serves h and shuts down gracefully when ctx ends, so every app
+// serves the same way. The address comes from config httphost.addr; when the auth
+// module is started the bind is validated against its mode (off and permissive
+// refuse a wildcard or public address). There is no write timeout, so streams
+// (SSE) are not cut off; header and idle timeouts are set. Serve returns nil
+// after a clean shutdown.
+func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions) error {
+	addr := o.Addr
+	if addr == "" {
+		cfg, _ := app.Config["httphost"].(map[string]any)
+		addr, _ = cfg["addr"].(string)
+	}
+	if addr == "" {
+		addr = "127.0.0.1:8080"
+	}
+	if v, ok := app.Value("auth.guard"); ok {
+		if g, ok := v.(interface{ Mode() libauth.Mode }); ok {
+			if err := libauth.ValidateBind(addr, g.Mode()); err != nil {
+				return fmt.Errorf("httphost: %w", err)
+			}
+		}
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("httphost: %w", err)
+	}
+	if o.Ready != nil {
+		o.Ready(ln.Addr())
+	}
+	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	errc := make(chan error, 1)
+	go func() { errc <- srv.Serve(ln) }()
+	select {
+	case err := <-errc:
+		return err
+	case <-ctx.Done():
+	}
+	grace := o.GracePeriod
+	if grace <= 0 {
+		grace = 10 * time.Second
+	}
+	sctx, cancel := context.WithTimeout(context.Background(), grace)
+	defer cancel()
+	if err := srv.Shutdown(sctx); err != nil {
+		_ = srv.Close()
+		return fmt.Errorf("httphost: shutdown: %w", err)
+	}
+	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
 	return nil
 }

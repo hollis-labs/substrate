@@ -3,14 +3,18 @@ package httphost_test
 import (
 	"context"
 	"encoding/json"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"github.com/hollis-labs/substrate/boot"
+	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/auth"
 	_ "github.com/hollis-labs/substrate/modules/health"
 	"github.com/hollis-labs/substrate/modules/httphost"
@@ -90,5 +94,98 @@ func TestMountsThatShadowTheHostAreRefused(t *testing.T) {
 	}})
 	if err == nil || !strings.Contains(err.Error(), "a2a") {
 		t.Errorf("a conflicting pattern must be an error, not a panic: %v", err)
+	}
+}
+
+func serveApp(t *testing.T, cfg string) (*module.App, func()) {
+	t.Helper()
+	run, err := boot.Start(context.Background(), "t", []string{"health", "auth", "httphost"}, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return run.App, func() { _ = run.Stop(context.Background()) }
+}
+
+func TestServeServesAndShutsDownGracefully(t *testing.T) {
+	app, stop := serveApp(t, `{"auth":{"mode":"off"}}`)
+	defer stop()
+	inFlight, release := make(chan struct{}), make(chan struct{})
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/slow" {
+			close(inFlight)
+			<-release
+		}
+		_, _ = w.Write([]byte("done"))
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	bound := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- httphost.Serve(ctx, app, h, httphost.ServeOptions{Addr: "127.0.0.1:0", Ready: func(a net.Addr) { bound <- a }})
+	}()
+	addr := (<-bound).String()
+
+	slow := make(chan string, 1)
+	go func() {
+		resp, err := http.Get("http://" + addr + "/slow")
+		if err != nil {
+			slow <- err.Error()
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		slow <- string(b)
+	}()
+	<-inFlight
+	cancel() // shut down while a request is in flight
+	select {
+	case err := <-done:
+		t.Fatalf("Serve returned before the in-flight request finished: %v", err)
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	if got := <-slow; got != "done" {
+		t.Errorf("the in-flight request was cut off: %q", got)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("clean shutdown returned %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve did not return after shutdown")
+	}
+}
+
+func TestServeRefusesAPublicBindUnlessAuthEnforces(t *testing.T) {
+	app, stop := serveApp(t, `{"auth":{"mode":"off"}}`)
+	defer stop()
+	err := httphost.Serve(context.Background(), app, http.NotFoundHandler(), httphost.ServeOptions{Addr: ":0"})
+	if err == nil {
+		t.Fatal("a wildcard bind was accepted with auth off")
+	}
+	// Address in use is an error, not a hang.
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer func() { _ = ln.Close() }()
+	if err := httphost.Serve(context.Background(), app, http.NotFoundHandler(), httphost.ServeOptions{Addr: ln.Addr().String()}); err == nil {
+		t.Error("serving on a taken address returned nil")
+	}
+}
+
+func TestServeReadsTheAddressFromConfig(t *testing.T) {
+	app, stop := serveApp(t, `{"auth":{"mode":"off"},"httphost":{"addr":"127.0.0.1:0"}}`)
+	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	bound := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- httphost.Serve(ctx, app, http.NotFoundHandler(), httphost.ServeOptions{Ready: func(a net.Addr) { bound <- a }})
+	}()
+	if a := <-bound; !strings.HasPrefix(a.String(), "127.0.0.1:") {
+		t.Errorf("bound %s", a)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Error(err)
 	}
 }

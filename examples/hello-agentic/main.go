@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net"
-	"net/http"
 	"os"
 	"os/signal"
 
@@ -38,20 +36,8 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	addr := "127.0.0.1:8080"
-	if v := os.Getenv("ADDR"); v != "" {
-		addr = v
-	}
-	if err := auth.ValidateBind(run.App, addr); err != nil {
+	if err := httphost.Serve(ctx, run.App, h, httphost.ServeOptions{}); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	ln, err := net.Listen("tcp", addr) // the app owns the listener
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	srv := &http.Server{Handler: h}
-	go func() { <-ctx.Done(); _ = srv.Close() }()
-	_ = srv.Serve(ln)
 }

@@ -23,6 +23,9 @@ func Start(ctx context.Context, name string, modules []string, configJSON string
 			return nil, fmt.Errorf("boot: config: %w", err)
 		}
 	}
+	if cfg == nil { // a manifest with no config block generates "null", which decodes to a nil map
+		cfg = map[string]any{}
+	}
 	app := &module.App{Name: name, Config: cfg, Values: map[string]any{}}
 	r := &Running{App: app}
 	if err := r.rt.Start(ctx, app, modules); err != nil {
