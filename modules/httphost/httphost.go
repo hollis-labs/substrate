@@ -4,6 +4,7 @@ package httphost
 
 import (
 	"context"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -35,6 +36,20 @@ func (mod) Stop(context.Context) error { return nil }
 type Options struct {
 	Assets fs.FS          // embedded SPA, may be nil
 	Routes *http.ServeMux // app routes mounted under /api/, may be nil
+	// Mounts are app handlers served outside /api/, for paths a protocol fixes
+	// (an A2A endpoint, /.well-known/...). Everything else belongs under /api/.
+	Mounts []Mount
+}
+
+// Mount is an app handler at a net/http mux pattern ("/a2a/" or "GET /.well-known/agent.json").
+// It is guarded by the auth module like /api/ and gets the flat error body, so
+// map its scopes on auth.ScopeTable; set Open only for a path that must be
+// reachable without credentials (public discovery). Patterns that would shadow
+// /api/, /healthz, /mcp or the declared routes are refused.
+type Mount struct {
+	Pattern string
+	Handler http.Handler
+	Open    bool
 }
 
 // Handler builds the app handler after all modules have started, so modules
@@ -90,6 +105,52 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 			}
 		}
 	}
+	for _, m := range o.Mounts {
+		if err := checkMount(m); err != nil {
+			return nil, err
+		}
+		var hh http.Handler = apierr.Normalize(m.Handler)
+		if !m.Open {
+			hh = apierr.Normalize(guard(m.Handler))
+		}
+		if err := handle(outer, m.Pattern, hh); err != nil {
+			return nil, err
+		}
+	}
 	outer.Handle("/", h.Handler())
 	return outer, nil
+}
+
+// checkMount refuses a mount that is malformed or aims at a path the host owns.
+func checkMount(m Mount) error {
+	if m.Handler == nil || m.Pattern == "" {
+		return fmt.Errorf("httphost: a mount needs a pattern and a handler")
+	}
+	path := m.Pattern
+	if i := strings.IndexByte(path, ' '); i >= 0 {
+		path = strings.TrimSpace(path[i+1:])
+	}
+	if !strings.HasPrefix(path, "/") {
+		return fmt.Errorf("httphost: mount %q: the path must start with /", m.Pattern)
+	}
+	for _, reserved := range []string{"/api", "/healthz", "/mcp"} {
+		if path == reserved || strings.HasPrefix(path, reserved+"/") {
+			return fmt.Errorf("httphost: mount %q is under %s, which the host owns", m.Pattern, reserved)
+		}
+	}
+	if path == "/" {
+		return fmt.Errorf("httphost: mount %q would shadow the SPA", m.Pattern)
+	}
+	return nil
+}
+
+// handle registers on mux and reports a conflicting pattern as an error rather than a panic.
+func handle(mux *http.ServeMux, pattern string, h http.Handler) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("httphost: mount %q: %v", pattern, r)
+		}
+	}()
+	mux.Handle(pattern, h)
+	return nil
 }
