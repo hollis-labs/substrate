@@ -160,15 +160,47 @@ func TestFrontendRoutesNeverEqualBackendPaths(t *testing.T) {
 	}
 }
 
-func TestSlotsMustOpenADockTabThatExists(t *testing.T) {
+var chatRegions = []manifest.Region{
+	{Name: "chat.composer"},
+	{Name: "chat.message"},
+	{Name: "chat.drawer", Docked: true, Anchor: "chat.composer"},
+	{Name: "other.drawer", Docked: true, Anchor: "chat.message"},
+}
+
+func withRegions(m *manifest.Manifest, rs []manifest.Region) *manifest.Manifest {
+	m.Frontend.Regions = rs
+	return m
+}
+
+func TestSlotsOpenTabsInTheDockedRegionAnchoredUnderThem(t *testing.T) {
 	b := realBOM(t)
-	slot := `{"kind":"slot","key":"t","region":"chat.composer","opens":"chat"}`
-	tab := `{"kind":"dock.tab","key":"chat","region":"chat.drawer","view":"chat"}`
-	if _, err := Build(mf("minimal", "auth"), b, ui.Default, loaders(map[string]string{"auth": slot})); err == nil || !strings.Contains(err.Error(), "dock.tab") {
-		t.Errorf("a slot opening nothing: %v", err)
+	tab := `{"kind":"dock.tab","key":"scratch","region":"chat.drawer","view":"v"}`
+	slot := func(region, opens string) string {
+		return `{"kind":"slot","key":"t","region":"` + region + `","opens":"` + opens + `"}`
 	}
-	if _, err := Build(mf("minimal", "auth", "events"), b, ui.Default, loaders(map[string]string{"auth": slot, "events": tab})); err != nil {
-		t.Errorf("a slot opening another module's tab: %v", err)
+	build := func(regions []manifest.Region, parts map[string]string) error {
+		_, err := Build(withRegions(mf("minimal", "auth", "events"), regions), b, ui.Default, loaders(parts))
+		return err
+	}
+
+	if err := build(chatRegions, map[string]string{"auth": slot("chat.composer", "scratch"), "events": tab}); err != nil {
+		t.Errorf("a slot opening a tab in the drawer anchored under it: %v", err)
+	}
+	for name, c := range map[string]struct {
+		regions []manifest.Region
+		parts   map[string]string
+		want    string
+	}{
+		"opens nothing":                 {chatRegions, map[string]string{"auth": slot("chat.composer", "ghost")}, "no selected module declares"},
+		"opens a tab in another drawer": {chatRegions, map[string]string{"auth": slot("chat.message", "scratch"), "events": tab}, "not anchored under"},
+		"undeclared region":             {nil, map[string]string{"auth": slot("chat.composer", "scratch"), "events": tab}, "does not declare"},
+		"tab in an inline region":       {chatRegions, map[string]string{"auth": `{"kind":"dock.tab","key":"x","region":"chat.composer","view":"v"}`}, "not docked"},
+		"slot in a docked region":       {chatRegions, map[string]string{"auth": `{"kind":"slot","key":"x","region":"chat.drawer"}`}, "docked region"},
+	} {
+		err := build(c.regions, c.parts)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", name, err, c.want)
+		}
 	}
 }
 

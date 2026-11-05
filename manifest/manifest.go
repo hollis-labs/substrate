@@ -4,6 +4,7 @@ package manifest
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -18,6 +19,27 @@ type Manifest struct {
 	Profiles []string       `yaml:"profiles"`
 	Modules  Modules        `yaml:"modules"`
 	Config   map[string]any `yaml:"config"`
+	Frontend Frontend       `yaml:"frontend"`
+}
+
+// Frontend is what the app's host declares for the generated frontend manifest.
+type Frontend struct {
+	// Regions is the host region catalog: the places a dock.tab or slot may
+	// contribute to. The core regions (nav.primary, nav.group:<key>, nav.footer,
+	// settings.sections, surface.page, aside.panels, widgets.grid) exist in every
+	// host and are not declared. Anything else is host-defined and must be listed.
+	Regions []Region `yaml:"regions"`
+}
+
+// Region is one host-defined region.
+type Region struct {
+	Name string `yaml:"name"`
+	// Docked marks a region that holds dock.tab contributions and opens and closes
+	// (a drawer). A docked region must name the inline region it is tucked under.
+	Docked bool `yaml:"docked"`
+	// Anchor is the inline region a docked region is tucked under; the slots in
+	// that region are the triggers that open it.
+	Anchor string `yaml:"anchor"`
 }
 
 type Modules struct {
@@ -125,6 +147,7 @@ func (m *Manifest) Validate() []error {
 			bad("config for unknown module %q", k)
 		}
 	}
+	errs = append(errs, m.checkRegions()...)
 	if len(errs) > 0 {
 		return errs
 	}
@@ -166,4 +189,54 @@ func keys[V any](m map[string]V) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+var regionName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
+
+// coreRegion reports whether name is one of the regions every host has.
+func coreRegion(name string) bool {
+	switch name {
+	case "nav.primary", "nav.footer", "settings.sections", "surface.page", "aside.panels", "widgets.grid":
+		return true
+	}
+	return strings.HasPrefix(name, "nav.group:")
+}
+
+// checkRegions validates the host region catalog.
+func (m *Manifest) checkRegions() []error {
+	var errs []error
+	bad := func(f string, a ...any) { errs = append(errs, fmt.Errorf("manifest: frontend.regions: "+f, a...)) }
+	byName := map[string]Region{}
+	for _, r := range m.Frontend.Regions {
+		switch {
+		case !regionName.MatchString(r.Name):
+			bad("%q is not a valid region name", r.Name)
+			continue
+		case coreRegion(r.Name):
+			bad("%q is a core region and is not declared", r.Name)
+			continue
+		}
+		if _, dup := byName[r.Name]; dup {
+			bad("%q is declared twice", r.Name)
+		}
+		byName[r.Name] = r
+	}
+	for _, r := range byName {
+		switch {
+		case r.Docked && r.Anchor == "":
+			bad("docked region %q must declare its anchor", r.Name)
+		case !r.Docked && r.Anchor != "":
+			bad("region %q has an anchor but is not docked", r.Name)
+		case r.Docked:
+			a, ok := byName[r.Anchor]
+			switch {
+			case !ok:
+				bad("docked region %q is anchored to %q, which is not declared", r.Name, r.Anchor)
+			case a.Docked:
+				bad("docked region %q is anchored to the docked region %q; an anchor is an inline region", r.Name, r.Anchor)
+			}
+		}
+	}
+	sort.Slice(errs, func(i, j int) bool { return errs[i].Error() < errs[j].Error() })
+	return errs
 }

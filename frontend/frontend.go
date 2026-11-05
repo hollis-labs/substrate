@@ -37,7 +37,10 @@ type Manifest struct {
 	// by priority (default 10), then module, then key. Shared nav groups appear once.
 	Items  []Item  `json:"items"`
 	Routes []Route `json:"routes"`
-	Kits   []Kit   `json:"kits"`
+	// Regions is the host's region catalog from the manifest, so the shell knows
+	// which regions are docked and where they are anchored.
+	Regions []manifest.Region `json:"regions"`
+	Kits    []Kit             `json:"kits"`
 }
 
 // DefaultPriority orders contributions that name none.
@@ -73,6 +76,7 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	out := &Manifest{
 		ManifestVersion: ManifestVersion, App: m.App, Variant: m.Variant, Profiles: m.Profiles, Modules: mods,
 		Contributions: []ui.Contribution{}, Items: []Item{}, Routes: []Route{}, Kits: []Kit{},
+		Regions: append([]manifest.Region{}, m.Frontend.Regions...),
 	}
 	want := map[string]bool{}
 	var items []Item
@@ -110,7 +114,7 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 			}
 		}
 	}
-	if out.Items, err = merge(items, out.Routes); err != nil {
+	if out.Items, err = merge(items, out.Routes, m.Frontend.Regions); err != nil {
 		return nil, err
 	}
 	names := make([]string, 0, len(want))
@@ -132,7 +136,7 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 // nav items sit in groups that exist, two modules naming a group agree on its
 // label (it is listed once), a slot opens a dock.tab that exists, and no
 // frontend route equals a backend path or another frontend route.
-func merge(in []Item, routes []Route) ([]Item, error) {
+func merge(in []Item, routes []Route, regions []manifest.Region) ([]Item, error) {
 	backend := map[string]string{}
 	seen := map[string]string{}
 	for _, r := range routes {
@@ -145,7 +149,6 @@ func merge(in []Item, routes []Route) ([]Item, error) {
 	}
 
 	groups := map[string]Item{}
-	docks := map[string]bool{}
 	front := map[string]string{}
 	var out []Item
 	for _, it := range in {
@@ -158,8 +161,6 @@ func merge(in []Item, routes []Route) ([]Item, error) {
 				continue // already listed
 			}
 			groups[it.Key] = it
-		case "dock.tab":
-			docks[it.Key] = true
 		}
 		if it.Route != "" && (it.Kind == "nav.item" || it.Kind == "surface") {
 			path := strings.TrimSuffix(it.Route, "/")
@@ -175,15 +176,45 @@ func merge(in []Item, routes []Route) ([]Item, error) {
 		}
 		out = append(out, it)
 	}
+	catalog := map[string]manifest.Region{}
+	for _, r := range regions {
+		catalog[r.Name] = r
+	}
+	tabRegion := map[string]string{} // dock.tab key -> its region
 	for _, it := range out {
+		if it.Kind == "dock.tab" {
+			tabRegion[it.Key] = it.EffectiveRegion()
+		}
+	}
+	for _, it := range out {
+		// dock.tab and slot go in host-defined regions, which the manifest must declare.
+		if it.Kind == "dock.tab" || it.Kind == "slot" {
+			r, ok := catalog[it.EffectiveRegion()]
+			switch {
+			case !ok:
+				return nil, fmt.Errorf("%s %q (%s) is in region %q, which the manifest does not declare under frontend.regions", it.Kind, it.Key, it.Module, it.EffectiveRegion())
+			case it.Kind == "dock.tab" && !r.Docked:
+				return nil, fmt.Errorf("dock.tab %q (%s) is in region %q, which is not docked", it.Key, it.Module, r.Name)
+			case it.Kind == "slot" && r.Docked:
+				return nil, fmt.Errorf("slot %q (%s) is in the docked region %q; slots live in inline regions", it.Key, it.Module, r.Name)
+			}
+		}
+		if it.Kind == "slot" && it.Opens != "" {
+			// The tab must sit in the docked region anchored under this slot's region.
+			region, ok := tabRegion[it.Opens]
+			switch {
+			case !ok:
+				return nil, fmt.Errorf("slot %q (%s) opens dock.tab %q, which no selected module declares", it.Key, it.Module, it.Opens)
+			case catalog[region].Anchor != it.EffectiveRegion():
+				return nil, fmt.Errorf("slot %q (%s) in region %q opens dock.tab %q in region %q, which is not anchored under %q", it.Key, it.Module, it.EffectiveRegion(), it.Opens, region, it.EffectiveRegion())
+			}
+		}
 		switch {
 		case it.Kind == "nav.item" && strings.HasPrefix(it.EffectiveRegion(), ui.RegionNavGroupPrefix):
 			g := strings.TrimPrefix(it.EffectiveRegion(), ui.RegionNavGroupPrefix)
 			if _, ok := groups[g]; !ok {
 				return nil, fmt.Errorf("nav.item %q (%s) is in group %q, which no selected module declares", it.Key, it.Module, g)
 			}
-		case it.Kind == "slot" && it.Opens != "" && !docks[it.Opens]:
-			return nil, fmt.Errorf("slot %q (%s) opens dock.tab %q, which no selected module declares", it.Key, it.Module, it.Opens)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {

@@ -58,3 +58,36 @@ func TestCLIVariantIncludesCLIModule(t *testing.T) {
 		t.Fatalf("cli variant must start the cli module: %v", got)
 	}
 }
+
+func TestHostRegionCatalogIsValidated(t *testing.T) {
+	base := "app: x\nvariant: app-host\nprofiles: [minimal]\nfrontend:\n  regions:\n"
+	for name, c := range map[string]struct{ regions, want string }{
+		"fine":                {"    - {name: chat.composer}\n    - {name: chat.drawer, docked: true, anchor: chat.composer}\n", ""},
+		"docked needs anchor": {"    - {name: chat.drawer, docked: true}\n", "must declare its anchor"},
+		"anchor undeclared":   {"    - {name: chat.drawer, docked: true, anchor: chat.composer}\n", "not declared"},
+		"anchor on inline":    {"    - {name: chat.composer, anchor: chat.drawer}\n", "not docked"},
+		"anchor is docked":    {"    - {name: a, docked: true, anchor: b}\n    - {name: b, docked: true, anchor: a}\n", "inline region"},
+		"core region":         {"    - {name: nav.primary}\n", "core region"},
+		"duplicate":           {"    - {name: chat.composer}\n    - {name: chat.composer}\n", "declared twice"},
+		"bad name":            {"    - {name: Chat Composer}\n", "valid region name"},
+	} {
+		m, err := Parse([]byte(base + c.regions))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		errs := m.Validate()
+		if c.want == "" {
+			if len(errs) != 0 {
+				t.Errorf("%s: %v", name, errs)
+			}
+			continue
+		}
+		found := false
+		for _, e := range errs {
+			found = found || strings.Contains(e.Error(), c.want)
+		}
+		if !found {
+			t.Errorf("%s: %v, want one containing %q", name, errs, c.want)
+		}
+	}
+}

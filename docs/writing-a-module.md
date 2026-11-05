@@ -81,6 +81,10 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
   `widgets.grid`; `dock.tab` and `slot` name a host-defined region such as `chat.drawer`).
   - Settings are referenced, never defined: a `settings.region` lists `{id, scope_kind}` groups that the admin
     manifest serves.
+  - `dock.tab` and `slot` name host-defined regions, which the app declares under `frontend.regions` in its
+    manifest (docked regions name the inline `anchor` they sit under). The core regions are not declared. The
+    builder fails on an undeclared region, a `dock.tab` outside a docked region, a `slot` inside one, and a
+    `slot.opens` that does not name a `dock.tab` in the docked region anchored under the slot's region.
   - A frontend `route` is a path in the SPA and must never equal a backend path.
   - A companion npm package is named in `package.name` and must be pinned in the BOM's `kits:` section; the
     version lives only there.
