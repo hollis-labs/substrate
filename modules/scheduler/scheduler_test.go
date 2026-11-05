@@ -112,3 +112,24 @@ func TestStopStopsTheEngine(t *testing.T) {
 		t.Error("the engine kept firing after Stop")
 	}
 }
+
+func TestAutostartFalseHoldsFiresUntilRun(t *testing.T) {
+	reset(t)
+	rec := &recorder{}
+	scheduler.UseRunner(rec)
+	c := `{"database":{"sqlite":{"path":"` + filepath.Join(t.TempDir(), "s.db") + `"}},"scheduler":{"tick_ms":20,"autostart":false}}`
+	run, err := boot.Start(context.Background(), "t", []string{"health", "database", "scheduler"}, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	create(t, run, libsched.Schedule{ID: "x", Enabled: true, Interval: 30 * time.Millisecond, NextRun: time.Now().Add(-time.Second), JobType: "j"})
+	time.Sleep(250 * time.Millisecond)
+	if rec.jobs.Load() != 0 {
+		t.Fatal("a schedule fired although the engine was not started")
+	}
+	if err := scheduler.Run(run.App); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "a fire after Run", func() bool { return rec.jobs.Load() > 0 })
+}

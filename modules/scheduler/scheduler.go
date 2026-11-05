@@ -15,6 +15,10 @@
 //	due_batch:           schedules and fires handled per tick (default 100).
 //	claim_lease_seconds: how long a claimed fire is exclusive before another
 //	                     process may redeliver it (default 600).
+//	autostart:           start the engine with the app (default true). Set false for
+//	                     an app whose binary is also a CLI, and call
+//	                     scheduler.Run(app) from the daemon command, so a short-lived
+//	                     command never fires schedules.
 //
 // libs provides a reference store for SQLite only. With Postgres, supply a
 // Store with scheduler.UseStore (libs ships a conformance suite for it).
@@ -118,10 +122,22 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 		libsched.WithDueBatchLimit(int(num("due_batch", 100))),
 		libsched.WithClaimLease(time.Duration(num("claim_lease_seconds", 600))*time.Second),
 	)
-	eng.Start()
 	m.eng = eng
 	app.Set(Key, eng)
 	app.Set(StoreKey, schedStore)
+	if auto, ok := cfg["autostart"].(bool); !ok || auto {
+		eng.Start() // idempotent
+	}
+	return nil
+}
+
+// Run starts the engine if it is not running (see autostart). It is idempotent.
+func Run(app *module.App) error {
+	eng := Engine(app)
+	if eng == nil {
+		return errors.New("scheduler module is not started")
+	}
+	eng.Start()
 	return nil
 }
 

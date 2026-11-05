@@ -18,6 +18,9 @@
 //	concurrency:  polling goroutines (default 1).
 //	poll_ms:      sleep between empty polls (default 3000).
 //	max_tries:    default attempts per job (default 3; 0 is unlimited).
+//	autostart:    start the worker with the app (default true). Set false for an
+//	              app whose binary is also a CLI, and call queue.Run(app) from the
+//	              daemon command, so a short-lived command never runs jobs.
 package queue
 
 import (
@@ -66,6 +69,7 @@ func Reset() {
 func init() { module.Register(&mod{}) }
 
 type mod struct {
+	mu     sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
 }
@@ -127,24 +131,53 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 	for t, h := range hs {
 		w.Register(t, h)
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.cancel, m.done = cancel, make(chan struct{})
-	go func() { defer close(m.done); _ = w.Start(ctx) }()
+	launch := func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		if m.cancel != nil {
+			return
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		m.cancel, m.done = cancel, make(chan struct{})
+		go func(done chan struct{}) { defer close(done); _ = w.Start(ctx) }(m.done)
+	}
 	app.Set(Key, q)
+	app.Set(launchKey, launch)
+	if auto, ok := cfg["autostart"].(bool); !ok || auto {
+		launch()
+	}
+	return nil
+}
+
+const launchKey = "queue.launch"
+
+// Run starts the worker if it is not running (see autostart). It is idempotent.
+func Run(app *module.App) error {
+	v, _ := app.Value(launchKey)
+	launch, ok := v.(func())
+	if !ok {
+		return errors.New("queue module is not started")
+	}
+	launch()
 	return nil
 }
 
 func (m *mod) Stop(ctx context.Context) error {
-	if m.cancel == nil {
+	m.mu.Lock()
+	cancel, done := m.cancel, m.done
+	m.mu.Unlock()
+	if cancel == nil {
 		return nil
 	}
-	m.cancel()
+	cancel()
 	select {
-	case <-m.done:
+	case <-done:
 	case <-ctx.Done():
 		return fmt.Errorf("queue: worker did not stop: %w", ctx.Err())
 	}
+	m.mu.Lock()
 	m.cancel = nil
+	m.mu.Unlock()
 	return nil
 }
 

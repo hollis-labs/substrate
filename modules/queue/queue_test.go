@@ -126,3 +126,21 @@ func TestStopWaitsForTheWorker(t *testing.T) {
 		t.Fatal("Stop did not return after the handler was told to stop")
 	}
 }
+
+func TestAutostartFalseHoldsJobsUntilRun(t *testing.T) {
+	queue.Reset()
+	t.Cleanup(queue.Reset)
+	var ran atomic.Bool
+	queue.Handle("held", func(context.Context, *libqueue.QueuedJob) error { ran.Store(true); return nil })
+	run := start(t, `{"queue":{"driver":"memory","poll_ms":10,"autostart":false}}`)
+	_ = queue.Push(context.Background(), run.App, "held", []byte(`1`))
+	time.Sleep(200 * time.Millisecond)
+	if ran.Load() {
+		t.Fatal("a job ran although the worker was not started")
+	}
+	if err := queue.Run(run.App); err != nil {
+		t.Fatal(err)
+	}
+	_ = queue.Run(run.App) // idempotent
+	eventually(t, "the held job after Run", ran.Load)
+}
