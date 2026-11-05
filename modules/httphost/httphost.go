@@ -109,7 +109,7 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		if err := checkMount(m); err != nil {
 			return nil, err
 		}
-		var hh http.Handler = apierr.Normalize(m.Handler)
+		hh := apierr.Normalize(m.Handler)
 		if !m.Open {
 			hh = apierr.Normalize(guard(m.Handler))
 		}
