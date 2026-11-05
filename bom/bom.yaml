@@ -29,6 +29,7 @@ libs:
 third_party:
   github.com/spf13/cobra: v1.10.2   # CLI standard (matches torque, tether, hadron, cerberus)
   gopkg.in/yaml.v3: v3.0.1          # manifest and BOM parsing
+  github.com/modelcontextprotocol/go-sdk: v1.8.0   # MCP stdio transport (go-mcp wraps it)
 kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
   "@hollis-labs/design-tokens": 0.5.0
   "@hollis-labs/design-components": 0.5.1

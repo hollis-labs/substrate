@@ -12,6 +12,13 @@
 //	scope:           scope required on /mcp when the auth module is started
 //	                 (default "<app>.mcp").
 //	allowed_origins: Origin allowlist for browser clients (default: all).
+//	stdio_token_file: file holding the token ServeStdio presents (default none).
+//
+// Over stdio (an agent launching the app as a subprocess) call
+// ServeStdio from the app's own command. The caller is identified once at start
+// from a token file (config stdio_token_file or StdioOptions.TokenFile) and
+// verified by the auth module, then stamped on every tool call, so Authorize
+// and per-tool scopes behave exactly as over HTTP.
 //
 // With auth started, /mcp is mapped to the configured scope in enforce mode and
 // the guard's principal reaches tool handlers; call Authorize(ctx, app, tool)
@@ -20,12 +27,17 @@ package mcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
-
-	libauth "github.com/hollis-labs/libs/security/auth"
+	"os"
+	"strings"
 
 	gmcp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/server"
 	mcphttp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/transport/http"
+	libauth "github.com/hollis-labs/libs/security/auth"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/hollis-labs/substrate/module"
 )
@@ -116,4 +128,78 @@ func scopes(app *module.App) *libauth.ScopeTable {
 	v, _ := app.Value("auth.scopes")
 	t, _ := v.(*libauth.ScopeTable)
 	return t
+}
+
+// StdioOptions configure ServeStdio.
+type StdioOptions struct {
+	In        io.ReadCloser  // default os.Stdin
+	Out       io.WriteCloser // default os.Stdout; nothing else may write to it
+	TokenFile string         // the caller's token; default config mcp.stdio_token_file
+}
+
+// ServeStdio serves the app's MCP server over stdio until ctx ends or the
+// client disconnects. With auth in off mode no token is needed. In permissive
+// and enforce mode a token that is given must verify; in enforce mode one is
+// required, and it must hold the same scope the /mcp route needs.
+func ServeStdio(ctx context.Context, app *module.App, o StdioOptions) error {
+	srv := Server(app)
+	if srv == nil {
+		return errors.New("mcp: the module is not started")
+	}
+	ctx, err := identify(ctx, app, o.TokenFile)
+	if err != nil {
+		return err
+	}
+	in, out := o.In, o.Out
+	if in == nil {
+		in = os.Stdin
+	}
+	if out == nil {
+		out = os.Stdout
+	}
+	return srv.SDKServer().Run(ctx, &mcpsdk.IOTransport{Reader: in, Writer: out})
+}
+
+// identify verifies the stdio caller's token and stamps the principal on ctx.
+func identify(ctx context.Context, app *module.App, tokenFile string) (context.Context, error) {
+	g := guard(app)
+	if g == nil || g.Mode() == libauth.ModeOff {
+		return ctx, nil
+	}
+	cfg, _ := app.Config["mcp"].(map[string]any)
+	if tokenFile == "" {
+		tokenFile, _ = cfg["stdio_token_file"].(string)
+	}
+	enforce := g.Mode() == libauth.ModeEnforce
+	if tokenFile == "" {
+		if enforce {
+			return ctx, errors.New("mcp: stdio in enforce mode needs a token (mcp.stdio_token_file or StdioOptions.TokenFile)")
+		}
+		return ctx, nil
+	}
+	b, err := os.ReadFile(tokenFile)
+	if err != nil {
+		return ctx, errors.New("mcp: cannot read the stdio token file")
+	}
+	tok := strings.TrimSpace(string(b))
+	if tok == "" {
+		return ctx, errors.New("mcp: the stdio token file is empty")
+	}
+	v, _ := app.Value("auth.verifier") // read by key: mcp does not import auth
+	vf, ok := v.(libauth.Verifier)
+	if !ok {
+		return ctx, errors.New("mcp: stdio has a token but the auth module has no verifier configured")
+	}
+	p, err := vf.Verify(ctx, tok)
+	if err != nil {
+		return ctx, errors.New("mcp: the stdio token was not accepted")
+	}
+	scope, _ := cfg["scope"].(string)
+	if scope == "" {
+		scope = app.Name + ".mcp"
+	}
+	if enforce && !p.HasScope(scope) {
+		return ctx, fmt.Errorf("mcp: the stdio token lacks the scope %q", scope)
+	}
+	return libauth.WithPrincipal(ctx, p), nil
 }

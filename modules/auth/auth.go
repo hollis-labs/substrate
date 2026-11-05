@@ -72,6 +72,9 @@ const (
 	GuardKey = "auth.guard"
 	ScopeKey = "auth.scopes"
 	TokenKey = "auth.token_source"
+	// VerifierKey holds the libauth.Verifier chain (nil when none is configured), for
+	// transports that identify a caller once instead of per request, such as MCP stdio.
+	VerifierKey = "auth.verifier"
 )
 
 func init() { module.Register(&mod{}) }
@@ -167,6 +170,9 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if ts != nil {
 		app.Set(TokenKey, ts)
 	}
+	if gc.Verifier != nil {
+		app.Set(VerifierKey, gc.Verifier)
+	}
 	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/me": me(g)}); err != nil {
 		cancel()
 		return err
@@ -193,6 +199,17 @@ func ScopeTable(app *module.App) *libauth.ScopeTable {
 	v, _ := app.Value(ScopeKey)
 	t, _ := v.(*libauth.ScopeTable)
 	return t
+}
+
+// Verify checks a token against the configured verifiers (JWT, API keys) and
+// returns the principal. It errors when no verifier is configured.
+func Verify(ctx context.Context, app *module.App, token string) (libauth.Principal, error) {
+	v, _ := app.Value(VerifierKey)
+	vf, ok := v.(libauth.Verifier)
+	if !ok {
+		return libauth.Principal{}, fmt.Errorf("auth: no verifier is configured")
+	}
+	return vf.Verify(ctx, token)
 }
 
 // ValidateBind refuses a listener address the configured mode may not use
