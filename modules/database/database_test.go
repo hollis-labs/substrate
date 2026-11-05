@@ -86,6 +86,9 @@ func TestConfigErrorsFailStartWithoutLeakingSecrets(t *testing.T) {
 func TestPostgresMigratesAndReportsHealth(t *testing.T) {
 	dsn := os.Getenv("SUBSTRATE_TEST_POSTGRES_DSN")
 	if dsn == "" {
+		if os.Getenv("SUBSTRATE_REQUIRE_POSTGRES") == "1" {
+			t.Fatal("SUBSTRATE_REQUIRE_POSTGRES=1 but SUBSTRATE_TEST_POSTGRES_DSN is not set")
+		}
 		if os.Getenv("SUBSTRATE_E2E_OFFLINE") == "1" {
 			t.Skip("SUBSTRATE_E2E_OFFLINE=1")
 		}

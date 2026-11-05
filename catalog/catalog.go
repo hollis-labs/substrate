@@ -24,6 +24,9 @@ var Modules = []Module{
 	{Name: "database", Import: "github.com/hollis-labs/substrate/modules/database", Requires: []string{"health"}, Status: "ready"},
 	{Name: "pluginhost", Import: "github.com/hollis-labs/substrate/modules/pluginhost", Requires: []string{"health"}, Status: "ready"},
 	{Name: "events", Import: "github.com/hollis-labs/substrate/modules/events", Requires: []string{"httphost"}, Status: "ready"},
+	{Name: "queue", Import: "github.com/hollis-labs/substrate/modules/queue", Requires: []string{"database"}, Status: "ready"},
+	{Name: "scheduler", Import: "github.com/hollis-labs/substrate/modules/scheduler", Requires: []string{"database"}, Status: "ready"},
+	{Name: "router", Import: "github.com/hollis-labs/substrate/modules/router", Status: "ready"},
 	{Name: "cli", Import: "github.com/hollis-labs/substrate/modules/cli", Requires: []string{"health"}, Status: "ready"},
 }
 
@@ -32,8 +35,9 @@ var Modules = []Module{
 var Profiles = map[string][]string{
 	"minimal": {"config", "logging", "health"},
 	// agentic: minimal plus the capability report, secrets, identity and MCP.
-	// policy, database and pluginhost are not in it: policy needs the app's PDP,
-	// database and pluginhost own app data and plugins. Apps add them under
+	// policy, database, queue, scheduler, router and pluginhost are not in it:
+	// policy needs the app's PDP, router needs the app's rules, and the rest own app
+	// data, jobs and plugins. Apps add them under
 	// modules.add. mcp pulls in httphost, so agentic needs an HTTP-capable binary.
 	"agentic": {"config", "logging", "health", "capabilities", "secrets", "auth", "mcp"},
 }

@@ -9,10 +9,13 @@ import (
 	"sort"
 	"testing"
 
+	librouter "github.com/hollis-labs/libs/core/util/router"
+
 	"github.com/hollis-labs/substrate/catalog"
 	"github.com/hollis-labs/substrate/manifest"
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/policy"
+	"github.com/hollis-labs/substrate/modules/router"
 
 	_ "github.com/hollis-labs/substrate/modules/auth"
 	_ "github.com/hollis-labs/substrate/modules/capabilities"
@@ -25,6 +28,9 @@ import (
 	_ "github.com/hollis-labs/substrate/modules/logging"
 	_ "github.com/hollis-labs/substrate/modules/mcp"
 	_ "github.com/hollis-labs/substrate/modules/pluginhost"
+	_ "github.com/hollis-labs/substrate/modules/queue"
+	_ "github.com/hollis-labs/substrate/modules/router"
+	_ "github.com/hollis-labs/substrate/modules/scheduler"
 	_ "github.com/hollis-labs/substrate/modules/secrets"
 )
 
@@ -45,6 +51,10 @@ func newApp(t *testing.T) *module.App {
 func startStop(t *testing.T, names []string) {
 	t.Helper()
 	policy.UsePDP(policy.AllowAll{}) // policy refuses to start without an app-supplied PDP
+	// router refuses to start without rules.
+	router.UseRules(librouter.RuleSet{Version: "conformance", Strategy: librouter.FirstMatch, Rules: []librouter.Rule{{
+		ID: "r", Target: "t", When: []librouter.Cond{{Field: "kind", Op: librouter.OpEq, Value: "x"}},
+	}}})
 	app := newApp(t)
 	var rt module.Runtime
 	ctx := context.Background()
