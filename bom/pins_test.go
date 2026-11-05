@@ -285,6 +285,13 @@ func TestCheckAppHoldsLibsAndPinnedThirdPartyToTheBOM(t *testing.T) {
 	}
 }
 
+func TestCheckAppIgnoresUnpinnedIndirectLibs(t *testing.T) {
+	b, gp := appFixture(t, "module example.com/app\n\ngo 1.26.10\n\nrequire github.com/hollis-labs/libs/mesh/core v0.8.0 // indirect\n")
+	if ds, _ := CheckApp(b, gp); len(ds) != 0 {
+		t.Fatalf("an indirect libs requirement the BOM does not pin must not be reported: %v", ds)
+	}
+}
+
 func TestCheckAppRefusesAnUnpinnedLibsModule(t *testing.T) {
 	b, gp := appFixture(t, "module example.com/app\n\ngo 1.26.10\n\nrequire github.com/hollis-labs/libs/mesh/core v0.8.0\n")
 	ds, _ := CheckApp(b, gp)

@@ -397,8 +397,11 @@ func versionLess(a, b string) bool {
 }
 
 // CheckApp reports where an app's go.mod disagrees with the BOM: a pinned module
-// at another version, and any libs module the BOM does not pin at all. Modules
-// the BOM does not name and that are not libs are the app's own business.
+// at another version, and any libs module the app requires directly that the BOM
+// does not pin. Libs modules that arrive only as indirect requirements follow
+// from the pinned ones and are not listed; if the BOM does pin one, it must
+// match. Modules the BOM does not name and that are not libs are the app's own
+// business.
 func CheckApp(b *BOM, goMod string) ([]Diff, error) {
 	src, err := os.ReadFile(goMod)
 	if err != nil {
@@ -447,7 +450,7 @@ func editAppGoMod(b *BOM, src string) (string, []string) {
 		case pinned && have != want:
 			diffs = append(diffs, fmt.Sprintf("%s is %s, bom pins %s", path, have, want))
 			return m[1] + path + " " + want + m[4]
-		case !pinned && strings.HasPrefix(path, "github.com/hollis-labs/libs/"):
+		case !pinned && strings.HasPrefix(path, "github.com/hollis-labs/libs/") && !strings.Contains(m[4], "indirect"):
 			diffs = append(diffs, "unpinned: "+path+" is a libs module the bom does not pin (add it to app_libs or drop the import)")
 		}
 		return line
