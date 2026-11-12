@@ -12,6 +12,9 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
   linked modules and size of minimal vs agentic from one source (about 9.4 MB vs 13.7 MB on arm64 macOS).
 - Identity: `Service.User` lookup accessor (public view, no secrets). Signing-key rotation is not built yet.
 
+- App UI contributions (`frontend.contributions`: the app's own file, validated and merged like a module's) and an app
+  config block (`config.<app>`) in the manifest.
+
 ## Next
 
 - `gui-shell` profile (frontend; repo location to be settled) and Hadron as the first real app.
