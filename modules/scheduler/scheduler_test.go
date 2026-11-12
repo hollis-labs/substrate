@@ -2,6 +2,8 @@ package scheduler_test
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -12,7 +14,8 @@ import (
 	"github.com/hollis-labs/libs/core/util/scheduler/sqlstore"
 
 	"github.com/hollis-labs/substrate/boot"
-	_ "github.com/hollis-labs/substrate/modules/database"
+	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/database"
 	_ "github.com/hollis-labs/substrate/modules/health"
 	"github.com/hollis-labs/substrate/modules/queue"
 	"github.com/hollis-labs/substrate/modules/scheduler"
@@ -132,4 +135,50 @@ func TestAutostartFalseHoldsFiresUntilRun(t *testing.T) {
 		t.Fatal(err)
 	}
 	eventually(t, "a fire after Run", func() bool { return rec.jobs.Load() > 0 })
+}
+
+// A store built over the app's own database after the database module started,
+// with an observer option: the shape an app with its own schedule tables uses.
+func TestUseStoreFuncAndOptionsFuncBuildOverTheDatabase(t *testing.T) {
+	reset(t)
+	rec := &recorder{}
+	scheduler.UseRunner(rec)
+	var builtOver *sql.DB
+	var optionsFor libsched.Store
+	scheduler.UseStoreFunc(func(app *module.App) (libsched.Store, error) {
+		db := database.From(app)
+		if db == nil {
+			return nil, errors.New("database module did not start first")
+		}
+		builtOver = db.DB()
+		if err := sqlstore.Migrate(context.Background(), builtOver); err != nil {
+			return nil, err
+		}
+		return sqlstore.New(builtOver)
+	})
+	scheduler.UseOptionsFunc(func(store libsched.Store) []libsched.Option {
+		optionsFor = store
+		return []libsched.Option{libsched.WithTickCadence(15 * time.Millisecond)}
+	})
+	run, err := boot.Start(context.Background(), "t", []string{"health", "database", "scheduler"}, cfg(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	if builtOver == nil || optionsFor == nil || optionsFor != scheduler.Store(run.App) {
+		t.Fatalf("store func ran over %v; options saw %v; module store %v", builtOver, optionsFor, scheduler.Store(run.App))
+	}
+	create(t, run, libsched.Schedule{ID: "x", Enabled: true, Interval: 30 * time.Millisecond, NextRun: time.Now().Add(-time.Second), JobType: "j"})
+	eventually(t, "a fire through the lazily built store", func() bool { return rec.jobs.Load() > 0 })
+}
+
+func TestStoreAndStoreFuncTogetherFailStart(t *testing.T) {
+	reset(t)
+	scheduler.UseRunner(&recorder{})
+	st, _ := sqlstore.New(nil)
+	scheduler.UseStore(st)
+	scheduler.UseStoreFunc(func(*module.App) (libsched.Store, error) { return st, nil })
+	if _, err := boot.Start(context.Background(), "t", []string{"health", "database", "scheduler"}, cfg(t)); err == nil {
+		t.Fatal("UseStore and UseStoreFunc together were accepted")
+	}
 }

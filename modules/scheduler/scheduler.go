@@ -20,8 +20,10 @@
 //	                     scheduler.Run(app) from the daemon command, so a short-lived
 //	                     command never fires schedules.
 //
-// libs provides a reference store for SQLite only. With Postgres, supply a
-// Store with scheduler.UseStore (libs ships a conformance suite for it).
+// libs provides a reference store for SQLite only. With Postgres, or an app that
+// keeps schedules in its own tables, supply a Store with scheduler.UseStore, or
+// scheduler.UseStoreFunc when it is built over the app's database (libs ships a
+// conformance suite for it). UseOptionsFunc adds engine options such as an observer.
 package scheduler
 
 import (
@@ -47,9 +49,11 @@ const (
 )
 
 var (
-	mu     sync.Mutex
-	runner libsched.Runner
-	custom libsched.Store
+	mu         sync.Mutex
+	runner     libsched.Runner
+	custom     libsched.Store
+	storeFunc  func(*module.App) (libsched.Store, error)
+	optionFunc func(libsched.Store) []libsched.Option
 )
 
 // UseRunner supplies the dispatcher for fired jobs, replacing the default
@@ -59,8 +63,30 @@ func UseRunner(r libsched.Runner) { mu.Lock(); runner = r; mu.Unlock() }
 // UseStore supplies the schedule store, replacing the reference SQLite one.
 func UseStore(s libsched.Store) { mu.Lock(); custom = s; mu.Unlock() }
 
+// UseStoreFunc supplies the schedule store lazily: f runs when the module starts,
+// after the modules it requires (so database.From(app) works), for a store that
+// is built over the app's own database. Use it instead of UseStore when the store
+// cannot exist before boot.Start.
+func UseStoreFunc(f func(app *module.App) (libsched.Store, error)) {
+	mu.Lock()
+	storeFunc = f
+	mu.Unlock()
+}
+
+// UseOptionsFunc supplies extra engine options (an observer, a claim lease) once
+// the store exists. They are applied after the config defaults, so they win.
+func UseOptionsFunc(f func(store libsched.Store) []libsched.Option) {
+	mu.Lock()
+	optionFunc = f
+	mu.Unlock()
+}
+
 // Reset clears the hooks (for tests).
-func Reset() { mu.Lock(); runner, custom = nil, nil; mu.Unlock() }
+func Reset() {
+	mu.Lock()
+	runner, custom, storeFunc, optionFunc = nil, nil, nil, nil
+	mu.Unlock()
+}
 
 func init() { module.Register(&mod{}) }
 
@@ -93,8 +119,18 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 		return def
 	}
 	mu.Lock()
-	r, st := runner, custom
+	r, st, sf, of := runner, custom, storeFunc, optionFunc
 	mu.Unlock()
+	if st != nil && sf != nil {
+		return errors.New("scheduler: set UseStore or UseStoreFunc, not both")
+	}
+	if sf != nil {
+		built, err := sf(app)
+		if err != nil {
+			return fmt.Errorf("scheduler: store: %w", err)
+		}
+		st = built
+	}
 
 	schedStore := st
 	if schedStore == nil {
@@ -117,11 +153,15 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if r == nil {
 		r = queueRunner{app: app}
 	}
-	eng := libsched.New(schedStore, r,
-		libsched.WithTickCadence(time.Duration(num("tick_ms", 1000))*time.Millisecond),
+	opts := []libsched.Option{
+		libsched.WithTickCadence(time.Duration(num("tick_ms", 1000)) * time.Millisecond),
 		libsched.WithDueBatchLimit(int(num("due_batch", 100))),
-		libsched.WithClaimLease(time.Duration(num("claim_lease_seconds", 600))*time.Second),
-	)
+		libsched.WithClaimLease(time.Duration(num("claim_lease_seconds", 600)) * time.Second),
+	}
+	if of != nil {
+		opts = append(opts, of(schedStore)...)
+	}
+	eng := libsched.New(schedStore, r, opts...)
 	m.eng = eng
 	app.Set(Key, eng)
 	app.Set(StoreKey, schedStore)
