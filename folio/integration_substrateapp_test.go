@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"testing"
@@ -373,5 +374,212 @@ func checkPrintOnlyCommands(t *testing.T, bin, name string) {
 			names = append(names, e.Name())
 		}
 		t.Errorf("print-only commands created files in HOME: %v", names)
+	}
+}
+
+// bomKits reads the pinned kit versions from the bom.yaml of the Substrate version under test, so the
+// kit inputs (which have no default) come from the framework and not from a list kept here.
+func bomKits(t *testing.T, version string) map[string]string {
+	t.Helper()
+	out, err := exec.Command("go", "mod", "download", "-json", "github.com/hollis-labs/substrate@"+version).Output()
+	if err != nil {
+		t.Fatalf("go mod download substrate@%s: %v", version, err)
+	}
+	var info struct{ Dir string }
+	if err := json.Unmarshal(out, &info); err != nil || info.Dir == "" {
+		t.Fatalf("go mod download: no module directory: %v", err)
+	}
+	bom := readText(t, filepath.Join(info.Dir, "bom", "bom.yaml"))
+	kits := map[string]string{}
+	re := regexp.MustCompile(`(?m)^\s+"@hollis-labs/([a-z-]+)":\s+([0-9]+\.[0-9]+\.[0-9]+)\s*(?:#.*)?$`)
+	for _, m := range re.FindAllStringSubmatch(bom, -1) {
+		kits[m[1]] = m[2]
+	}
+	for _, k := range []string{"app-shell", "design-app-runtime", "design-bindings", "design-components", "design-tokens", "kit-dashboard"} {
+		if kits[k] == "" {
+			t.Fatalf("bom.yaml pins no @hollis-labs/%s", k)
+		}
+	}
+	return kits
+}
+
+func renderSubstrateWebapp(t *testing.T, name, version string, kits map[string]string, extra map[string]any) (string, error) {
+	t.Helper()
+	target := filepath.Join(t.TempDir(), name)
+	inputs := map[string]any{
+		"repo_name":              name,
+		"substrate_version":      version,
+		"kit_app_shell":          kits["app-shell"],
+		"kit_design_app_runtime": kits["design-app-runtime"],
+		"kit_design_bindings":    kits["design-bindings"],
+		"kit_design_components":  kits["design-components"],
+		"kit_design_tokens":      kits["design-tokens"],
+		"kit_dashboard":          kits["kit-dashboard"],
+	}
+	for k, v := range extra {
+		inputs[k] = v
+	}
+	_, err := newGoLibService(t).New(service.NewOptions{PresetID: "substrate-webapp", TargetDir: target, Inputs: inputs})
+	return target, err
+}
+
+func TestSubstrateWebapp_RendersTree(t *testing.T) {
+	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0"}
+	target, err := renderSubstrateWebapp(t, "webby", "v0.1.1-0.20261112164520-da9f59bb59b7", kits, nil)
+	if err != nil {
+		t.Fatalf("service.New substrate-webapp: %v", err)
+	}
+	for _, p := range []string{
+		"frontend/package.json", "frontend/index.html", "frontend/src/App.tsx", "frontend/src/main.tsx", "frontend/src/manifest.ts",
+		"frontend/src/identity/entry.tsx", "frontend/src/pages/items.tsx", "cmd/webby/ui/app.json", "Makefile", "internal/webui/dist/.gitkeep",
+	} {
+		if _, statErr := os.Stat(filepath.Join(target, filepath.FromSlash(p))); statErr != nil {
+			t.Errorf("expected %s, missing: %v", p, statErr)
+		}
+	}
+	pkg := readText(t, filepath.Join(target, "frontend", "package.json"))
+	var parsed struct{ Dependencies, DevDependencies map[string]string }
+	if jsonErr := json.Unmarshal([]byte(pkg), &parsed); jsonErr != nil {
+		t.Fatalf("package.json is not JSON: %v\n%s", jsonErr, pkg)
+	}
+	for name, v := range kits {
+		if got := parsed.Dependencies["@hollis-labs/"+name]; got != v {
+			t.Errorf("@hollis-labs/%s = %q, want the input %q", name, got, v)
+		}
+	}
+	for dep, v := range parsed.Dependencies {
+		if strings.ContainsAny(v, "^~*><") || v == "latest" {
+			t.Errorf("dependency %s is not an exact version: %q", dep, v)
+		}
+	}
+	manifest := readText(t, filepath.Join(target, "cmd", "webby", "substrate.yaml"))
+	if !strings.Contains(manifest, "frontend: { contributions: ui/app.json }") {
+		t.Errorf("manifest does not name the contributions file:\n%s", manifest)
+	}
+	check := readText(t, filepath.Join(target, ".github", "workflows", "check.yml"))
+	if !strings.Contains(check, "npm run typecheck") || !strings.Contains(check, "npm run build") {
+		t.Error("check.yml lacks the frontend steps")
+	}
+	// A backend-only render has none of this.
+	plain, err := renderSubstrateApp(t, "plain", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(readText(t, filepath.Join(plain, "cmd", "plain", "substrate.yaml")), "frontend") || strings.Contains(readText(t, filepath.Join(plain, ".github", "workflows", "check.yml")), "npm") {
+		t.Error("substrate-app must not render frontend steps")
+	}
+}
+
+func TestSubstrateWebapp_KitInputsAreRequired(t *testing.T) {
+	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0"}
+	for _, drop := range []string{"kit_app_shell", "kit_dashboard"} {
+		target := filepath.Join(t.TempDir(), "webby")
+		inputs := map[string]any{
+			"repo_name": "webby", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7",
+			"kit_app_shell": kits["app-shell"], "kit_design_app_runtime": kits["design-app-runtime"], "kit_design_bindings": kits["design-bindings"],
+			"kit_design_components": kits["design-components"], "kit_design_tokens": kits["design-tokens"], "kit_dashboard": kits["kit-dashboard"],
+		}
+		delete(inputs, drop)
+		_, err := newGoLibService(t).New(service.NewOptions{PresetID: "substrate-webapp", TargetDir: target, Inputs: inputs})
+		if err == nil || !strings.Contains(err.Error(), drop) {
+			t.Errorf("without %s: want an error naming it, got %v", drop, err)
+		}
+	}
+}
+
+// TestSubstrateWebapp_BuildsAndServesUI renders the app with a UI against the real framework and the
+// kit versions from its bom.yaml, then runs npm install, typecheck, lint and build, builds the Go
+// binary (which embeds the built UI) and checks the binary serves the SPA. It needs network, Go and
+// Node; a missing tool is a visible SKIP (a failure under FOLIO_REQUIRE_TOOLS=1).
+func TestSubstrateWebapp_BuildsAndServesUI(t *testing.T) {
+	version := os.Getenv("FOLIO_SUBSTRATE_VERSION")
+	if version == "" {
+		if os.Getenv("FOLIO_REQUIRE_TOOLS") == "1" {
+			t.Fatal("FOLIO_SUBSTRATE_VERSION is required (FOLIO_REQUIRE_TOOLS=1)")
+		}
+		t.Skip("SKIPPED, not passed: FOLIO_SUBSTRATE_VERSION names no framework version to build against")
+	}
+	if !needTool(t, "go") || !needTool(t, "npm") {
+		return
+	}
+	port := os.Getenv("FOLIO_TEST_PORT")
+	if port == "" {
+		port = "18210"
+	}
+	kits := bomKits(t, version)
+	dir, err := renderSubstrateWebapp(t, "webby", version, kits, map[string]any{"http_port": port})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	mustRun(t, dir, "go", "mod", "tidy")
+	mustRun(t, dir, "go", "run", "github.com/hollis-labs/substrate/cmd/substrate", "pins", "sync", "--app", ".")
+	mustRun(t, dir, "go", "mod", "tidy")
+	mustRun(t, dir, "go", "run", "github.com/hollis-labs/substrate/cmd/substrate", "pins", "check", "--app", ".")
+	wiring := filepath.Join(dir, "cmd", "webby", "substrate_wiring.go")
+	rendered := readText(t, wiring)
+	mustRun(t, dir, "go", "run", "github.com/hollis-labs/substrate/cmd/substrate", "generate", "-f", "cmd/webby/substrate.yaml")
+	if got := readText(t, wiring); got != rendered {
+		t.Fatalf("rendered substrate_wiring.go differs from `substrate generate`")
+	}
+	fe := filepath.Join(dir, "frontend")
+	mustRun(t, fe, "npm", "install", "--no-audit", "--no-fund")
+	mustRun(t, fe, "npm", "run", "typecheck")
+	mustRun(t, fe, "npm", "run", "lint")
+	mustRun(t, fe, "npm", "run", "build")
+	mustRun(t, dir, "go", "vet", "./...")
+	mustRun(t, dir, "go", "test", "-race", "./...")
+	bin := filepath.Join(dir, "webby")
+	mustRun(t, dir, "go", "build", "-o", bin, "./cmd/webby")
+	checkPrintOnlyCommands(t, bin, "webby")
+	serveAndFetchSPA(t, bin, "webby", port)
+}
+
+// serveAndFetchSPA starts the binary on a throwaway data directory and checks it serves the built SPA
+// at the root (the embedded index, not the empty embed) and that an unknown Host is refused.
+func serveAndFetchSPA(t *testing.T, bin, name, port string) {
+	t.Helper()
+	data := t.TempDir()
+	cfg := filepath.Join(data, "override.yaml")
+	if err := os.WriteFile(cfg, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "WEBBY_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg)
+	setup := exec.Command(bin, "identity", "setup", "--username", "owner")
+	setup.Env, setup.Stdin = env, strings.NewReader(randomHex(t)+"\n")
+	if out, err := setup.CombinedOutput(); err != nil {
+		t.Fatalf("identity setup: %v\n%s", err, out)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	srv := exec.CommandContext(ctx, bin, "serve")
+	srv.Env = env
+	if err := srv.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_ = srv.Process.Signal(syscall.SIGTERM)
+		_ = srv.Wait()
+	}()
+	base := "http://127.0.0.1:" + port
+	var body string
+	for i := 0; i < 100; i++ {
+		resp, err := http.Get(base + "/")
+		if err == nil {
+			b, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				body = string(b)
+				break
+			}
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if !strings.Contains(body, `<div id="root">`) || !strings.Contains(body, "/assets/") {
+		t.Fatalf("GET / did not serve the built SPA: %q", body)
+	}
+	req, _ := http.NewRequest("GET", base+"/healthz", nil)
+	req.Host = "evil.example"
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusForbidden {
+		t.Errorf("unknown Host not refused: %v %v", err, resp)
 	}
 }

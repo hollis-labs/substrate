@@ -1,0 +1,85 @@
+folio_version: "0.1"
+id: substrate-frontend
+version: 0.1.0
+description: Minimal app-shell frontend for a Substrate app (BOM-pinned kits, sign-in, one list surface, ui/app.json) — compose, do not render directly
+author: hollis-labs
+license: MIT
+layer_only: true
+
+# A LAYER over `substrate-baseline`. It renders the smallest frontend that works against the backend
+# shell: React 19, Vite, Tailwind, app-shell's ManifestShell over the manifest `substrate frontend`
+# generates, a sign-in screen (identity has no UI kit yet, so the identity screens are app-owned and sit in
+# one directory), and one list surface over GET/POST /api/items. It switches the baseline's frontend steps on
+# (its `with_frontend` input): the manifest names `ui/app.json` and CI builds the UI before the Go tests.
+#
+# Versions: the @hollis-labs kit versions are inputs with NO default, taken from the `kits:` block of the
+# Substrate bom/bom.yaml; the framework does not mirror them into platform-pins.yaml yet (docs/conversion-notes.md,
+# Gap 2). The toolchain packages (react, vite, tailwind, biome, eslint, typescript, base-ui, lucide-react and
+# @hollis-labs/eslint-config-design) are not in the BOM at all: they are literals copied from the ported apps
+# (Gap 5). `npm install` once to create the lock file; CI runs `npm ci`.
+
+composes:
+  - id: substrate-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../substrate-baseline
+    vars:
+      with_frontend: "yes"
+
+inputs:
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary and Substrate app name (lowercase, hyphens allowed)
+  - name: substrate_version
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: The github.com/hollis-labs/substrate version for the go.mod require line. No default.
+  - name: kit_app_shell
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/app-shell, exact, from the Substrate bom.yaml kits block. No default."
+  - name: kit_design_app_runtime
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-app-runtime, exact, from the Substrate bom.yaml kits block. No default."
+  - name: kit_design_bindings
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-bindings, exact, from the Substrate bom.yaml kits block. No default."
+  - name: kit_design_components
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-components, exact, from the Substrate bom.yaml kits block. No default."
+  - name: kit_design_tokens
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-tokens, exact, from the Substrate bom.yaml kits block. No default."
+  - name: kit_dashboard
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/kit-dashboard, exact, from the Substrate bom.yaml kits block. No default."
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: "frontend/src/**"
+      policy: skip
+    - glob: "cmd/*/ui/app.json"
+      policy: skip
+    - glob: "frontend/eslint.config.js"
+      policy: overwrite
+    - glob: "frontend/biome.json"
+      policy: overwrite

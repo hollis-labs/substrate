@@ -12,7 +12,7 @@ jobs:
     with:
       app: {{ .inputs.repo_name }}
       main_pkg: ./cmd/{{ .inputs.repo_name }}
-{{- if .computed.frontend }}
+{{- if .inputs.with_frontend }}
       node_version: "24"
       ui_cmd: "cd frontend && npm ci && npm run build"
 {{- end }}

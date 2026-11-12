@@ -1,0 +1,43 @@
+.PHONY: all build ui-build ui-dev test vet lint pins scan generate clean
+
+SUBSTRATE := go run github.com/hollis-labs/substrate/cmd/substrate
+
+# The frontend, then the Go binary with the UI embedded.
+all: ui-build build
+
+# Build the UI into internal/webui/dist (the Go embed directory). `npm ci` needs the lock file:
+# run `npm install` once in frontend/ and commit package-lock.json.
+ui-build:
+	cd frontend && npm ci && npm run build
+
+# UI dev server with hot reload; proxies /api to the backend (run `{{ .inputs.repo_name }} serve` in another shell).
+ui-dev:
+	cd frontend && npm ci && npm run dev
+
+build:
+	go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+
+test:
+	go test -race ./...
+
+vet:
+	go vet ./...
+
+lint: vet
+	golangci-lint run
+
+# The go.mod pins must match the Substrate BOM; edit the BOM (in Substrate), never go.mod.
+pins:
+	$(SUBSTRATE) pins check --app .
+
+scan:
+	$(SUBSTRATE) scan-public --tree
+
+# Regenerate the wiring file after editing cmd/{{ .inputs.repo_name }}/substrate.yaml.
+generate:
+	$(SUBSTRATE) generate -f cmd/{{ .inputs.repo_name }}/substrate.yaml
+
+clean:
+	rm -f {{ .inputs.repo_name }}
+	rm -rf frontend/node_modules frontend/src/generated
+	find internal/webui/dist -mindepth 1 ! -name .gitkeep -delete

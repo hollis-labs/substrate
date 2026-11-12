@@ -48,6 +48,13 @@ inputs:
     description: >-
       The github.com/hollis-labs/substrate version for the go.mod require line (a tag or a
       pseudo-version). No default: take it from the framework you are building on.
+  - name: with_frontend
+    type: string
+    default: ""
+    pattern: "^(yes)?$"
+    description: >-
+      "yes" switches on the frontend steps (the manifest names ui/app.json, CI and the build workflow build
+      the UI first). Set by the substrate-frontend layer through its compose entry, not by a person.
   - name: http_port
     type: string
     default: "8080"
@@ -62,7 +69,7 @@ inputs:
 computed:
   module_path: "github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}"
   env_prefix: '{{ upper (replace "-" "_" .inputs.repo_name) }}'
-  frontend: ""
+  app_title: '{{ pascalCase .inputs.repo_name }}'
 
 files:
   source: ./files
