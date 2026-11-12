@@ -126,6 +126,12 @@ type Route struct {
 // Authenticated is the Scope value meaning any verified caller.
 const Authenticated = "authenticated"
 
+// Public is the Scope value meaning no authentication at all, for the few routes
+// that must work before a caller has an identity: first-run setup, login, a
+// published key set, pairing. A public route is reachable in every auth mode, so
+// its handler is responsible for everything it allows.
+const Public = "public"
+
 // Fixed region names published by hosts.
 const (
 	RegionNavPrimary       = "nav.primary"

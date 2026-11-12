@@ -144,15 +144,21 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if len(keys) > 0 {
 		verifiers = append(verifiers, libauth.NewAPIKeyVerifier(keys...))
 	}
-	if mode == libauth.ModeEnforce && len(verifiers) == 0 {
+	// An app that selects the identity module is its own issuer: the module adds
+	// its verifier after this one starts (AddVerifier), so none is needed here.
+	_, localIdentity := app.Config["identity"].(map[string]any)
+	if mode == libauth.ModeEnforce && len(verifiers) == 0 && !localIdentity {
 		cancel()
-		return fmt.Errorf("mode enforce needs a verifier: set jwks_url, bootstrap_key_file or api_keys")
+		return fmt.Errorf("mode enforce needs a verifier: set jwks_url, bootstrap_key_file or api_keys (or select the identity module)")
 	}
 
 	scopes := libauth.NewScopeTable()
-	gc := libauth.Config{Mode: mode, Scopes: scopes, OpenPath: func(string) bool { return false }}
-	if len(verifiers) > 0 {
+	gc := libauth.Config{Mode: mode, Scopes: scopes, OpenPath: func(p string) bool { return module.IsPublic(app, p) }}
+	switch {
+	case len(verifiers) > 0:
 		gc.Verifier = libauth.Chain(verifiers...)
+	case localIdentity:
+		gc.Verifier = refuseAll{} // until the identity module adds its own
 	}
 	g, err := libauth.New(gc)
 	if err != nil {
@@ -184,6 +190,36 @@ func (m *mod) Stop(context.Context) error {
 	if m.cancel != nil {
 		m.cancel()
 	}
+	return nil
+}
+
+// refuseAll is the verifier of an app whose only verifier is added later: until
+// then every credential is invalid.
+type refuseAll struct{}
+
+func (refuseAll) Verify(context.Context, string) (libauth.Principal, error) {
+	return libauth.Principal{}, libauth.ErrInvalidToken
+}
+
+// AddVerifier makes the guard also accept credentials v resolves. It is how a
+// module that issues credentials (identity) gets them accepted by the app's one
+// guard, in the mode the guard is already in. Call it from the module's Start,
+// after auth has started.
+func AddVerifier(app *module.App, v libauth.Verifier) error {
+	g := Guard(app)
+	if g == nil {
+		return fmt.Errorf("auth module is not started")
+	}
+	current, _ := app.Value(VerifierKey)
+	cur, _ := current.(libauth.Verifier)
+	next := v
+	if _, isRefuse := cur.(refuseAll); cur != nil && !isRefuse {
+		next = libauth.Chain(cur, v)
+	}
+	if err := g.Apply(g.Mode(), next); err != nil {
+		return err
+	}
+	app.Set(VerifierKey, next)
 	return nil
 }
 
