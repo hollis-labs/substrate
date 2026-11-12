@@ -37,6 +37,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -153,7 +154,7 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	}
 
 	scopes := libauth.NewScopeTable()
-	gc := libauth.Config{Mode: mode, Scopes: scopes, OpenPath: func(p string) bool { return module.IsPublic(app, p) }}
+	gc := libauth.Config{Mode: mode, Scopes: scopes, Logger: slog.New(quietNotEnforcing{}), OpenPath: func(p string) bool { return module.IsPublic(app, p) }}
 	switch {
 	case len(verifiers) > 0:
 		gc.Verifier = libauth.Chain(verifiers...)
@@ -192,6 +193,49 @@ func (m *mod) Stop(context.Context) error {
 	}
 	return nil
 }
+
+// NotEnforcingMsg is the message libs logs when a guard is built in a mode other
+// than enforce. The auth module silences it at Start (a short-lived command in a
+// CLI-variant app would print it on every run) and httphost.Serve logs it where a
+// listener starts.
+const NotEnforcingMsg = "auth is not enforcing"
+
+// quietNotEnforcing is the guard's logger: the process default logger (looked up
+// per record, so a logging module that starts later is honoured) without the
+// startup "not enforcing" warning.
+type quietNotEnforcing struct {
+	attrs []slog.Attr
+	group string
+}
+
+func (q quietNotEnforcing) base() slog.Handler {
+	h := slog.Default().Handler()
+	if len(q.attrs) > 0 {
+		h = h.WithAttrs(q.attrs)
+	}
+	if q.group != "" {
+		h = h.WithGroup(q.group)
+	}
+	return h
+}
+
+func (q quietNotEnforcing) Enabled(ctx context.Context, l slog.Level) bool {
+	return q.base().Enabled(ctx, l)
+}
+
+func (q quietNotEnforcing) Handle(ctx context.Context, r slog.Record) error {
+	if r.Message == NotEnforcingMsg {
+		return nil
+	}
+	return q.base().Handle(ctx, r)
+}
+
+func (q quietNotEnforcing) WithAttrs(a []slog.Attr) slog.Handler {
+	q.attrs = append(append([]slog.Attr{}, q.attrs...), a...)
+	return q
+}
+
+func (q quietNotEnforcing) WithGroup(n string) slog.Handler { q.group = n; return q }
 
 // refuseAll is the verifier of an app whose only verifier is added later: until
 // then every credential is invalid.
