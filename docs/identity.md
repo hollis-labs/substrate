@@ -40,7 +40,7 @@ With `identity` selected, `enforce` needs no other verifier.
 
 ## People
 
-1. First run: `GET /api/setup` says `{"setup_required": true}`. `POST /api/setup` with `{display_name, username, password}` creates the owner (scope `*`), closes setup for good, and signs in.
+1. First run: the owner is created offline, before the service starts (see [Offline bootstrap](#offline-bootstrap)). `GET /api/setup` says `{"setup_required": true, "setup_over_http": false}` until then and `{"setup_required": false, ...}` after. `POST /api/setup` is refused (403 `setup_offline`) unless `identity.setup` is `http`, a local-development opt-in under which `{display_name, username, password}` creates the owner (scope `*`), closes setup for good, and signs in.
 2. `POST /api/login`, `POST /api/logout`, `PUT /api/password` (ends every other session), `GET /api/identity/profile`, `PUT /api/identity/profile`, `GET /api/identity/sessions`, `DELETE /api/identity/sessions/{id}`.
 3. Administrators (`<app>.admin`, which the owner holds through `*`) manage users: `GET|POST /api/identity/users`, `PUT /api/identity/users/{id}` (disable, scopes, password). Nobody can grant a scope they do not hold.
 
@@ -105,6 +105,33 @@ curl -s https://app/api/identity/signing-key -H "Authorization: Bearer $ADMIN_KE
 
 Go: `identity.From(app).RotateSigningKey(compromised)` and `.SigningKey()` do the same in process. Boot hooks must not register modules.
 
+## Offline bootstrap
+
+There is never an open first-run setup over HTTP on a host where agents run: loopback is not a boundary (an agent on the same host reached an app's loopback setup first and became its owner). The owner and the first keys are created offline, before the service starts. When an app selects `identity` and `cli`, the cli root gets:
+
+```sh
+# the owner: password from the terminal (prompted twice, not echoed) or from the first line of stdin
+printf '%s\n' "$OWNER_PASSWORD" | <app> identity setup --username owner --display-name "The Owner"
+
+# an API key: written once to a new file (mode 0600, never overwritten), or with --stdout to stdout, nothing else
+<app> identity key create --name station-a --scope station.read --scope station.write \
+      [--audience station] [--ttl 720h] --out /run/secrets/station-a.key
+```
+
+- `identity setup` makes the first owner (scope `*`) with the same validation and the same atomic check as `POST /api/setup`, so it refuses when any user exists ("setup is already done", exit 1, nothing changed). After it, `GET /api/setup` answers `setup_required: false` and `POST /api/setup` is refused. No session is created.
+- The password is never an argument or an environment variable. With no terminal on stdin the first line of stdin is the password; with one, it is prompted twice. Nothing the commands print includes it (also on errors).
+- `identity key create` needs an owner (run setup first). Any scope may be granted, including `*`; the key is recorded as created by `local:operator` and shows in `GET /api/identity/keys`. Exactly one of `--out PATH` (the file is claimed with `O_EXCL` at mode 0600 before the key exists, so a taken path costs nothing; stdout then carries only the credential id) or `--stdout` (the key and a newline, the only output; notes go to stderr, never the key). `--ttl` is optional (default: no expiry), `--audience` and `--scope` repeat.
+- Scripting: no prompt when stdin is not a terminal; any failure is a non-zero exit and a one-line message on stderr. A repeat `setup` on an instance that already has an owner exits non-zero, so a first-run script that must be idempotent tests `GET /api/setup` (or the message) first.
+- Go: the same operations are `Service.SetupOwner(ctx, OwnerInput)` and `Service.CreateKey(ctx, KeyInput)` for an app with its own provisioning flow. `cli.AddCommand(app, cmd)` adds a command to the root whichever of the two modules starts first.
+
+**Same boot as the server.** The commands run inside the app's normal boot (`boot.StartWith` with the app's hooks, the `SUBSTRATE_CONFIG` merge), so the database, `key_file` and secrets directory are the ones the service reads. They work on a database just created by the app's migrate step that no server has opened: identity creates its own tables on start. Starting the module also creates the signing key at `key_file` if it is absent (the same file the server will use, so this is harmless on one host; a later change guards against a second issuer).
+
+**Beside a running server.** The store allows one write connection per process, not per file. A command run while the server is up is a second process on the same SQLite file; SQLite serialises the two writers and the store waits for the lock. The server sees the new rows on its next request (credentials are read per call, not cached). Tested with a server writing sessions continuously while eight keys were created beside it. The limit: a write that holds the lock for a long time (a backup, a very large migration) delays the command; it does not corrupt anything. Postgres has no such limit.
+
+**`identity.setup`.** `offline` (the default) or `http`. Under `offline`, `POST /api/setup` is always refused with 403 `setup_offline` and a message that names `<app> identity setup`, on a fresh instance too, so a service started by mistake before the bootstrap cannot be claimed. `GET /api/setup` still answers (`setup_required: true`, `setup_over_http: false`). `http` restores the old behaviour and is for local development only: set `identity: {setup: http}` in the manifest or in a `SUBSTRATE_CONFIG` override.
+
+**Trust statement.** Whoever can run the binary against the database and the key file already controls the instance: they can read the database and the signing key and write rows or mint tokens directly. These commands add no authority; they make the same authority usable without an open setup window. They do not check who the operator is, and a local key's `local:operator` creator is a label, not a verified identity.
+
 ## Config
 
-See the package comment for the full list: `key_file`, `allow_new_signing_key` (default false), `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).
+See the package comment for the full list: `key_file`, `allow_new_signing_key` (default false), `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `setup` (`offline`; `http` for development), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).

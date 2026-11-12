@@ -43,7 +43,7 @@ func startIn(t *testing.T, dir, mode, extra string) *app {
 	cfg := fmt.Sprintf(`{
 		"database": {"sqlite": {"path": %q}},
 		"auth": {"mode": %q},
-		"identity": {"key_file": %q, "bcrypt_cost": 4%s}
+		"identity": {"key_file": %q, "bcrypt_cost": 4, "setup": "http"%s}
 	}`, filepath.Join(dir, "t.db"), mode, filepath.Join(dir, "id.key"), extra)
 	run, err := boot.Start(context.Background(), "demo", []string{"health", "logging", "auth", "database", "httphost", "identity"}, cfg)
 	if err != nil {
