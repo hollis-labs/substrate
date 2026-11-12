@@ -22,6 +22,7 @@ minor releases may break APIs.
 ### Fixed
 
 - `database`: two processes starting at the same moment on one new SQLite file no longer fail with `database is locked` at open or `table ... already exists` at migrate. On SQLite (file paths only) open and migrate now run under an exclusive `flock` on `<path>.open.lock`; the kernel releases it when the holder exits, so there is no stale-lock case. New config `database.sqlite.open_lock_timeout` (Go duration, default `30s`, must be positive); a longer wait fails the start with an error naming the lock file. Not taken for `:memory:` or Postgres; a no-op on non-unix builds. A new file `<db>.open.lock` appears beside the database. Documented in the store contract (`docs/adopting-substrate.md` section 4).
+- `identity`: two processes starting at once on one new data directory now end with the same signing key. The first-start create was a plain write, so each process could keep its own key while the file held the last writer's; it is now an exclusive create (private temp file hard-linked to `key_file`) and the loser reads the winner's key. The JWKS and retired-set scratch files are named per process, so concurrent starts no longer collide on them.
 
 ### Added
 

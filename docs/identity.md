@@ -80,7 +80,7 @@ Revoking the key at B ends A's access within the token lifetime.
 
 ## Keys and storage
 
-The signing key (Ed25519, PEM) is created `0600` at `identity.key_file` on first start, beside a public `<key_file>.jwks.json`. Losing it invalidates minted tokens, not sessions or keys. State lives in `identity_*` tables created at start in the app's database (SQLite or Postgres). See the next section to rotate the key without breaking live tokens.
+The signing key (Ed25519, PEM) is created `0600` at `identity.key_file` on first start, beside a public `<key_file>.jwks.json`. Several processes starting at once on one new data directory share one key: the create is exclusive (a private temp file hard-linked to `key_file`), and the process that loses reads the winner's key. Losing it invalidates minted tokens, not sessions or keys. State lives in `identity_*` tables created at start in the app's database (SQLite or Postgres). See the next section to rotate the key without breaking live tokens.
 
 ### One issuer per database
 
