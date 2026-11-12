@@ -91,6 +91,13 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 	if len(m.Presets) == 0 {
 		return InspectResult{}, newErr(ErrManifestInvalid, manifest.ManifestFilename+" records no presets", nil)
 	}
+	// A breadcrumb that names a removed preset fails here, before anything is rendered: a removed preset is
+	// never replaced by the current preset of the same name.
+	for _, ref := range m.Presets {
+		if removedPreset(ref.ID, ref.Version) {
+			return InspectResult{}, errPresetRemoved(ref.ID, ref.Version)
+		}
+	}
 	root := m.Presets[len(m.Presets)-1]
 
 	now := m.GeneratedAt

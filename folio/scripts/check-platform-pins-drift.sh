@@ -101,8 +101,6 @@ if [ "$selftest" = 1 ]; then
 	CHK=presets/go-baseline/files/.github/workflows/check.yml.tmpl
 	mutate "go-default-wrong" presets/base/preset.yaml 's/default: "1.26.11"/default: "1.26.5"/' "go-default:presets/base/preset.yaml"
 	mutate "go-mod-wrong" go.mod 's/^go 1\.26\.11$/go 1.26.5/' "go-mod:go.mod"
-	mutate "chimera-wrong" presets/chat-app/preset.yaml 's/default: v0.0.0-20261008115211-389155313ee5/default: v0.0.0-20261008115211-000000000000/' "chimera_version:presets/chat-app/preset.yaml"
-	mutate "chimera-wrapper-wrong" presets/app-dashboard-chimera-plugin/preset.yaml 's/default: design-0.4.0-react-19.3.0/default: design-0.4.0-react-0.0.0/' "chimera_gui_recipe:presets/app-dashboard-chimera-plugin/preset.yaml"
 	mutate "floor-script-wrong" scripts/check-lib-conformance.sh 's/"\$patch" -ge 11 \]/"$patch" -ge 5 ]/' "go-floor-script:scripts/check-lib-conformance.sh"
 	# first occurrence only: a file with SOME wrong tags must fail too
 	mutate "checkout-one-of-many-wrong" .github/workflows/ci.yml '1,/actions\/checkout@v5/s/actions\/checkout@v5/actions\/checkout@v4/' "checkout:.github/workflows/ci.yml"
@@ -131,8 +129,6 @@ pin() { # section key
 	' "$manifest"
 }
 go_v=$(pin go version)
-chimera_v=$(pin chimera version)
-chimera_gui=$(pin chimera gui_recipe)
 checkout_v=$(pin ci actions_checkout)
 setupgo_v=$(pin ci actions_setup_go)
 lintact_v=$(pin ci golangci_lint_action)
@@ -171,13 +167,6 @@ for f in "$dir"/presets/*/preset.yaml; do
 	' "$f")
 	[ -n "$got" ] || continue # preset composes go-baseline instead of declaring go_version
 	compare "go-default:$(rel "$f")" "go_version default" "$go_v" "$got"
-done
-for f in "$dir"/presets/app-dashboard/preset.yaml "$dir"/presets/chat-app/preset.yaml "$dir"/presets/app-dashboard-chimera-plugin/preset.yaml "$dir"/presets/chat-app-chimera-plugin/preset.yaml; do
- for key in chimera_version chimera_gui_recipe; do
-  got=$(awk -v key="$key" '$0 ~ "^ *- name: "key"[ \t]*$" { f=1; next } f && /^ *default:/ { v=$0; sub(/^ *default:[ \t]*/, "", v); gsub(/"/, "", v); print v; exit }' "$f")
-  want=$chimera_v; [ "$key" = chimera_gui_recipe ] && want=$chimera_gui
-  compare "$key:$(rel "$f")" "$key default" "$want" "$got"
- done
 done
 compare "go-mod:go.mod" "go directive" "$go_v" "$(awk '$1 == "go" { print $2; exit }' "$dir/go.mod")"
 

@@ -15,6 +15,7 @@ type ErrorCode string
 const (
 	ErrPresetNotFound ErrorCode = "preset_not_found"
 	ErrPresetInvalid  ErrorCode = "preset_invalid"
+	ErrPresetRemoved  ErrorCode = "preset_removed"
 	ErrInputMissing   ErrorCode = "input_missing"
 	ErrInputInvalid   ErrorCode = "input_invalid"
 	ErrComputeFailed  ErrorCode = "compute_failed"

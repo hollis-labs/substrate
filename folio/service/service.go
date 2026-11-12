@@ -362,6 +362,9 @@ func (s *Service) LoadPreset(id string) (*LoadedPreset, error) {
 	if id == "" {
 		return nil, newErr(ErrPresetNotFound, "preset id is empty", nil)
 	}
+	if removedPreset(id, "") {
+		return nil, errPresetRemoved(id, "")
+	}
 	if s.bundledFS != nil {
 		sub := pathJoin(s.bundledRoot, id)
 		// Preserve old CLI calls and inspect of existing sysop-ui breadcrumbs.

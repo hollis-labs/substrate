@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -19,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hollis-labs/tools/folio/internal/manifest"
 	"github.com/hollis-labs/tools/folio/service"
 )
 
@@ -404,7 +406,7 @@ func bomKits(t *testing.T, version string) map[string]string {
 	return kits
 }
 
-func renderSubstrateWebapp(t *testing.T, name, version string, kits map[string]string, extra map[string]any) (string, error) {
+func renderAppDashboard(t *testing.T, name, version string, kits map[string]string, extra map[string]any) (string, error) {
 	t.Helper()
 	target := filepath.Join(t.TempDir(), name)
 	inputs := map[string]any{
@@ -421,15 +423,15 @@ func renderSubstrateWebapp(t *testing.T, name, version string, kits map[string]s
 	for k, v := range extra {
 		inputs[k] = v
 	}
-	_, err := newGoLibService(t).New(service.NewOptions{PresetID: "substrate-webapp", TargetDir: target, Inputs: inputs})
+	_, err := newGoLibService(t).New(service.NewOptions{PresetID: "app-dashboard", TargetDir: target, Inputs: inputs})
 	return target, err
 }
 
-func TestSubstrateWebapp_RendersTree(t *testing.T) {
+func TestAppDashboard_RendersTree(t *testing.T) {
 	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0", "plugin-host-ui": "0.3.0"}
-	target, err := renderSubstrateWebapp(t, "webby", "v0.1.1-0.20261112164520-da9f59bb59b7", kits, nil)
+	target, err := renderAppDashboard(t, "webby", "v0.1.1-0.20261112164520-da9f59bb59b7", kits, nil)
 	if err != nil {
-		t.Fatalf("service.New substrate-webapp: %v", err)
+		t.Fatalf("service.New app-dashboard: %v", err)
 	}
 	for _, p := range []string{
 		"frontend/package.json", "frontend/index.html", "frontend/src/App.tsx", "frontend/src/main.tsx", "frontend/src/manifest.ts",
@@ -501,7 +503,7 @@ func TestSubstrateWebapp_RendersTree(t *testing.T) {
 	}
 }
 
-func TestSubstrateWebapp_KitInputsAreRequired(t *testing.T) {
+func TestAppDashboard_KitInputsAreRequired(t *testing.T) {
 	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0", "plugin-host-ui": "0.3.0"}
 	for _, drop := range []string{"kit_app_shell", "kit_dashboard"} {
 		target := filepath.Join(t.TempDir(), "webby")
@@ -511,18 +513,18 @@ func TestSubstrateWebapp_KitInputsAreRequired(t *testing.T) {
 			"kit_design_components": kits["design-components"], "kit_design_tokens": kits["design-tokens"], "kit_dashboard": kits["kit-dashboard"], "kit_plugin_host_ui": kits["plugin-host-ui"],
 		}
 		delete(inputs, drop)
-		_, err := newGoLibService(t).New(service.NewOptions{PresetID: "substrate-webapp", TargetDir: target, Inputs: inputs})
+		_, err := newGoLibService(t).New(service.NewOptions{PresetID: "app-dashboard", TargetDir: target, Inputs: inputs})
 		if err == nil || !strings.Contains(err.Error(), drop) {
 			t.Errorf("without %s: want an error naming it, got %v", drop, err)
 		}
 	}
 }
 
-// TestSubstrateWebapp_BuildsAndServesUI renders the app with a UI against the real framework and the
+// TestAppDashboard_BuildsAndServesUI renders the app with a UI against the real framework and the
 // kit versions from its bom.yaml, then runs npm install, typecheck, lint and build, builds the Go
 // binary (which embeds the built UI) and checks the binary serves the SPA. It needs network, Go and
 // Node; a missing tool is a visible SKIP (a failure under FOLIO_REQUIRE_TOOLS=1).
-func TestSubstrateWebapp_BuildsAndServesUI(t *testing.T) {
+func TestAppDashboard_BuildsAndServesUI(t *testing.T) {
 	version := os.Getenv("FOLIO_SUBSTRATE_VERSION")
 	if version == "" {
 		if os.Getenv("FOLIO_REQUIRE_TOOLS") == "1" {
@@ -538,7 +540,7 @@ func TestSubstrateWebapp_BuildsAndServesUI(t *testing.T) {
 		port = "18210"
 	}
 	kits := bomKits(t, version)
-	dir, err := renderSubstrateWebapp(t, "webby", version, kits, map[string]any{"http_port": port})
+	dir, err := renderAppDashboard(t, "webby", version, kits, map[string]any{"http_port": port})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -644,5 +646,41 @@ func checkTransportGate(t *testing.T, dir string) {
 	}
 	if err := os.Remove(bad); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A breadcrumb or a command line that still says sysop-ui resolves to app-dashboard (the engine keeps
+// that alias), and the new app-dashboard records itself under its canonical id.
+func TestAppDashboard_LegacySysopUIAlias(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "legacy")
+	inputs := map[string]any{
+		"repo_name": "legacy-dashboard", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7",
+		"kit_app_shell": "0.1.0", "kit_design_app_runtime": "0.5.0", "kit_design_bindings": "0.2.0",
+		"kit_design_components": "0.5.1", "kit_design_tokens": "0.5.0", "kit_dashboard": "0.6.0", "kit_plugin_host_ui": "0.3.0",
+	}
+	svc := newGoLibService(t)
+	if _, err := svc.New(service.NewOptions{PresetID: "sysop-ui", TargetDir: target, Inputs: inputs}); err != nil {
+		t.Fatal(err)
+	}
+	mf, err := manifest.Read(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The breadcrumb lists the composed layers first and the root preset last.
+	root := &mf.Presets[len(mf.Presets)-1]
+	if root.ID != "app-dashboard" || root.Version != "3.0.0" {
+		t.Fatalf("alias did not record the canonical preset: %+v", mf.Presets)
+	}
+	// An existing 2.x breadcrumb (preset id from before the rename) is NOT re-rendered onto the new
+	// preset: it fails with a sentence naming the removed preset and the release that last had it.
+	root.ID = "sysop-ui"
+	root.Version = "1.2.0"
+	if wErr := manifest.Write(target, mf); wErr != nil {
+		t.Fatal(wErr)
+	}
+	_, err = svc.Inspect(service.InspectOptions{TargetDir: target})
+	var se *service.Error
+	if !errors.As(err, &se) || se.Code != service.ErrPresetRemoved || !strings.Contains(se.Message, "v0.0.1") {
+		t.Fatalf("inspect of an old sysop-ui breadcrumb must fail with preset_removed naming v0.0.1, got %v", err)
 	}
 }
