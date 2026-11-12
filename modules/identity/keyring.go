@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
@@ -197,6 +198,9 @@ func (s *Service) loadKey() error {
 		}
 		priv = ek
 	case errors.Is(err, os.ErrNotExist):
+		if err := s.refuseSecondIssuer(); err != nil {
+			return err
+		}
 		_, priv, err = ed25519.GenerateKey(rand.Reader)
 		if err != nil {
 			return err
@@ -239,6 +243,34 @@ func (s *Service) loadKey() error {
 	}
 	s.keys.Store(&keyState{kid: kid, priv: priv, created: created, retired: kept, jwt: jv})
 	return nil
+}
+
+// refuseSecondIssuer stops a process from minting a signing key when the database
+// already holds identity rows (users or API keys) but no key file exists where
+// this process's config points. Those rows belong to an instance that already has
+// a signing key, somewhere else; a second key here would make two issuers, each
+// verifying only its own tokens. A database with no identity rows is a fresh
+// instance and creates its key. allow_new_signing_key is the deliberate override
+// (a lost key, or a deliberate move).
+func (s *Service) refuseSecondIssuer() error {
+	if s.cfg.allowNewKey {
+		return nil
+	}
+	ctx := context.Background()
+	users, err := s.db.userCount(ctx)
+	if err != nil {
+		return fmt.Errorf("identity: checking for existing identity rows: %w", err)
+	}
+	keys, err := s.db.credentialCount(ctx)
+	if err != nil {
+		return fmt.Errorf("identity: checking for existing identity rows: %w", err)
+	}
+	if users == 0 && keys == 0 {
+		return nil
+	}
+	return fmt.Errorf("identity: the database already holds identity rows (%d users, %d API keys) but there is no signing key at key_file %q, so creating one here would make a second issuer. "+
+		"Point identity.key_file (or SUBSTRATE_CONFIG) at the key the service uses, or the database at the right file; "+
+		"only if the key is truly lost or this is a deliberate new issuer, set identity.allow_new_signing_key: true for one start", users, keys, s.cfg.keyFile)
 }
 
 func encodeKey(priv ed25519.PrivateKey) []byte {

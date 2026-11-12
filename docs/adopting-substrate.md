@@ -95,8 +95,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
-  (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, a write through
-  it fails with "attempt to write a readonly database"). Rules that follow:
+  (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with
+  `database.sqlite.read_pool` (1 to 64), a write through it fails with "attempt to write a readonly database"). The
+  write side stays one connection; a bigger read pool lets more cursors be open at once, it does not add writers. Rules that follow:
   - A second statement issued on the write handle while a cursor (`*sql.Rows`) is open on it waits for the one
     connection forever, a deadlock. It bites as a hung test, and as a hung request in production. The same happens
     inside a `WriteTx` callback if it uses anything but the `tx` it was given (the store itself, `DB()`, the read
@@ -179,6 +180,23 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 7. DNS rebinding and proxies: serve on loopback, check the `Host` header against loopback plus a configured list, and
    set identity's `trusted_proxy` only for a local TLS proxy that overwrites `X-Forwarded-Proto`.
 8. Strict-mode proofs (passkeys, signed approvals) are not part of this path. Do not port them; record the follow-up.
+9. Local trust for a stdio MCP process (owner decision 14): enforced identity stays on HTTP; a stdio process the
+   user launched locally against the app's own data file may run without a token. The app opts in in Go, at the
+   call site: `mcp.ServeStdio(ctx, app, mcp.StdioOptions{LocalTrust: true})`. There is no config key and the
+   default is off, so a manifest or override file cannot enable it. With no token configured the tools run under
+   `local:operator` (kind `operator`, verified by filesystem trust, scopes `*`; narrow with `LocalScopes`, and
+   per-tool `mcp.Authorize` then refuses what the list lacks). A token that is given is verified as always and a
+   bad one is an error, never a fallback. The trust statement, verbatim: the process runs as a user who can open
+   the data file; the module cannot tell who launched it and checks nothing about the file or the parent. A
+   child launched by a gateway (Tether) on the same host as the same user counts as local. A gateway that serves
+   several callers through one child must authorize per caller, or give the child a token (`mcp.stdio_token_file`),
+   because every caller of a local child is the operator. The process writes one line to stderr naming the local
+   principal; audit events carry `principal_id` `local:operator`, which no identity-issued id can equal. Apps that
+   key a cache on a verified principal see the local principal as verified.
+10. One issuer per database. The identity module creates its signing key at start only when the database holds no
+    users or API keys; with identity rows and no key file at `identity.key_file` it refuses to start and names the
+    path. A child process pointed at the service's database (an explicit `-db`) must point `key_file` at the
+    service's key. `identity.allow_new_signing_key: true` is the deliberate override for a lost key.
 
 ## 6. Configuration
 
@@ -223,7 +241,17 @@ Map every old environment variable to a config key (or drop it on purpose) and w
   check --app .` must pass in the app; `pins sync` rewrites `go.mod` and the CI workflow. A lib the BOM does not
   list is a one-line Substrate PR, not a local `go.mod` exception.
 - CI: `go vet`, the pins check, `go test -race`, `golangci-lint`, the frontend typecheck/lint/build (built before
-  `go test` so the embed has assets) and `python3 scripts/scan-public --ref HEAD`. Copy the workflow from a ported app.
+  `go test` so the embed has assets) and `go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD`.
+  Copy the workflow from a ported app.
+- Do not copy `scripts/scan-public` into the app: `substrate scan-public` carries it (one source, pinned with the
+  Substrate version in `go.mod`). It runs the embedded script with `python3 -I` (Python 3 must be on `PATH`; GitHub
+  runners have it) and takes the script's flags: `--ref REV` (repeatable), `--repo DIR` (default the current
+  directory), `--tree`, `--history`, `--no-gitleaks`, `--allowlist FILE`, `--no-allowlist`, `--source`. Exit 0 clean,
+  1 findings, 2 the scanner could not run. The app keeps only its own allowlists at its repository root:
+  `scan-public.allow` and `scan-public.allow.d/*.allow`, lines `RULE-ID PATH-GLOB REASON`; allowlisted findings are
+  still printed and counted. gitleaks runs too when it is on `PATH`. To move an app over: change the CI line, delete
+  `scripts/scan-public`, keep the allow files, run both once on the same ref and compare. (`pins sync` does not
+  template this line: it rewrites version pins inside the workflow, not steps, so the line is edited by hand.)
 - The repository is probably public. No secrets, internal hosts or addresses, or personal paths in files, commits or
   CI. Scan history as well as the tree; fixing history later is expensive.
 
@@ -254,7 +282,7 @@ app's Torque task:
 ## 12. Evidence before you open the PR
 
 Run and report the actual output of: `go vet ./...`, `go test -race ./...`, `golangci-lint run`, `pins check --app .`,
-frontend typecheck/lint/build, `scan-public --ref HEAD`. Then run the real binary on a throwaway data directory and
+frontend typecheck/lint/build, `substrate scan-public --ref HEAD`. Then run the real binary on a throwaway data directory and
 exercise setup, sign-in, a write, a read, a refused request and `SIGTERM`. For an app with a UI, drive it in a real
 browser against the real backend; a stub backend proves the UI only. Say plainly what you did not verify.
 

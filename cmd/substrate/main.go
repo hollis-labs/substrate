@@ -27,6 +27,10 @@ const usage = `substrate <command> [flags]
   upgrade [-dir .] [-to vX.Y.Z] [-dry-run] [-allow-unmigrated]
                                         move an app to another Substrate release: report pin
                                         changes, apply migrations, verify, restore on failure
+  scan-public [--ref REV] [--repo DIR] [--allowlist FILE | --no-allowlist] ...
+                                        scan the repository (tree and history) for secrets, internal hosts,
+                                        private IPs and paths; exit 0 clean, 1 findings, 2 could not run.
+                                        Needs python3; flags as in scripts/scan-public
   pins check|sync [--root .] [--folio dir|file|url] [--app dir]
                                         verify or rewrite go.mod, the CI workflow and
                                         Folio's platform-pins.yaml from bom/bom.yaml
@@ -41,6 +45,9 @@ func main() {
 	if cmd == "pins" {
 		pins(args)
 		return
+	}
+	if cmd == "scan-public" {
+		os.Exit(scanPublic(args, os.Stdout, os.Stderr))
 	}
 	if cmd == "upgrade" {
 		upgradeCmd(args)

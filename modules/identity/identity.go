@@ -26,6 +26,12 @@
 //	key_file:        Ed25519 signing key (PEM), created 0600 on first start.
 //	                 Default "identity-signing.key" in the working directory. A
 //	                 public JWKS is written beside it ("<key_file>.jwks.json").
+//	                 One issuer per database: when key_file does not exist but the
+//	                 database already holds users or API keys, start refuses to
+//	                 create a key (it would be a second issuer) and names key_file.
+//	allow_new_signing_key: true lets that one start create the key anyway (the key
+//	                 is truly lost, or a new issuer is intended). Default false; a
+//	                 database with no identity rows creates its key without it.
 //	issuer:          the iss claim. Default: the app name.
 //	audience:        the aud of tokens for this app. Default: the app name.
 //	session_ttl:     absolute session life. Default "720h".
@@ -123,6 +129,7 @@ type config struct {
 	trustedProxy             bool
 	origins                  map[string]bool
 	keyFile                  string
+	allowNewKey              bool
 	retiredTTL               time.Duration
 	setupHTTP                bool // identity.setup: http
 }
@@ -198,6 +205,7 @@ func parseConfig(app *module.App) (config, error) {
 		origins: map[string]bool{},
 	}
 	c.trustedProxy, _ = m["trusted_proxy"].(bool)
+	c.allowNewKey, _ = m["allow_new_signing_key"].(bool)
 	var err error
 	if c.sessionTTL, err = dur("session_ttl", "720h"); err != nil {
 		return c, err
