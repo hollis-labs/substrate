@@ -180,14 +180,14 @@ func TestClientAddressIsRecordedOnlyForAValidatedProxyRequest(t *testing.T) {
 
 func TestParseAllowedHosts(t *testing.T) {
 	good := map[string]any{"allowed_hosts": []any{"App.Example.Test", "b.example.test:8443", "[::1]"}}
-	got, err := parseAllowedHosts(good)
+	got, err := parseHostList(good, "allowed_hosts")
 	if err != nil || strings.Join(got, ",") != "app.example.test,b.example.test:8443,[::1]" {
 		t.Fatalf("got %v, %v", got, err)
 	}
-	if got, err := parseAllowedHosts(nil); err != nil || len(got) != 0 {
+	if got, err := parseHostList(nil, "allowed_hosts"); err != nil || len(got) != 0 {
 		t.Fatalf("absent key: %v, %v", got, err)
 	}
-	if got, err := parseAllowedHosts(map[string]any{"allowed_hosts": []any{}}); err != nil || len(got) != 0 {
+	if got, err := parseHostList(map[string]any{"allowed_hosts": []any{}}, "allowed_hosts"); err != nil || len(got) != 0 {
 		t.Fatalf("empty list: %v, %v", got, err)
 	}
 	for _, bad := range []any{
@@ -195,7 +195,7 @@ func TestParseAllowedHosts(t *testing.T) {
 		[]any{"app.example.test/"}, []any{"user@app.example.test"}, []any{" app.example.test"},
 		[]any{"a b"}, []any{7}, "app.example.test", 5, []any{"ok.example.test", ""},
 	} {
-		if _, err := parseAllowedHosts(map[string]any{"allowed_hosts": bad}); err == nil {
+		if _, err := parseHostList(map[string]any{"allowed_hosts": bad}, "allowed_hosts"); err == nil {
 			t.Errorf("%v: want an error", bad)
 		} else if !strings.Contains(err.Error(), "httphost.allowed_hosts") {
 			t.Errorf("%v: the error should name the key: %v", bad, err)

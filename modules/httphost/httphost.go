@@ -30,6 +30,13 @@
 // info fail Start. Serve warns when it binds a non-loopback address with an empty list,
 // since every request then needs a loopback Host.
 //
+// httphost.direct_hosts names hosts served directly on the address the app is bound to, with
+// no proxy (an app bound to a tailnet address, whose clients send that name as Host). They
+// are served to any peer, and nothing a client sends is believed for them: every forwarding
+// header is stripped (X-Forwarded-Proto too, so identity's trusted_proxy never trusts it
+// for a direct request) and clientaddr.From is the peer address. A name may not be in both
+// lists. Default empty.
+//
 // A proxy on another host is not supported: the peer rule is loopback only.
 package httphost
 
@@ -64,7 +71,7 @@ func (mod) Start(_ context.Context, app *module.App) error {
 		return http.ErrNotSupported // unreachable via builder: health is required
 	}
 	cfg, _ := app.Config["httphost"].(map[string]any)
-	_, err := parseAllowedHosts(cfg)
+	_, _, err := parseHosts(cfg)
 	return err
 }
 
@@ -95,7 +102,7 @@ type Mount struct {
 // carries the host check (package comment); an app does not add its own.
 func Handler(app *module.App, o Options) (http.Handler, error) {
 	hcfg, _ := app.Config["httphost"].(map[string]any)
-	allowed, err := parseAllowedHosts(hcfg)
+	allowed, direct, err := parseHosts(hcfg)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +169,7 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	outer.Handle("/", h.Handler())
-	return hostGuard(allowed, outer), nil
+	return hostGuardDirect(allowed, direct, outer), nil
 }
 
 // checkMount refuses a mount that is malformed or aims at a path the host owns.
@@ -247,8 +254,8 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 		}
 	}
 	if hcfg, _ := app.Config["httphost"].(map[string]any); !loopbackAddr(addr) {
-		if allowed, _ := parseAllowedHosts(hcfg); len(allowed) == 0 {
-			slog.Warn("httphost: serving a non-loopback address with no httphost.allowed_hosts; "+
+		if allowed, direct, _ := parseHosts(hcfg); len(allowed)+len(direct) == 0 {
+			slog.Warn("httphost: serving a non-loopback address with no httphost.allowed_hosts or httphost.direct_hosts; "+
 				"every request needs a loopback Host and is refused otherwise", "addr", addr)
 		}
 	}

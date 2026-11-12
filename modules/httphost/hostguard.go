@@ -22,12 +22,12 @@ const (
 	codeUntrustedProxy = "untrusted_proxy"
 )
 
-// parseAllowedHosts reads httphost.allowed_hosts: a list of host names exactly as a
-// client sends them in Host (a port only when the client sends one). Entries are
-// lower-cased. An empty entry, a wildcard, or anything with a scheme, path, user info
+// parseHostList reads one httphost list key (allowed_hosts or direct_hosts): host names
+// exactly as a client sends them in Host (a port only when the client sends one). Entries
+// are lower-cased. An empty entry, a wildcard, or anything with a scheme, path, user info
 // or space is an error, so a typo fails closed at start.
-func parseAllowedHosts(cfg map[string]any) ([]string, error) {
-	raw, ok := cfg["allowed_hosts"]
+func parseHostList(cfg map[string]any, key string) ([]string, error) {
+	raw, ok := cfg[key]
 	if !ok || raw == nil {
 		return nil, nil
 	}
@@ -39,26 +39,51 @@ func parseAllowedHosts(cfg map[string]any) ([]string, error) {
 		for _, e := range v {
 			s, ok := e.(string)
 			if !ok {
-				return nil, fmt.Errorf("httphost.allowed_hosts: entries must be strings, got %T", e)
+				return nil, fmt.Errorf("httphost.%s: entries must be strings, got %T", key, e)
 			}
 			in = append(in, s)
 		}
 	default:
-		return nil, fmt.Errorf("httphost.allowed_hosts must be a list of host names, got %T", raw)
+		return nil, fmt.Errorf("httphost.%s must be a list of host names, got %T", key, raw)
 	}
 	out := make([]string, 0, len(in))
 	for _, s := range in {
 		if s == "" || strings.TrimSpace(s) != s || strings.ContainsAny(s, "*/\\@?# \t") {
-			return nil, fmt.Errorf("httphost.allowed_hosts: %q is not a host name (no wildcard, scheme, path, user info or space)", s)
+			return nil, fmt.Errorf("httphost.%s: %q is not a host name (no wildcard, scheme, path, user info or space)", key, s)
 		}
 		out = append(out, strings.ToLower(s))
 	}
 	return out, nil
 }
 
+// parseHosts reads httphost.allowed_hosts (names served only through a local TLS proxy)
+// and httphost.direct_hosts (names served directly on the bound address). A name in both
+// is an error: the two mean different trust.
+func parseHosts(cfg map[string]any) (allowed, direct []string, err error) {
+	if allowed, err = parseHostList(cfg, "allowed_hosts"); err != nil {
+		return nil, nil, err
+	}
+	if direct, err = parseHostList(cfg, "direct_hosts"); err != nil {
+		return nil, nil, err
+	}
+	for _, d := range direct {
+		if slices.Contains(allowed, d) {
+			return nil, nil, fmt.Errorf("httphost.direct_hosts: %q is also in httphost.allowed_hosts; a name is served either through a local proxy or directly, not both", d)
+		}
+	}
+	return allowed, direct, nil
+}
+
 // hostGuard refuses requests for hosts that are not served and strips forwarding
 // headers. allowed holds lower-cased names.
 func hostGuard(allowed []string, next http.Handler) http.Handler {
+	return hostGuardDirect(allowed, nil, next)
+}
+
+// hostGuardDirect is hostGuard with direct, the names served on the bound address to any
+// peer. A direct name is believed for nothing: no forwarding header is kept (X-Forwarded-Proto
+// included, so identity's trusted_proxy never trusts it) and the client address is the peer.
+func hostGuardDirect(allowed, direct []string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Set on refusals too: a refusal page must not be framed or leak a referrer.
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -66,6 +91,8 @@ func hostGuard(allowed []string, next http.Handler) http.Handler {
 		proxied := false
 		switch {
 		case isLoopbackHost(r.Host):
+		case slices.Contains(direct, strings.ToLower(r.Host)):
+			// Served as is; proxied stays false so every forwarding header is stripped.
 		case slices.Contains(allowed, strings.ToLower(r.Host)):
 			values := r.Header.Values("X-Forwarded-Proto")
 			if !loopbackPeer(r.RemoteAddr) || len(values) != 1 || values[0] != "https" {

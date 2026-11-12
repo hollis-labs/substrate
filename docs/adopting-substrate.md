@@ -189,7 +189,7 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 6. Keep stored secrets behind the `secrets` module's resolver. Never return a secret, a secret reference, a hash or a
    session value from any API.
 7. DNS rebinding and proxies: serve on loopback and set `httphost.allowed_hosts` to the public name(s) a local TLS
-   proxy forwards. `httphost.Handler` already carries the host check; do not write or copy one (no `internal/hostguard`).
+   proxy forwards (an app bound to a tailnet address with no proxy uses `httphost.direct_hosts`, below). `httphost.Handler` already carries the host check; do not write or copy one (no `internal/hostguard`).
    - Loopback names (`localhost`, `127.0.0.0/8`, `::1`, any port) are always served. A listed name is served only from a
      loopback peer with exactly one `X-Forwarded-Proto: https` (403 `untrusted_proxy` otherwise); any other `Host`
      is 403 `invalid_host`. A bare entry does not admit `name:port`; list the port form if clients send it. Entries
@@ -206,8 +206,17 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
      validated request when it is a bare IP, else the peer. The proxy must append or overwrite `X-Forwarded-For`
      (nginx `$proxy_add_x_forwarded_for`, Caddy and Traefik defaults all do); a proxy that passes the client's header through
      untouched would let a client choose its bucket. Use `clientaddr.From` for any per-client key; never read the headers.
-   - Moving an app off its own copy: set `httphost.allowed_hosts` (it was `<app>.allowed_hosts`) and delete the
-     copy and its wrapper call; keep an end-to-end test that an unknown `Host` is refused. See the CHANGELOG entry.
+   - Serving a name directly, with no proxy (an app bound to a tailnet address): list it in `httphost.direct_hosts`
+     instead. It is served to any peer; no forwarding header is believed for it (all are stripped, `X-Forwarded-Proto`
+     too, so `trusted_proxy` never treats it as https) and `clientaddr.From` is the peer. A name is in one list, not both;
+     entries are validated like `allowed_hosts`; default empty. Binding a non-loopback address with neither list logs a
+     warning, since every request then needs a loopback `Host`. `direct_hosts` is a setting, not a reason to fork the check.
+   - Moving an app off its own copy (Basalisk, Sigil, Loom, Station, Tangent): move `<app>.allowed_hosts` to
+     `httphost.allowed_hosts` (or `direct_hosts` if the app is bound to a tailnet address), delete `internal/hostguard`
+     and the wrapper call in `main`, delete the old key from the app's settings decoder; test requests send
+     `Host: localhost`; keep an end-to-end test that an unknown `Host` is refused; the refusal is now JSON
+     (`invalid_host`, `untrusted_proxy`), so check proxy health probes; set identity's `trusted_proxy` only with
+     `allowed_hosts`; key per-client state on `clientaddr.From(r)`. See the CHANGELOG entry.
 8. Strict-mode proofs (passkeys, signed approvals) are not part of this path. Do not port them; record the follow-up.
 9. Local trust for a stdio MCP process (owner decision 14): enforced identity stays on HTTP; a stdio process the
    user launched locally against the app's own data file may run without a token. The app opts in in Go, at the

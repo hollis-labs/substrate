@@ -16,13 +16,19 @@ import (
 // forward that name.
 func startBehindProxy(t *testing.T) *app {
 	t.Helper()
+	return startWithHosts(t, `{"allowed_hosts": ["demo.example"]}`)
+}
+
+// startWithHosts is an app with identity's trusted_proxy on and the given httphost block.
+func startWithHosts(t *testing.T, httphostCfg string) *app {
+	t.Helper()
 	dir := t.TempDir()
 	cfg := fmt.Sprintf(`{
 		"database": {"sqlite": {"path": %q}},
 		"auth": {"mode": "enforce"},
-		"httphost": {"allowed_hosts": ["demo.example"]},
-		"identity": {"key_file": %q, "bcrypt_cost": 4, "trusted_proxy": true}
-	}`, filepath.Join(dir, "t.db"), filepath.Join(dir, "id.key"))
+		"httphost": %s,
+		"identity": {"key_file": %q, "bcrypt_cost": 4, "trusted_proxy": true, "setup": "http"}
+	}`, filepath.Join(dir, "t.db"), httphostCfg, filepath.Join(dir, "id.key"))
 	run, err := boot.Start(context.Background(), "demo", []string{"health", "logging", "auth", "database", "httphost", "identity"}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -143,5 +149,42 @@ func TestSecureCookieOnlyForAValidatedProxyRequest(t *testing.T) {
 	}
 	if secure(func(r *http.Request) { r.Header.Set("X-Forwarded-Proto", "https") }) {
 		t.Error("a loopback request claiming https must not get a Secure cookie")
+	}
+}
+
+// A direct host is not a proxy: with trusted_proxy on, a direct request claiming https
+// gets no Secure cookie (the header is stripped), and the limiter keys on the peer, not
+// on a client-chosen X-Forwarded-For.
+func TestDirectHostGetsNoForwardedTrust(t *testing.T) {
+	a := startWithHosts(t, `{"direct_hosts": ["tail.example"]}`)
+	a.owner()
+	direct := func(peer string, hdr map[string]string) opt {
+		return func(r *http.Request) {
+			r.Host, r.RemoteAddr = "tail.example", peer
+			for k, v := range hdr {
+				r.Header.Set(k, v)
+			}
+		}
+	}
+	w := a.do("POST", "/api/login", map[string]string{"username": "owner", "password": password},
+		direct("198.51.100.7:1", map[string]string{"X-Forwarded-Proto": "https"}))
+	if w.Code != 200 {
+		t.Fatalf("login: %d %s", w.Code, w.Body)
+	}
+	if c := w.cookie("demo_session"); c == nil || c.Secure {
+		t.Fatalf("a direct request claiming https must not get a Secure cookie: %+v", c)
+	}
+	// Rotating X-Forwarded-For (from a loopback or remote peer) does not leave the peer's bucket.
+	for _, peer := range []string{"198.51.100.8:1", "127.0.0.1:1"} {
+		for i := 0; i < 5; i++ {
+			a.loginWith("wrong password "+fmt.Sprint(i), direct(peer, map[string]string{"X-Forwarded-For": fmt.Sprintf("203.0.113.%d", i), "X-Forwarded-Proto": "https"}))
+		}
+		if got := a.loginWith(password, direct(peer, map[string]string{"X-Forwarded-For": "203.0.113.99", "X-Forwarded-Proto": "https"})); got != 429 {
+			t.Fatalf("peer %s: a forwarding header chose the bucket: %d, want 429", peer, got)
+		}
+	}
+	// Another peer is a fresh bucket.
+	if got := a.loginWith(password, direct("198.51.100.9:1", nil)); got != 200 {
+		t.Fatalf("another peer shares the bucket: %d, want 200", got)
 	}
 }
