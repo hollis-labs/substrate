@@ -20,9 +20,12 @@ go build ./cmd/{{ .inputs.repo_name }}
 The owner is created offline, never over HTTP (see `docs/identity-bootstrap.md`):
 
 ```sh
-printf '%s\n' "$OWNER_PASSWORD" | ./{{ .inputs.repo_name }} identity setup --username owner
+./{{ .inputs.repo_name }} identity setup --username owner   # the password is typed twice at the terminal, not echoed
 ./{{ .inputs.repo_name }} serve
 ```
+
+For automation only, `identity setup` also reads the password from the first line of stdin when stdin is
+not a terminal; take it from your secret store, never from a shell variable or the command line.
 
 Settings are keys in the YAML file named by `SUBSTRATE_CONFIG` (for example `httphost.addr`); the only
 environment variable the app reads is `{{ upper (replace "-" "_" .inputs.repo_name) }}_DATA_DIR`.
