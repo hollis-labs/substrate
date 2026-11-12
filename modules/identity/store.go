@@ -187,6 +187,12 @@ func (d db) userCount(ctx context.Context) (int, error) {
 	return n, err
 }
 
+func (d db) credentialCount(ctx context.Context) (int, error) {
+	var n int
+	err := d.st.QueryRowContext(ctx, `SELECT COUNT(*) FROM identity_credentials`).Scan(&n)
+	return n, err
+}
+
 // createFirstUser makes the owner, once: it fails with ErrSetupClosed when any
 // user exists, atomically with the insert.
 func (d db) createFirstUser(ctx context.Context, u User) error {
