@@ -10,6 +10,27 @@
 // GracePeriod (default 10s), after which r.Context() is cancelled, connections are closed and
 // Serve returns an error. r.Context() is not cancelled by a graceful stop, so a request doing
 // real work is allowed to finish.
+//
+// # Host check
+//
+// Handler wraps everything it serves (/api/, /mcp, /healthz, declared routes, mounts and
+// the SPA) in a host check, on for every app with no off switch. It answers a request only
+// when its Host is a loopback name (localhost, 127.0.0.0/8, ::1, any port) or a name listed in
+// config httphost.allowed_hosts (exact, case-insensitive; a port only if the client sends one,
+// so "app.example.test" does not admit "app.example.test:8443"). A listed name is served only
+// when the peer is a loopback address and the request carries exactly one X-Forwarded-Proto:
+// https, that is a local TLS proxy; otherwise 403 untrusted_proxy. Any other Host is
+// 403 invalid_host. Bodies are the flat apierr shape and never echo the Host. Before routing
+// the check removes Forwarded, X-Forwarded-Host, X-Forwarded-For and X-Real-IP, and removes
+// X-Forwarded-Proto unless it was just validated (so identity's trusted_proxy can believe
+// it); it sets X-Frame-Options: DENY and Referrer-Policy: no-referrer on every response.
+// For a validated proxied request it records the client address (the last hop of
+// X-Forwarded-For, when a bare IP) for clientaddr.From. Loopback is always served and
+// cannot be removed. Entries that are empty, wildcards, or carry a scheme, path or user
+// info fail Start. Serve warns when it binds a non-loopback address with an empty list,
+// since every request then needs a loopback Host.
+//
+// A proxy on another host is not supported: the peer rule is loopback only.
 package httphost
 
 import (
@@ -42,7 +63,9 @@ func (mod) Start(_ context.Context, app *module.App) error {
 	if health.From(app) == nil {
 		return http.ErrNotSupported // unreachable via builder: health is required
 	}
-	return nil
+	cfg, _ := app.Config["httphost"].(map[string]any)
+	_, err := parseAllowedHosts(cfg)
+	return err
 }
 
 func (mod) Stop(context.Context) error { return nil }
@@ -68,8 +91,14 @@ type Mount struct {
 }
 
 // Handler builds the app handler after all modules have started, so modules
-// that published handlers (health, capabilities) are mounted.
+// that published handlers (health, capabilities) are mounted. The returned handler
+// carries the host check (package comment); an app does not add its own.
 func Handler(app *module.App, o Options) (http.Handler, error) {
+	hcfg, _ := app.Config["httphost"].(map[string]any)
+	allowed, err := parseAllowedHosts(hcfg)
+	if err != nil {
+		return nil, err
+	}
 	api := http.NewServeMux()
 	if o.Routes != nil {
 		api.Handle("/api/", o.Routes)
@@ -133,7 +162,7 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	outer.Handle("/", h.Handler())
-	return outer, nil
+	return hostGuard(allowed, outer), nil
 }
 
 // checkMount refuses a mount that is malformed or aims at a path the host owns.
@@ -215,6 +244,12 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 			if m := g.Mode(); m != libauth.ModeEnforce {
 				slog.Warn("auth is not enforcing", "auth", string(m), "addr", addr)
 			}
+		}
+	}
+	if hcfg, _ := app.Config["httphost"].(map[string]any); !loopbackAddr(addr) {
+		if allowed, _ := parseAllowedHosts(hcfg); len(allowed) == 0 {
+			slog.Warn("httphost: serving a non-loopback address with no httphost.allowed_hosts; "+
+				"every request needs a loopback Host and is refused otherwise", "addr", addr)
 		}
 	}
 	ln, err := net.Listen("tcp", addr)

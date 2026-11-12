@@ -74,7 +74,7 @@ func TestRoutesMountedUnderAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/api/plugins/nope/x", nil))
+	h.ServeHTTP(w, httptest.NewRequest("GET", "http://localhost/api/plugins/nope/x", nil))
 	if w.Code != 404 || w.Body.String() == "" {
 		t.Fatalf("unknown plugin: %d %q", w.Code, w.Body)
 	}
@@ -108,7 +108,7 @@ func TestPluginRoutesAreScopedAndTheAppCanBeFiner(t *testing.T) {
 	}
 	status := func(path, key string) int {
 		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", path, nil)
+		r := httptest.NewRequest("POST", "http://localhost"+path, nil)
 		if key != "" {
 			r.Header.Set("Authorization", "Bearer "+key)
 		}

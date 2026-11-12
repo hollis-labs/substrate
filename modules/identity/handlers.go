@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"github.com/hollis-labs/substrate/apierr"
+	"github.com/hollis-labs/substrate/clientaddr"
 )
 
 const maxBody = 64 << 10
@@ -115,13 +115,9 @@ func (s *Service) callerUser(r *http.Request) (User, libauth.Principal, bool) {
 	return u, p, true
 }
 
-func clientAddr(r *http.Request) string {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return host
-}
+// clientAddr keys the rate limiter. It is the address the httphost host check
+// validated behind a local TLS proxy, else the peer address (package clientaddr).
+func clientAddr(r *http.Request) string { return clientaddr.From(r) }
 
 func (s *Service) isAdmin(p libauth.Principal) bool { return p.HasScope(s.app.Name + ".admin") }
 

@@ -15,6 +15,8 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 - MCP stdio local trust: `StdioOptions.LocalTrust` / `LocalScopes` (Go option, never config) runs a locally launched stdio process as `local:operator` (verified, scopes `*` by default) when no token is given; a given token is always verified. HTTP `/mcp` unchanged.
 - `httphost.Stopping(r)` and a handler-counting shutdown: SSE and hijacked (WebSocket) handlers learn of a stop, `Serve` returns nil once all handlers returned, or an error after `GracePeriod` naming how many did not.
 
+- Host check in `httphost` (on for every app): loopback names plus `httphost.allowed_hosts` (a listed name only from a loopback peer with one `X-Forwarded-Proto: https`), forwarding headers stripped, `X-Frame-Options` and `Referrer-Policy` set, flat 403 `invalid_host` / `untrusted_proxy`. Replaces the apps' `internal/hostguard` copies. The identity limiters key on `clientaddr.From` (validated last `X-Forwarded-For` hop, else the peer). A proxy on another host is not supported.
+
 - UI vocabulary v0.4.1: the `user.menu` core region, `group` and `requires` on `menu.item` (builder side). The identity
   module's own `user.menu` items are pending (they wait on the identity UI kit being pinned in the BOM).
 

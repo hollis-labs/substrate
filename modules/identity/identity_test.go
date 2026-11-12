@@ -96,7 +96,7 @@ func (a *app) do(method, path string, body any, opts ...opt) reply {
 	} else {
 		rd = bytes.NewReader(nil)
 	}
-	r := httptest.NewRequest(method, path, rd)
+	r := httptest.NewRequest(method, "http://localhost"+path, rd)
 	r.RemoteAddr = "192.0.2.10:1234"
 	if body != nil {
 		r.Header.Set("Content-Type", "application/json")
@@ -188,7 +188,7 @@ func TestCookieWritesNeedTheAppsOwnOriginAndAHeader(t *testing.T) {
 	c := a.owner()
 	post := func(opts ...opt) int {
 		r := httptest.NewRequest("POST", "/api/logout", nil)
-		r.Host = "demo.example"
+		r.Host = "localhost"
 		r.AddCookie(c)
 		for _, o := range opts {
 			o(r)
@@ -203,7 +203,7 @@ func TestCookieWritesNeedTheAppsOwnOriginAndAHeader(t *testing.T) {
 	if got := post(header("X-Requested-With", "x"), header("Origin", "https://evil.example")); got != 403 {
 		t.Errorf("a cookie write from another origin: %d, want 403", got)
 	}
-	if got := post(header("X-Requested-With", "x"), header("Origin", "https://demo.example")); got != 204 {
+	if got := post(header("X-Requested-With", "x"), header("Origin", "http://localhost")); got != 204 {
 		t.Errorf("a cookie write from the app's own origin: %d, want 204", got)
 	}
 }

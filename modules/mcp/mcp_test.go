@@ -38,7 +38,7 @@ func setup(t *testing.T, mods []string, cfg string) (http.Handler, *module.App) 
 
 func call(h http.Handler, bearer string) *httptest.ResponseRecorder {
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`
-	r := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	r := httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json, text/event-stream")
 	if bearer != "" {
@@ -78,7 +78,7 @@ func TestAuthorizeAllowsWithoutAuthModule(t *testing.T) {
 }
 
 func list(h http.Handler) string {
-	r := httptest.NewRequest("POST", "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	r := httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json, text/event-stream")
 	w := httptest.NewRecorder()

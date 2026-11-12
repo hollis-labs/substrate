@@ -42,7 +42,7 @@ func TestEnforceGuardsAPIButNotHealthz(t *testing.T) {
 		t.Fatal(err)
 	}
 	do := func(method, path, bearer string) int {
-		r := httptest.NewRequest(method, path, nil)
+		r := httptest.NewRequest(method, "http://localhost"+path, nil)
 		if bearer != "" {
 			r.Header.Set("Authorization", "Bearer "+bearer)
 		}
@@ -103,7 +103,7 @@ func TestCapabilitiesIsMappedInEnforceMode(t *testing.T) {
 		t.Fatal(err)
 	}
 	do := func(bearer string) int {
-		r := httptest.NewRequest("GET", "/api/capabilities", nil)
+		r := httptest.NewRequest("GET", "http://localhost/api/capabilities", nil)
 		if bearer != "" {
 			r.Header.Set("Authorization", "Bearer "+bearer)
 		}
@@ -136,7 +136,7 @@ func TestCapabilitiesScopeIsConfigurable(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = run.Stop(context.Background()) })
 	h, _ := httphost.Handler(run.App, httphost.Options{})
-	r := httptest.NewRequest("GET", "/api/capabilities", nil)
+	r := httptest.NewRequest("GET", "http://localhost/api/capabilities", nil)
 	r.Header.Set("Authorization", "Bearer "+key)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
@@ -147,7 +147,7 @@ func TestCapabilitiesScopeIsConfigurable(t *testing.T) {
 
 func get(t *testing.T, h http.Handler, path, bearer string) *httptest.ResponseRecorder {
 	t.Helper()
-	r := httptest.NewRequest("GET", path, nil)
+	r := httptest.NewRequest("GET", "http://localhost"+path, nil)
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
 	}

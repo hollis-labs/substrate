@@ -81,7 +81,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   and stops the modules already started, in reverse order. If the `config` module is not selected there is no
   override to wait for, so `AfterConfig` runs once before the first module starts. Hooks run once per start.
 - `serve` builds the handler with `httphost.Handler(app, httphost.Options{Assets, Routes, Mounts})` and runs it with
-  `httphost.Serve(ctx, app, handler, ...)`, which also checks the bind address against the auth mode.
+  `httphost.Serve(ctx, app, handler, ...)`, which also checks the bind address against the auth mode. The handler
+  includes the host check (section 5, rule 7): only loopback names and `httphost.allowed_hosts` are served, so an app
+  behind a proxy sets that list, and a new test client must send `Host: localhost` (httptest's default `example.com` is refused).
 - Shut down on `SIGINT` and `SIGTERM` (`signal.NotifyContext`), stop accepting work, drain, then stop modules. Test
   the signal path with a real process; a daemon that ignores `SIGTERM` is killed by its supervisor mid-write.
 - Long-lived handlers (SSE, WebSocket, long poll) must watch `httphost.Stopping(r)`, a channel closed when `Serve`'s
@@ -186,8 +188,26 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 5. The data owner of a row is the verified principal subject from the request context, never a request field.
 6. Keep stored secrets behind the `secrets` module's resolver. Never return a secret, a secret reference, a hash or a
    session value from any API.
-7. DNS rebinding and proxies: serve on loopback, check the `Host` header against loopback plus a configured list, and
-   set identity's `trusted_proxy` only for a local TLS proxy that overwrites `X-Forwarded-Proto`.
+7. DNS rebinding and proxies: serve on loopback and set `httphost.allowed_hosts` to the public name(s) a local TLS
+   proxy forwards. `httphost.Handler` already carries the host check; do not write or copy one (no `internal/hostguard`).
+   - Loopback names (`localhost`, `127.0.0.0/8`, `::1`, any port) are always served. A listed name is served only from a
+     loopback peer with exactly one `X-Forwarded-Proto: https` (403 `untrusted_proxy` otherwise); any other `Host`
+     is 403 `invalid_host`. A bare entry does not admit `name:port`; list the port form if clients send it. Entries
+     must be plain names (no `*`, scheme or path), or start fails naming the key. The proxy must be on the same host.
+   - Behind the proxy the check removes `Forwarded`, `X-Forwarded-Host`, `X-Forwarded-For` and `X-Real-IP`, and
+     removes `X-Forwarded-Proto` unless it just validated it. It sets `X-Frame-Options: DENY` and
+     `Referrer-Policy: no-referrer`.
+   - Set identity's `trusted_proxy: true` only for this proxy. It then gets a validated `X-Forwarded-Proto` (the only
+     request that keeps one), so the session cookie is `Secure` only for a request the check accepted. Without
+     `allowed_hosts` it is inert. Identity's `allowed_origins` is separate: it lists extra browser Origins for cookie
+     writes; a listed host is its own origin (compared with the validated `Host`), so a published name needs no
+     `allowed_origins` entry.
+   - Rate limits key on `clientaddr.From(r)`: the last `X-Forwarded-For` hop (the one your proxy wrote) for a
+     validated request when it is a bare IP, else the peer. The proxy must append or overwrite `X-Forwarded-For`
+     (nginx `$proxy_add_x_forwarded_for`, Caddy and Traefik defaults all do); a proxy that passes the client's header through
+     untouched would let a client choose its bucket. Use `clientaddr.From` for any per-client key; never read the headers.
+   - Moving an app off its own copy: set `httphost.allowed_hosts` (it was `<app>.allowed_hosts`) and delete the
+     copy and its wrapper call; keep an end-to-end test that an unknown `Host` is refused. See the CHANGELOG entry.
 8. Strict-mode proofs (passkeys, signed approvals) are not part of this path. Do not port them; record the follow-up.
 9. Local trust for a stdio MCP process (owner decision 14): enforced identity stays on HTTP; a stdio process the
    user launched locally against the app's own data file may run without a token. The app opts in in Go, at the

@@ -132,6 +132,10 @@ printf '%s\n' "$OWNER_PASSWORD" | <app> identity setup --username owner --displa
 
 **Trust statement.** Whoever can run the binary against the database and the key file already controls the instance: they can read the database and the signing key and write rows or mint tokens directly. These commands add no authority; they make the same authority usable without an open setup window. They do not check who the operator is, and a local key's `local:operator` creator is a label, not a verified identity.
 
+## Behind a local TLS proxy
+
+`httphost` runs a host check in front of everything (package comment, `docs/adopting-substrate.md` section 5 rule 7). Pair it with this module: list the public name in `httphost.allowed_hosts` and set `trusted_proxy: true`. Order of events for a request: the check admits a listed name only from a loopback peer with exactly one `X-Forwarded-Proto: https`, strips the other forwarding headers, and keeps that proto only for such a request; `trusted_proxy` then makes the session cookie `Secure`. Without `allowed_hosts`, `trusted_proxy` is inert (no request keeps the header). `allowed_origins` stays a separate list of extra Origins for cookie writes; the same-origin check compares the Origin with the `Host` the check validated, so a published name needs no entry. The sign-in, password-change and pairing limiters key on `clientaddr.From`: the last `X-Forwarded-For` hop of a validated request when it is a bare IP, else the peer address, so users behind the proxy do not share one lockout. Wrap order is free: `identity.Middleware` may sit outside `httphost.Handler`, because the check refuses a bad `Host` before any handler.
+
 ## Config
 
 See the package comment for the full list: `key_file`, `allow_new_signing_key` (default false), `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `setup` (`offline`; `http` for development), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).

@@ -43,7 +43,7 @@ func handler(t *testing.T, key string, mounts ...httphost.Mount) http.Handler {
 }
 
 func status(h http.Handler, method, path, bearer string) (int, string) {
-	r := httptest.NewRequest(method, path, nil)
+	r := httptest.NewRequest(method, "http://localhost"+path, nil)
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
 	}

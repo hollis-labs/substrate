@@ -72,7 +72,7 @@ func (is *issuer) token(app, sub, jti, scope string) string {
 }
 
 func statusOf(h http.Handler, path, bearer string) int {
-	r := httptest.NewRequest("GET", path, nil)
+	r := httptest.NewRequest("GET", "http://localhost"+path, nil)
 	if bearer != "" {
 		r.Header.Set("Authorization", "Bearer "+bearer)
 	}

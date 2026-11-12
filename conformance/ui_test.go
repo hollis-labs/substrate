@@ -84,7 +84,7 @@ func TestEveryDeclaredRouteIsMappedAndServed(t *testing.T) {
 				}
 				req := func(bearer string) int {
 					w := httptest.NewRecorder()
-					rq := httptest.NewRequest(method, path, nil)
+					rq := httptest.NewRequest(method, "http://localhost"+path, nil)
 					if bearer != "" {
 						rq.Header.Set("Authorization", "Bearer "+bearer)
 					}
