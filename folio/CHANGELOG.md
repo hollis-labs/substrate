@@ -6,6 +6,17 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Changed
+
+- **Go floor 1.26.6 to 1.26.11.** `platform-pins.yaml` mirrors Substrate's BOM
+  (`toolchain.go_floor`, raised for GO-2026-6859, an HTTP/1 server crash in `net/http` fixed
+  in 1.26.11), and everything that must match it moves with it: the `go_version` default of
+  every bundled preset, folio's own `go.mod`, the floor literals in
+  `scripts/check-lib-conformance.sh` (B5), the mutations in
+  `scripts/check-platform-pins-drift.sh`, and the integration tests that assert the rendered
+  `go` directive. A repository scaffolded from a preset now starts at `go 1.26.11`; existing
+  repositories are not touched.
+
 ## v0.0.1 - 2026-10-25
 
 First tagged release. Pre-1.0: interfaces can change between 0.x versions.

@@ -1,6 +1,6 @@
 module github.com/hollis-labs/tools/folio
 
-go 1.26.6
+go 1.26.11
 
 require (
 	github.com/charmbracelet/huh v1.0.0

@@ -69,8 +69,8 @@ func TestIntegration_ComposingGoPackagePreset(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(gomod), "\ngo 1.26.6\n") {
-		t.Errorf("go.mod missing default go directive 1.26.6:\n%s", gomod)
+	if !strings.Contains(string(gomod), "\ngo 1.26.11\n") {
+		t.Errorf("go.mod missing default go directive 1.26.11:\n%s", gomod)
 	}
 
 	readme, err := os.ReadFile(filepath.Join(target, "README.md"))

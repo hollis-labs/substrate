@@ -82,7 +82,7 @@ func TestIntegration_GoLibPreset(t *testing.T) {
 	if !strings.Contains(string(gomod), "module github.com/hollis-labs/go-smoke-lib") {
 		t.Errorf("go.mod missing expected module declaration:\n%s", gomod)
 	}
-	if !strings.Contains(string(gomod), "go 1.26.6") {
+	if !strings.Contains(string(gomod), "go 1.26.11") {
 		t.Errorf("go.mod missing default go directive:\n%s", gomod)
 	}
 
