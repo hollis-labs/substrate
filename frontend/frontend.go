@@ -136,6 +136,9 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	if out.Items, err = merge(items, out.Routes, m.Frontend.Regions); err != nil {
 		return nil, err
 	}
+	if out.Items == nil {
+		out.Items = []Item{} // the wire form is [], never null: the shell refuses null
+	}
 	for b := range bindings {
 		out.Bindings = append(out.Bindings, b)
 	}

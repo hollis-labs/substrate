@@ -30,6 +30,7 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/workflow/engine: v0.2.0
   github.com/hollis-labs/libs/harness/core: v0.16.0
   github.com/hollis-labs/libs/mesh/core: v0.6.0      # Tether client, messaging (Hadron agent sessions)
+  github.com/hollis-labs/libs/security/pairing: v0.0.0-20261018164511-e8bfb38b4f31   # device grants and renewable device tokens (Basalisk companion); untagged in libs
 third_party:
   github.com/spf13/cobra: v1.10.2   # CLI standard (matches torque, tether, hadron, cerberus)
   gopkg.in/yaml.v3: v3.0.1          # manifest and BOM parsing

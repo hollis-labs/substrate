@@ -378,3 +378,19 @@ func TestWireShapeOfRegionsAndNewItems(t *testing.T) {
 		t.Error("bindings is absent from the wire")
 	}
 }
+
+// The shell reads items as an array; an app whose modules contribute none must
+// still get [] on the wire, not null.
+func TestEmptyItemsSerializeAsAnArray(t *testing.T) {
+	fm, err := Build(mf("minimal"), realBOM(t), ui.Default, func(string) ([]byte, bool, error) { return nil, false, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(fm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"items":[]`) {
+		t.Fatalf("items is not an empty array: %s", data)
+	}
+}
