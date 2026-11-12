@@ -98,9 +98,9 @@ if [ -n "$gover" ]; then
 	minor=${rest%%.*}
 	patch=0
 	case "$rest" in *.*) patch=${rest#*.} ;; esac
-	if [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && { [ "$minor" -gt 26 ] || { [ "$minor" -eq 26 ] && [ "$patch" -ge 6 ]; }; }; }; then floor_ok=1; fi
+	if [ "$major" -gt 1 ] || { [ "$major" -eq 1 ] && { [ "$minor" -gt 26 ] || { [ "$minor" -eq 26 ] && [ "$patch" -ge 11 ]; }; }; }; then floor_ok=1; fi
 fi
-if [ "$floor_ok" = 1 ]; then res PASS B5 "go directive $gover is at or above the 1.26.6 floor"; else res FAIL B5 "go directive '${gover:-missing}' is below the 1.26.6 floor"; fi
+if [ "$floor_ok" = 1 ]; then res PASS B5 "go directive $gover is at or above the 1.26.11 floor"; else res FAIL B5 "go directive '${gover:-missing}' is below the 1.26.11 floor"; fi
 
 # --- B6-B8 gates -----------------------------------------------------------
 run_item B6 "gofmt -l . is empty" sh -c 'out=$(gofmt -l .); [ -z "$out" ] || { echo "$out"; exit 1; }'

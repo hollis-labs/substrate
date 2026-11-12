@@ -14,7 +14,7 @@
 # reads it with awk, not a YAML parser.
 
 go:
-  version: "1.26.6"           # portfolio floor -- decision go_floor_1_26_6_everywhere
+  version: "1.26.11"           # portfolio floor -- decision go_floor_1_26_6_everywhere
   # a per-repo `toolchain` line stays a LOCAL escape hatch (go-baseline's
   # go_toolchain input), never a substitute for this floor on the `go` line.
 

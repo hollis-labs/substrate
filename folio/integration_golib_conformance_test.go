@@ -142,8 +142,8 @@ func TestGoLib_RendersConformingModule(t *testing.T) {
 
 			if tc.inputs["go_toolchain"] == nil {
 				// Default inputs render exactly the decided floor, no toolchain.
-				if !strings.Contains(gomod, "\ngo 1.26.6\n") || strings.Contains(gomod, "toolchain") {
-					t.Errorf("go.mod should be exactly go 1.26.6 with no toolchain:\n%s", gomod)
+				if !strings.Contains(gomod, "\ngo 1.26.11\n") || strings.Contains(gomod, "toolchain") {
+					t.Errorf("go.mod should be exactly go 1.26.11 with no toolchain:\n%s", gomod)
 				}
 			} else if !strings.Contains(gomod, "\ntoolchain go1.26.8\n") {
 				t.Errorf("go.mod missing requested toolchain:\n%s", gomod)
@@ -329,7 +329,7 @@ func TestConformanceScript_PositiveControls(t *testing.T) {
 		// An orphan go.sum line: `go mod tidy -diff` wants it gone, no network needed.
 		"B3":  write("go.sum", "example.com/x v1.0.0 h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n"),
 		"B4":  edit(".github/workflows/check.yml", repl("go-version-file: go.mod", "go-version: 'stable'")),
-		"B5":  edit("go.mod", repl("go 1.26.6", "go 1.26.1")),
+		"B5":  edit("go.mod", repl("go 1.26.11", "go 1.26.1")),
 		"B6":  write("demo/bad.go", "package demo\nfunc  Bad( ) {}\n"),
 		"B7":  write("demo/bad.go", "package demo\n\nfunc Bad() int { return \"x\" }\n"),
 		"B8":  write("demo/bad_test.go", "package demo\n\nimport \"testing\"\n\nfunc TestBad(t *testing.T) { t.Fatal(\"x\") }\n"),

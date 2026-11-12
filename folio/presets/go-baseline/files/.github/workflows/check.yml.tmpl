@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # go.mod is the single Go pin: the `go` line (1.26.6 by decision) is
+      # go.mod is the single Go pin: the `go` line (1.26.11 by decision) is
       # the floor; an optional `toolchain` line, if present, wins (setup-go
       # v6+ only — v5 ignores it and would install the `go` line).
       - uses: actions/setup-go@v6

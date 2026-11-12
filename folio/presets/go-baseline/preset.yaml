@@ -34,10 +34,10 @@ inputs:
     description: One-line description
   - name: go_version
     type: string
-    default: "1.26.6"
+    default: "1.26.11"
     pattern: "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
     description: >-
-      The go.mod `go` directive — the portfolio floor (1.26.6). Renders into
+      The go.mod `go` directive — the portfolio floor (1.26.11). Renders into
       go.mod and golangci-lint's `go:` key, and CI reads it back through
       `go-version-file: go.mod`, so there is one pin. govulncheck judges the
       stdlib by this line: a lower floor reports advisories fixed in 1.26.4-6.

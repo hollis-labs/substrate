@@ -98,8 +98,8 @@ func TestGoServiceApp_RendersTree(t *testing.T) {
 	if !strings.Contains(gomod, "module github.com/hollis-labs/my-service\n") {
 		t.Errorf("go.mod module line wrong:\n%s", gomod)
 	}
-	if !strings.Contains(gomod, "\ngo 1.26.6\n") {
-		t.Errorf("go.mod missing default go directive 1.26.6:\n%s", gomod)
+	if !strings.Contains(gomod, "\ngo 1.26.11\n") {
+		t.Errorf("go.mod missing default go directive 1.26.11:\n%s", gomod)
 	}
 
 	cfg := readText(t, filepath.Join(target, ".golangci.transport.yml"))
@@ -376,7 +376,7 @@ func syntheticModule(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	files := map[string]string{
-		"go.mod": "module example.com/syn\n\ngo 1.26.6\n",
+		"go.mod": "module example.com/syn\n\ngo 1.26.11\n",
 		"internal/store/store.go": `package store
 
 type Row struct{ ID int }
