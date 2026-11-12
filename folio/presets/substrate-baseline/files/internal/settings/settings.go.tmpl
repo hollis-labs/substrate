@@ -1,0 +1,57 @@
+// Package settings reads the app's own "{{ .inputs.repo_name }}" block from the manifest config. The shell modules
+// read theirs; this block holds what only this app has.
+//
+//	{{ .inputs.repo_name }}:
+//	  allowed_hosts: []   # extra Host names served (a local TLS proxy forwarding a public name)
+package settings
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// Key is the name of the config block.
+const Key = "{{ .inputs.repo_name }}"
+
+// Settings are the parsed block.
+type Settings struct {
+	AllowedHosts []string
+}
+
+// Parse reads the block (nil for a missing one). An unknown key or a bad value is an error naming
+// the key, so a typo is found at startup instead of silently turning a protection off.
+func Parse(raw any) (Settings, error) {
+	var s Settings
+	if raw == nil {
+		return s, nil
+	}
+	block, ok := raw.(map[string]any)
+	if !ok {
+		return s, fmt.Errorf("%s: the config block must be a map", Key)
+	}
+	var unknown []string
+	for k := range block {
+		if k != "allowed_hosts" {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return s, fmt.Errorf("%s: unknown key(s) %s", Key, strings.Join(unknown, ", "))
+	}
+	if v, present := block["allowed_hosts"]; present && v != nil {
+		list, ok := v.([]any)
+		if !ok {
+			return s, fmt.Errorf("%s.allowed_hosts: must be a list of host names", Key)
+		}
+		for _, item := range list {
+			name, ok := item.(string)
+			if !ok || strings.TrimSpace(name) == "" {
+				return s, fmt.Errorf("%s.allowed_hosts: every entry must be a non-empty string", Key)
+			}
+			s.AllowedHosts = append(s.AllowedHosts, strings.TrimSpace(name))
+		}
+	}
+	return s, nil
+}

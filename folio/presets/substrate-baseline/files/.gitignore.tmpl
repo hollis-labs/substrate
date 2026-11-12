@@ -1,0 +1,33 @@
+# Go binary built from `go build ./cmd/{{ .inputs.repo_name }}`
+/{{ .inputs.repo_name }}
+
+# Go test + build artefacts
+*.exe
+*.test
+*.out
+coverage.out
+
+# Built UI assets embedded by internal/webui: dist/ and its .gitkeep stay so `//go:embed` compiles.
+/internal/webui/dist/*
+!/internal/webui/dist/.gitkeep
+frontend/node_modules/
+frontend/dist/
+
+# Local config and data: never commit
+substrate.local.yaml
+*.db
+*.db-shm
+*.db-wal
+*.key
+
+# IDE / OS / local env
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.env
+.env.local
+
+# Release build staging written at the repo root by the shared build workflow (go-app-build.yml);
+# untracked, it makes the Go build stamp the binary as +dirty.
+/dist/

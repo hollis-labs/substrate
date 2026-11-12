@@ -1,0 +1,33 @@
+# {{ .inputs.repo_name }} on Substrate: one binary, deployed by fleet-install from the CI artifact
+# (`fleet-install deploy {{ .inputs.repo_name }} --commit <sha>`, with --dry-run first).
+#
+# Replace the host alias below with the fleet inventory name of the machine that runs it.
+# Settings are keys in the file named by SUBSTRATE_CONFIG (written by the operator, never committed).
+# The owner is created offline before the first start: docs/identity-bootstrap.md.
+schema: fleet-deploy/v1
+app: {{ .inputs.repo_name }}
+repo: {{ .inputs.github_owner }}/{{ .inputs.repo_name }}
+artifact: {name: "{{ .inputs.repo_name }}-{sha12}", tarball: "{{ .inputs.repo_name }}_{version}_{os}_{arch}.tar.gz", sums: SHA256SUMS}
+targets:
+  - id: {{ .inputs.repo_name }}-linux
+    when: {os: linux, arch: amd64}
+    hosts: [fleet-host]
+    binary: {{ .inputs.repo_name }}
+    install_root: ~/.local/share/fleet/releases/{{ .inputs.repo_name }}
+    symlinks:
+      - path: ~/.local/bin/{{ .inputs.repo_name }}
+    unit_dropins:
+      - unit: {{ .inputs.repo_name }}.service
+        name: 20-fleet-exec.conf
+        content: |
+          [Service]
+          ExecStart=
+          ExecStart=%h/.local/bin/{{ .inputs.repo_name }} serve
+          Environment=SUBSTRATE_CONFIG=%h/.config/{{ .inputs.repo_name }}/{{ .inputs.repo_name }}.yaml
+    preflight:
+      - {kind: sqlite_backup, db: ~/.local/share/{{ .inputs.repo_name }}/{{ .inputs.repo_name }}.db, dest: "{backup_dir}/{{ .inputs.repo_name }}.pre-{version}.db"}
+    restart: {via: systemd-user, unit: {{ .inputs.repo_name }}.service}
+    health:
+      url: "http://127.0.0.1:{{ .inputs.http_port }}/healthz"
+      expect_status: [200]
+      timeout: 30s

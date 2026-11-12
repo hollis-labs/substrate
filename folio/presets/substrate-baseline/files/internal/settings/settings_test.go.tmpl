@@ -1,0 +1,27 @@
+package settings_test
+
+import (
+	"strings"
+	"testing"
+
+	"{{ .computed.module_path }}/internal/settings"
+)
+
+func TestParse(t *testing.T) {
+	if _, err := settings.Parse(nil); err != nil {
+		t.Fatalf("nil block: %v", err)
+	}
+	s, err := settings.Parse(map[string]any{"allowed_hosts": []any{"app.example.test"}})
+	if err != nil || len(s.AllowedHosts) != 1 {
+		t.Fatalf("good block: %v %+v", err, s)
+	}
+	for name, raw := range map[string]any{
+		"unknown key": map[string]any{"allowed_host": []any{}},
+		"not a list":  map[string]any{"allowed_hosts": "a"},
+		"empty entry": map[string]any{"allowed_hosts": []any{" "}},
+	} {
+		if _, err := settings.Parse(raw); err == nil || !strings.Contains(err.Error(), "{{ .inputs.repo_name }}") {
+			t.Errorf("%s: want an error naming the block, got %v", name, err)
+		}
+	}
+}

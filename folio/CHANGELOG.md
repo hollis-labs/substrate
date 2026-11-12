@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Added
+
+- **`substrate-app` preset (and its `substrate-baseline` layer).** Renders a Substrate `app-host`
+  backend: `cmd/<name>/substrate.yaml` with its committed `substrate_wiring.go`, boot and serve with the
+  Host check and identity middleware, own identity with the owner created offline (no open setup over
+  HTTP), SQLite through the database module with one goose migration, scoped routes with a test that
+  every route has a scope, `internal/settings`, the embedded-UI package, `check.yml` (vet, pins, wiring
+  current, race tests, golangci-lint v2.11.4, scan-public), `build.yml` calling the tools reusable
+  workflow, `deploy.yaml`, and `docs/identity-bootstrap.md`. `substrate_version` has no default: a render
+  without it fails. A command that only prints (help, version, a bare command, an unknown word) starts no
+  module and creates no file; only `serve` and the offline `identity` commands boot and create the data
+  directory. `internal/hostguard` is a per-app copy of a check the framework is to own (Substrate pull
+  request 23): the preset drops it when that lands. Frontend layer, the `app-dashboard` and `chat-app` variants and the removal of the
+  Chimera and go-webui presets follow in later changes.
+
 ### Changed
 
 - **Go floor 1.26.6 to 1.26.11.** `platform-pins.yaml` mirrors Substrate's BOM

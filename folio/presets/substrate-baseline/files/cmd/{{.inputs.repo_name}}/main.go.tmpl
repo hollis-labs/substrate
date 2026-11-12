@@ -1,0 +1,51 @@
+// Command {{ .inputs.repo_name }} is built on Substrate. The shell (config, logging, health, HTTP, auth, identity,
+// secrets, database, CLI skeleton) comes from the manifest; this package and internal/ are the
+// app: its schema, its routes and its commands.
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/spf13/cobra"
+
+	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/cli"
+)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, "{{ .inputs.repo_name }}:", err)
+		stop()
+		os.Exit(1)
+	}
+}
+
+func run(ctx context.Context) error {
+	args := os.Args[1:]
+	started, err := start(ctx, plan(args))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = started.Stop(context.Background()) }()
+	root := newRoot(ctx, started.App)
+	// A bare command prints help; a typo never starts a server.
+	root.SetArgs(args)
+	return root.ExecuteContext(ctx)
+}
+
+// newRoot is the command tree over the started app.
+func newRoot(ctx context.Context, app *module.App) *cobra.Command {
+	root := cli.Root(app)
+	root.AddCommand(serveCmd(ctx, app))
+	if c, _, _ := root.Find([]string{"identity"}); c == nil || c == root {
+		// The identity module did not start (nothing that writes starts for a print-only command): help text only.
+		root.AddCommand(&cobra.Command{Use: "identity", Short: "Create the owner and API keys offline: identity setup, identity key create"})
+	}
+	return root
+}
