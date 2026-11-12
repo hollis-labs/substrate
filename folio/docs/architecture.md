@@ -1,66 +1,66 @@
 # Architecture: Substrate presets
 
-Folio renders typed presets (YAML manifest plus text/template tree). The port adds presets whose output is a
-Substrate app; the engine (`internal/*`, `service/`, `cmd/folio`) does not change except for what presets need.
+Folio renders typed presets (YAML manifest plus text/template tree). Presets whose output is a Substrate app
+sit beside the older ones; the engine (`internal/*`, `service/`, `cmd/folio`) changed in one place only: a
+breadcrumb or a command line that names a removed preset fails with `preset_removed` (`service/removed.go`).
 
-## Preset design
+## Presets
 
 ```
-go-baseline (layer, unchanged)       CI check, lint, hooks, LICENSE, CHANGELOG, AGENTS.md base
-  substrate-baseline (layer, new)    backend shell of a Substrate app
-    substrate-app (preset, new)      app-host: backend only, no UI
-      substrate-frontend (layer)     app-shell frontend, ui/app.json, internal/webui embed
-        app-dashboard 3.0 (preset)   substrate-app + frontend + dashboard surface
-        chat-app 2.0 (preset)        substrate-app + frontend + chat surface (blocked, Gap 3)
+go-baseline (layer)                  LICENSE, CHANGELOG, AGENTS.md, lint config, hooks (unchanged)
+  substrate-baseline (layer)         the Go shell of a Substrate app-host; composes go-baseline
+    substrate-app (preset)           backend only, no UI
+    substrate-frontend (layer)       minimal app-shell frontend; composes substrate-baseline with with_frontend=yes
+      app-dashboard 3.0.0 (preset)   the app with a UI (kit-dashboard theme, sign-in, one list surface)
 ```
 
-### What `substrate-baseline` renders (modelled on Mentat and Loom main)
+Unchanged and out of scope: `base`, `go-lib`, `go-package`, `nanite-plugin`, `ts-plugin`. Removed: see
+`conversion-notes.md`. There is no chat preset until a `kit-chat` release is pinned in the Substrate BOM.
 
-- `cmd/<name>/substrate.yaml`: `app`, `variant: app-host`, `profiles: [minimal]`, modules `secrets, auth, database,
-  identity, cli`; config for logging, `httphost.addr` (default `127.0.0.1:8080`, overridden through
-  `SUBSTRATE_CONFIG`), sqlite path, `auth.mode: enforce`, identity key file; the app's own block (key = app name).
-- `cmd/<name>/substrate_wiring.go`: committed generator output. A test regenerates it with the pinned
-  `substrate generate` and diffs, so it cannot drift.
-- `cmd/<name>/main.go`: `signal.NotifyContext`, `boot.Start`, `cli.Root`, `serve`.
-- `internal/settings` (decodes the app block, refuses bad values naming the key), `internal/webui` (embeds
-  `all:dist`, `dist/.gitkeep`), `internal/storage/migrations/sqlite/00001_init.sql` registered with
-  `database.UseMigrationFS`.
-- Identity: owner created offline (`<name> identity setup`, `identity key create`); no open setup form
-  (`identity.setup: offline`, the default). `docs/identity-bootstrap.md` has the scripted sequence.
-- `go.mod` (go floor from `platform-pins.yaml`, Substrate pin from the BOM), `.golangci.yml` (v2.11.4),
-  `.gitignore` with `/dist/`, `scan-public.allow`, `.github/workflows/{ci,build}.yml`, `deploy.yaml`,
-  `docs/architecture.md`, `docs/conversion-notes.md` stubs, `AGENTS.md`.
-- No secret-shaped literals, hosts or user paths in any template; `substrate scan-public --tree` on the rendered
-  output is part of the integration test.
+### What `substrate-baseline` renders (modelled on Loom and Mentat)
+
+- `cmd/<name>/substrate.yaml` (`variant: app-host`, modules `secrets, auth, database, identity, cli`,
+  `auth.mode: enforce`, the identity key file, the app's own block) and its committed generated
+  `substrate_wiring.go`. The wiring is templated (the app block's key order follows the app name) and the
+  integration test proves it byte-identical to `substrate generate` for two app names.
+- `cmd/<name>/config.go`: `plan` decides from the command line before anything boots. Only `serve` and the
+  offline `identity setup` / `identity key create` start every module and create the data directory; help,
+  version, a bare command, an unknown word and a bad flag start nothing that writes. A bare command prints help.
+- `cmd/<name>/serve.go`: the handler stack (Host check, identity middleware, the host with guard, routes and SPA).
+- `internal/api` (routes with scopes; the owner of a row is the verified principal), `internal/service` (the only
+  code that runs SQL), `internal/settings`, `internal/hostguard` (a per-app copy of a check the framework is to own,
+  Substrate pull request 23), `internal/webui` (embeds `all:dist`), `internal/storage` (one goose migration).
+- `.golangci.transport.yml` and `docs/transport-boundary.md`: handlers may not import the storage package, the
+  database module or `database/sql`; a second lint run in `check.yml` enforces it.
+- `.github/workflows/check.yml` (vet, pins check, wiring current, race tests, both lint runs, scan-public) and
+  `build.yml` (the tools reusable `go-app-build.yml`, pinned by commit), `deploy.yaml` (a host-alias placeholder),
+  `docs/identity-bootstrap.md` (interactive owner setup), `.gitignore` with `/dist/`, `scan-public.allow`.
+- `go.mod` carries only the Substrate requirement; `go mod tidy`, `substrate pins sync --app .`, `go mod tidy`
+  complete it. No `go.sum` is rendered.
 
 ### What `substrate-frontend` renders
 
-Minimal only: `frontend/package.json` with BOM-pinned exact versions (no `^`), `index.html`, `src/main.tsx`,
-`src/App.tsx` on app-shell, `cmd/<name>/ui/app.json` (the contribution file named by
-`frontend.contributions`), vite/tsconfig/biome/eslint configs, and the `manifest` script that runs
-`substrate frontend`. A frontend agent reviews it before the pull request goes to the owner.
+React 19, Vite, Tailwind, app-shell's `ManifestShell` over the manifest `substrate frontend` generates (`predev`,
+`prebuild` and `pretypecheck` run it), an app-owned sign-in screen (identity has no UI kit yet; a copy of Loom's
+with its fixes), one list surface over `GET`/`POST /api/items`, `cmd/<name>/ui/app.json`, the lint configs, a
+`Makefile`. `npm install` once and commit `package-lock.json`: the rendered `check.yml` fails with that
+instruction when the lock is missing. `identity.allowed_origins` for the dev server is documented for a
+development override file only; no shipped file sets it.
 
-### Inputs
+### Inputs and versions
 
-`project_name`, `github_owner`, `description`, `go_version` (from the pins file), `base_path`
-(app-dashboard keeps it only if a Substrate app can serve a sub-path; to be checked, not assumed).
-Removed: `gui_host`, `chimera_version`, `chimera_gui_recipe`, `design_kit_version`, `go_webui_version`.
+`repo_name`, `github_owner`, `description`, `go_version` (the portfolio floor, from `platform-pins.yaml`),
+`http_port`, `build_workflow_ref`. Required with NO default: `substrate_version` and the seven `kit_*` versions
+(a stale default is worse than a failed render); the integration tests read them from the framework's
+`bom.yaml`. The Go floor and CI action versions are literals checked by the drift check. The frontend toolchain
+literals are copied from Loom's `frontend/package.json` (Gap 5). Layers receive switches through compose `vars`
+(`with_frontend`), not through `computed`, which does not reach a composed layer's templates.
 
-### Versions: where they come from
+## Tests
 
-Go floor and CI tool versions: `platform-pins.yaml` (mirror, written by `substrate pins sync --folio`).
-Substrate version and kit versions: not in that mirror today (Gap 2); no second hand-kept list is added.
-
-### Tests
-
-Existing integration tests render, compile and assert. New: render `substrate-app`, `go mod tidy`, `substrate
-validate`, `go vet`, `go build`, `go test`, `substrate pins check --app`, `scan-public --tree`, then start the
-binary on a temporary data directory (port 18210 to 18219) and check offline identity bootstrap, sign-in, a
-refused request, `GET /api/setup` says `setup_required: false`, and `SIGTERM`. Frontend: `npm ci`, typecheck,
-lint and build of the rendered project.
-
-## Slices
-
-S0 these notes; S1 this design; S2 `substrate-baseline` + `substrate-app`; S3 `substrate-frontend` + the two
-variants; S4 removal (Chimera, go-webui, `go-service-app`, fixtures, scripts, vendored licensed material, which
-leaves the tree and stays in history); S5 README, CHANGELOG, AGENTS.md, `docs/cutover-plan.md`.
+`integration_substrateapp_test.go`: render trees and refusals (no default for `substrate_version`, bad inputs,
+required kits); `TestSubstrateApp_BuildsAndRuns` and `TestAppDashboard_BuildsAndServesUI` build against the real
+framework (tidy, pins, validate, generate diff, vet, race tests, npm install, typecheck, lint, build, the
+transport-gate controls) and run the binary on a temporary data directory (offline owner, sign-in, write, read,
+refused requests, `SIGTERM`, an empty `HOME` stays empty). They need network, Go and Node and set
+`FOLIO_SUBSTRATE_VERSION`; without it they skip visibly (`FOLIO_REQUIRE_TOOLS=1` makes that a failure, as in CI).

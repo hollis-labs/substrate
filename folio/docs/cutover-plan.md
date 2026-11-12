@@ -4,7 +4,8 @@ Folio is a one-shot command-line tool: no service, no port, no database, no keyr
 (survey in `docs/conversion-notes.md`, #17). The cutover is therefore a release, not a data migration.
 Nothing here touches a live system; the owner merges and a maintainer pushes the tag.
 
-Status: **not started** (pull requests #21, #24, #25 and this one are drafts).
+Status: **code merged on `main` (2026-11-12); release not yet tagged**. Pull requests #17, #22, #21, #24, #25, #28
+and #30 are merged; the release steps in section 4 remain.
 
 ## 1. Data
 
@@ -40,7 +41,7 @@ Nothing to remove: no unit, no descriptor, no environment of the tool itself (on
 
 ## 4. Release
 
-1. Merge #17, #21, #24, #25 (and #22) in the owner's order; #24 and #25 are stacked, retarget to `main`.
+1. Done: the owner merged the stack (#22, #17, #21, #24, #25, #28, #30) on 2026-11-12.
 2. In `folio/CHANGELOG.md` turn `## Unreleased` into the release section (`## v0.1.0 - <date>`;
    pre-1.0, a breaking change takes the minor). `scripts/release` refuses a tag without that heading.
 3. On `main`: `scripts/release folio v0.1.0` (dry run, validates), then `scripts/release --apply folio v0.1.0`
@@ -89,5 +90,7 @@ maintainer's. The sub-folio agent does not push tags and does not run anything a
 - `kit-chat` is not pinned in the BOM, so there is no chat preset.
 - `internal/hostguard` in the rendered app is a per-app copy of a check the framework will own
   (Substrate pull request 23); the preset drops it when that lands.
-- `folio/.github/workflows/ci.yml` is not executed by GitHub (only the repository root workflows run);
-  the root `modules.yml` runs vet and tests for Folio without the framework environment.
+- Folio's framework tests run in CI through the root workflow `.github/workflows/folio-checks.yml` (merged,
+  green on `main`), with `FOLIO_REQUIRE_TOOLS=1` and a hand-maintained `FOLIO_SUBSTRATE_VERSION`.
+  `folio/.github/workflows/ci.yml` is never executed by GitHub (only the root workflows run); it stays because the
+  drift check reads it, and a follow-up points the drift check at the root workflow and deletes it.
