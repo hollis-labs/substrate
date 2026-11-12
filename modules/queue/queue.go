@@ -23,6 +23,9 @@
 //	concurrency:  polling goroutines (default 1).
 //	poll_ms:      sleep between empty polls (default 3000).
 //	max_tries:    default attempts per job (default 3; 0 is unlimited).
+//	retry_after_secs: delay before a failed job is tried again, in whole seconds
+//	              (default 0: at once). A fixed delay for every job; the sqlite
+//	              driver keeps whole seconds, so seconds is the unit.
 //	autostart:    start the worker with the app (default true). Set false for an
 //	              app whose binary is also a CLI, and call queue.Run(app) from the
 //	              daemon command, so a short-lived command never runs jobs.
@@ -172,7 +175,17 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 			}
 		}
 	}
+	retryAfter := num("retry_after_secs", 0)
+	if retryAfter < 0 || retryAfter != float64(int64(retryAfter)) {
+		return errors.New("queue: retry_after_secs must be a whole number of seconds, 0 or more")
+	}
+	if _, set := cfg["retry_after_secs"]; set {
+		if _, ok := cfg["retry_after_secs"].(float64); !ok {
+			return errors.New("queue: retry_after_secs must be a number")
+		}
+	}
 	w := libqueue.NewWorker(q, libqueue.WorkerOpts{
+		RetryAfter:   time.Duration(retryAfter) * time.Second,
 		Queues:       names,
 		Concurrency:  int(num("concurrency", 1)),
 		PollInterval: time.Duration(num("poll_ms", 3000)) * time.Millisecond,
