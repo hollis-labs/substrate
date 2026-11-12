@@ -471,14 +471,14 @@ func TestSubstrateWebapp_RendersTree(t *testing.T) {
 	if !strings.Contains(script, "package-lock.json") || strings.Contains(script, "name:") {
 		t.Fatalf("could not extract the lock-file step:\n%s", script)
 	}
-	if out, err := run(t, filepath.Join(target, "frontend"), "sh", "-c", script); err == nil || !strings.Contains(out, lockMsg) {
-		t.Errorf("without a lock file the step must fail with the instruction: err=%v out=%q", err, out)
+	if out, runErr := run(t, filepath.Join(target, "frontend"), "sh", "-c", script); runErr == nil || !strings.Contains(out, lockMsg) {
+		t.Errorf("without a lock file the step must fail with the instruction: err=%v out=%q", runErr, out)
 	}
-	if err := os.WriteFile(filepath.Join(target, "frontend", "package-lock.json"), []byte("{}\n"), 0o600); err != nil {
-		t.Fatal(err)
+	if wErr := os.WriteFile(filepath.Join(target, "frontend", "package-lock.json"), []byte("{}\n"), 0o600); wErr != nil {
+		t.Fatal(wErr)
 	}
-	if out, err := run(t, filepath.Join(target, "frontend"), "sh", "-c", script); err != nil {
-		t.Errorf("with a lock file the step must pass: %v %s", err, out)
+	if out, runErr := run(t, filepath.Join(target, "frontend"), "sh", "-c", script); runErr != nil {
+		t.Errorf("with a lock file the step must pass: %v %s", runErr, out)
 	}
 	// A backend-only render has none of this.
 	plain, err := renderSubstrateApp(t, "plain", nil)
