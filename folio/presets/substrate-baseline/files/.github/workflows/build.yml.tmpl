@@ -14,7 +14,7 @@ jobs:
       main_pkg: ./cmd/{{ .inputs.repo_name }}
 {{- if .inputs.with_frontend }}
       node_version: "24"
-      ui_cmd: "cd frontend && npm ci && npm run build"
+      ui_cmd: "cd frontend && test -f package-lock.json && npm ci && npm run build"
 {{- end }}
       test_cmd: "go vet ./... && go test -race -count=1 ./..."
       extra_files: deploy.yaml

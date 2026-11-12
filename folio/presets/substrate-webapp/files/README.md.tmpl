@@ -29,8 +29,8 @@ environment variable the app reads is `{{ upper (replace "-" "_" .inputs.repo_na
 
 ## UI
 
-`frontend/` is a React app on app-shell and the BOM-pinned kits. Once: `cd frontend && npm install`
-(commit `package-lock.json`). Then `make ui-build` builds into `internal/webui/dist`, which the binary
+`frontend/` is a React app on app-shell and the BOM-pinned kits. **First step: `cd frontend && npm install`,
+then commit `package-lock.json`** (CI runs `npm ci` and fails without the lock). Then `make ui-build` builds into `internal/webui/dist`, which the binary
 embeds; `make ui-dev` runs the dev server against a running backend.
 
 ## Checks

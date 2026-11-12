@@ -6,7 +6,7 @@ SUBSTRATE := go run github.com/hollis-labs/substrate/cmd/substrate
 all: ui-build build
 
 # Build the UI into internal/webui/dist (the Go embed directory). `npm ci` needs the lock file:
-# run `npm install` once in frontend/ and commit package-lock.json.
+# the first step in a new project is `npm install` in frontend/, then commit package-lock.json.
 ui-build:
 	cd frontend && npm ci && npm run build
 

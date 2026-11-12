@@ -15,8 +15,9 @@ layer_only: true
 # Versions: the @hollis-labs kit versions are inputs with NO default, taken from the `kits:` block of the
 # Substrate bom/bom.yaml; the framework does not mirror them into platform-pins.yaml yet (docs/conversion-notes.md,
 # Gap 2). The toolchain packages (react, vite, tailwind, biome, eslint, typescript, base-ui, lucide-react and
-# @hollis-labs/eslint-config-design) are not in the BOM at all: they are literals copied from the ported apps
-# (Gap 5). `npm install` once to create the lock file; CI runs `npm ci`.
+# @hollis-labs/eslint-config-design) are not in the BOM at all: they are literals copied from the
+# frontend/package.json of hollis-labs/loom at commit e809f2db451f (Gap 5; the framework has no source for them yet).
+# `npm install` once and commit the lock file; CI runs `npm ci` and fails with that instruction when it is missing.
 
 composes:
   - id: substrate-baseline

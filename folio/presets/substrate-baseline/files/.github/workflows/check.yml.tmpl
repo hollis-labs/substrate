@@ -24,6 +24,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Frontend lock file is committed
+        working-directory: frontend
+        run: |
+          test -f package-lock.json || { echo "frontend/package-lock.json is missing: run npm install in frontend/ and commit package-lock.json" >&2; exit 1; }
       # The UI is built first: internal/webui embeds the frontend output and the Go tests need it.
       - name: Frontend (install, typecheck, lint, build)
         working-directory: frontend
