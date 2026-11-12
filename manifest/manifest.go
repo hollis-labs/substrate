@@ -31,15 +31,52 @@ type Frontend struct {
 	Regions []Region `yaml:"regions"`
 }
 
-// Region is one host-defined region.
+// Region is one host-defined region. Its JSON form (in the generated frontend
+// manifest) is snake_case; the dock attributes are optional and apply to docked
+// regions only. A docked region that sets none gets the vocabulary defaults.
 type Region struct {
-	Name string `yaml:"name"`
+	Name string `yaml:"name" json:"name"`
 	// Docked marks a region that holds dock.tab contributions and opens and closes
 	// (a drawer). A docked region must name the inline region it is tucked under.
-	Docked bool `yaml:"docked"`
+	Docked bool `yaml:"docked" json:"docked"`
 	// Anchor is the inline region a docked region is tucked under; the slots in
 	// that region are the triggers that open it.
-	Anchor string `yaml:"anchor"`
+	Anchor string `yaml:"anchor" json:"anchor,omitempty"`
+
+	// OpenState is "hidden" (default) or "open": whether the region starts with its first tab showing.
+	OpenState string `yaml:"open_state" json:"open_state,omitempty"`
+	// Exclusive: one tab open at a time. Default false, true for a bottom dock.
+	Exclusive *bool `yaml:"exclusive" json:"exclusive,omitempty"`
+	// Sizes are the size tokens (sm, md, lg) a user may pick from, and the default.
+	Sizes *DockSizes `yaml:"sizes" json:"sizes,omitempty"`
+	// DismissKey closes the region; "Esc" (default).
+	DismissKey string `yaml:"dismiss_key" json:"dismiss_key,omitempty"`
+	// Mobile is how the region presents on a narrow screen: "bottom-sheet" (default).
+	Mobile string `yaml:"mobile" json:"mobile,omitempty"`
+	// Edge is where the dock sits: "side" (default, a right-hand panel) or "bottom"
+	// (a resizable bottom dock). It is not Anchor, which names an inline region.
+	Edge string `yaml:"edge" json:"edge,omitempty"`
+	// HeightPx bounds a bottom dock's height in pixels; only with Edge "bottom".
+	HeightPx *DockHeight `yaml:"height_px" json:"height_px,omitempty"`
+}
+
+// DockSizes are the size tokens a docked region offers.
+type DockSizes struct {
+	Options []string `yaml:"options" json:"options"`
+	Default string   `yaml:"default" json:"default"`
+}
+
+// DockHeight bounds a bottom dock: min <= default <= max, all positive. A zero
+// field means the shell's default for it (120, 240, 640).
+type DockHeight struct {
+	Min     int `yaml:"min" json:"min,omitempty"`
+	Default int `yaml:"default" json:"default,omitempty"`
+	Max     int `yaml:"max" json:"max,omitempty"`
+}
+
+// hasDockAttributes reports whether the region sets any dock attribute.
+func (r Region) hasDockAttributes() bool {
+	return r.OpenState != "" || r.Exclusive != nil || r.Sizes != nil || r.DismissKey != "" || r.Mobile != "" || r.Edge != "" || r.HeightPx != nil
 }
 
 type Modules struct {
@@ -196,10 +233,11 @@ var regionName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
 // coreRegion reports whether name is one of the regions every host has.
 func coreRegion(name string) bool {
 	switch name {
-	case "nav.primary", "nav.footer", "settings.sections", "surface.page", "aside.panels", "widgets.grid":
+	case "nav.primary", "nav.footer", "settings.sections", "surface.page", "aside.panels", "widgets.grid",
+		"command.palette", "row.actions", "toolbar.primary":
 		return true
 	}
-	return strings.HasPrefix(name, "nav.group:")
+	return strings.HasPrefix(name, "nav.group:") || strings.HasPrefix(name, "menu:")
 }
 
 // checkRegions validates the host region catalog.
@@ -209,11 +247,11 @@ func (m *Manifest) checkRegions() []error {
 	byName := map[string]Region{}
 	for _, r := range m.Frontend.Regions {
 		switch {
-		case !regionName.MatchString(r.Name):
-			bad("%q is not a valid region name", r.Name)
-			continue
 		case coreRegion(r.Name):
 			bad("%q is a core region and is not declared", r.Name)
+			continue
+		case !regionName.MatchString(r.Name):
+			bad("%q is not a valid region name", r.Name)
 			continue
 		}
 		if _, dup := byName[r.Name]; dup {
@@ -222,6 +260,7 @@ func (m *Manifest) checkRegions() []error {
 		byName[r.Name] = r
 	}
 	for _, r := range byName {
+		errs = append(errs, checkDockAttributes(r)...)
 		switch {
 		case r.Docked && r.Anchor == "":
 			bad("docked region %q must declare its anchor", r.Name)
@@ -239,4 +278,69 @@ func (m *Manifest) checkRegions() []error {
 	}
 	sort.Slice(errs, func(i, j int) bool { return errs[i].Error() < errs[j].Error() })
 	return errs
+}
+
+// checkDockAttributes validates the dock attributes of one region.
+func checkDockAttributes(r Region) []error {
+	var errs []error
+	bad := func(f string, a ...any) {
+		errs = append(errs, fmt.Errorf("manifest: frontend.regions: region %q: "+f, append([]any{r.Name}, a...)...))
+	}
+	if !r.hasDockAttributes() {
+		return nil
+	}
+	if !r.Docked {
+		bad("dock attributes apply to docked regions only")
+		return errs
+	}
+	if r.OpenState != "" && r.OpenState != "hidden" && r.OpenState != "open" {
+		bad("open_state %q must be hidden or open", r.OpenState)
+	}
+	if r.DismissKey != "" && r.DismissKey != "Esc" {
+		bad("dismiss_key %q must be Esc", r.DismissKey)
+	}
+	if r.Mobile != "" && r.Mobile != "bottom-sheet" {
+		bad("mobile %q must be bottom-sheet", r.Mobile)
+	}
+	if r.Edge != "" && r.Edge != "side" && r.Edge != "bottom" {
+		bad("edge %q must be side or bottom", r.Edge)
+	}
+	if r.Sizes != nil {
+		size := map[string]bool{"sm": true, "md": true, "lg": true}
+		seen := map[string]bool{}
+		for _, o := range r.Sizes.Options {
+			if !size[o] {
+				bad("sizes.options has %q; sizes are sm, md and lg", o)
+			}
+			if seen[o] {
+				bad("sizes.options lists %q twice", o)
+			}
+			seen[o] = true
+		}
+		switch {
+		case len(r.Sizes.Options) == 0:
+			bad("sizes.options must list at least one size")
+		case !seen[r.Sizes.Default]:
+			bad("sizes.default %q is not one of the options", r.Sizes.Default)
+		}
+	}
+	if h := r.HeightPx; h != nil {
+		if r.Edge != "bottom" {
+			bad("height_px applies only to edge bottom")
+		}
+		lo, def, hi := orDefault(h.Min, 120), orDefault(h.Default, 240), orDefault(h.Max, 640)
+		if h.Min < 0 || h.Default < 0 || h.Max < 0 {
+			bad("height_px values must be positive")
+		} else if lo > def || def > hi {
+			bad("height_px must satisfy min <= default <= max (got %d, %d, %d)", lo, def, hi)
+		}
+	}
+	return errs
+}
+
+func orDefault(v, d int) int {
+	if v == 0 {
+		return d
+	}
+	return v
 }

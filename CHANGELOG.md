@@ -11,6 +11,14 @@ minor releases may break APIs.
 
 ### Added
 
+- SF-2 vocabulary v0.4 (additive; contribution schema_version stays 0): kinds `menu.item` and `command`; core regions `command.palette`, `menu:<subject-kind>`, `row.actions`, `toolbar.primary`; a shared `action` reference (`navigate`, `openRegion` with optional `tab`, or `call` with optional `input`); `risk`, `order`, `when`, `keywords` and `group` fields. The builder refuses a navigate that names no surface route or a backend path, an openRegion that is undeclared or not docked, a tab that is not in that region, a `when` outside a menu region, a command outside the palette, a menu.item in the palette or in a docked region, and a duplicate menu.item key in one region. Menu items sort by `order` (default 100), then module, then key.
+- Dock attributes in the region catalog (`frontend.regions`): `open_state`, `exclusive`, `sizes`, `dismiss_key`, `mobile`, `edge`, `height_px`, validated, on docked regions only.
+- The frontend manifest carries `bindings` (`{kind, version}`) derived from modules' `envelopes.emits` (`kind@version`).
+
+### Fixed
+
+- The generated frontend manifest wrote each region as `{"Name","Docked","Anchor"}`; it is now `{"name","docked","anchor"}` as the shell reads it, and a test fixes the key names.
+
 - `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list`: one call per request with every tool name, returning the names to list (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
 
 - BOM `app_libs`: `libs/mesh/core v0.6.0` (the Tether client, for apps that launch agent sessions).

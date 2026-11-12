@@ -1,7 +1,8 @@
 // Package ui is the UI contribution manifest a capability module declares, so
 // the builder can generate the frontend manifest from the modules a binary
 // links. The kinds and regions are the design team's published vocabulary
-// (SF-2, v0.3); this package validates against them and invents no names.
+// (SF-2, v0.4: v0.3 plus menu.item and command); this package validates against
+// them and invents no names.
 package ui
 
 import (
@@ -22,7 +23,7 @@ type Contribution struct {
 	Module        string   `json:"module"`
 	Package       *Package `json:"package,omitempty"`
 	// Contributions are the UI pieces: nav.item, nav.group, settings.region,
-	// surface, panel, dock.tab, widget and slot.
+	// surface, panel, dock.tab, widget, slot, menu.item and command.
 	Contributions []Item     `json:"contributions,omitempty"`
 	Envelopes     *Envelopes `json:"envelopes,omitempty"`
 	Routes        []Route    `json:"routes,omitempty"`
@@ -70,6 +71,33 @@ type Item struct {
 
 	// slot: the key of a dock.tab this slot toggles.
 	Opens string `json:"opens,omitempty"`
+
+	// menu.item and command (v0.4)
+	Action *Action `json:"action,omitempty"`
+	Risk   string  `json:"risk,omitempty"` // low (default) | medium | high
+
+	// menu.item
+	Order int    `json:"order,omitempty"` // lower first; default 100
+	When  string `json:"when,omitempty"`  // a subject kind; only in a menu:<subject-kind> region
+
+	// command
+	Keywords []string `json:"keywords,omitempty"`
+	Group    string   `json:"group,omitempty"` // the palette section label
+}
+
+// Action is what a menu.item or command does. Exactly one of Navigate,
+// OpenRegion and Call is set. It carries no code and no URL: the host sends a
+// Call through its action gateway, which applies risk and confirmation policy.
+type Action struct {
+	// Navigate is the path of a registered frontend route (a surface's route),
+	// never a URL and never a backend path.
+	Navigate string `json:"navigate,omitempty"`
+	// OpenRegion is a docked region to open; Tab optionally names a dock.tab in it.
+	OpenRegion string `json:"openRegion,omitempty"`
+	Tab        string `json:"tab,omitempty"`
+	// Call is a catalog function name the gateway executes; Input is its argument object.
+	Call  string         `json:"call,omitempty"`
+	Input map[string]any `json:"input,omitempty"`
 }
 
 // GroupRef names an admin-manifest settings group and its scope.
@@ -107,7 +135,16 @@ const (
 	RegionSurfacePage      = "surface.page"
 	RegionAsidePanels      = "aside.panels"
 	RegionWidgetsGrid      = "widgets.grid"
+
+	// v0.4: command and menu regions. Core, in every host, not declared.
+	RegionCommandPalette = "command.palette"
+	RegionMenuPrefix     = "menu:" // menu:<subject-kind>, e.g. menu:plugin
+	RegionRowActions     = "row.actions"
+	RegionToolbarPrimary = "toolbar.primary"
 )
+
+// DefaultMenuOrder is the order of a menu.item that names none.
+const DefaultMenuOrder = 100
 
 // Vocabulary is the set of kinds a host accepts and, optionally, the regions it
 // publishes. An empty Regions list admits any host-defined region (docked
@@ -117,10 +154,11 @@ type Vocabulary struct {
 	Regions []string
 }
 
-// Default is the vocabulary v0.3 approved by the owner on 2026-11-05. dock.tab
+// Default is the vocabulary: v0.3 (approved by the owner on 2026-11-05) plus the
+// v0.4 delta (menu.item and command, drafted by the Interaction Designer). dock.tab
 // replaced drawer.tab with no alias; plugin-host-ui 0.3.0 renamed its kind to match.
 var Default = Vocabulary{
-	Kinds: []string{"nav.item", "nav.group", "settings.region", "surface", "panel", "dock.tab", "widget", "slot"},
+	Kinds: []string{"nav.item", "nav.group", "settings.region", "surface", "panel", "dock.tab", "widget", "slot", "menu.item", "command"},
 }
 
 var (
@@ -129,6 +167,11 @@ var (
 	scopeKds = map[string]bool{"app": true, "plugin": true, "project": true, "user": true}
 	layouts  = map[string]bool{"list": true, "detail": true, "form": true, "settings": true, "dashboard": true}
 	npmName  = regexp.MustCompile(`^@[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$`)
+	risks    = map[string]bool{"low": true, "medium": true, "high": true}
+	// callRe is a catalog function name; they are camelCase (openOverlay) or dotted.
+	callRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]*$`)
+	// emitRe is an envelope kind with its version: kind@version.
+	emitRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_.+-]*$`)
 )
 
 // Parse strictly decodes a contribution (unknown fields are errors).
@@ -165,6 +208,8 @@ func DefaultRegion(kind string) string {
 		return RegionAsidePanels
 	case "widget":
 		return RegionWidgetsGrid
+	case "command":
+		return RegionCommandPalette
 	}
 	return ""
 }
@@ -202,9 +247,20 @@ func Validate(c Contribution, v Vocabulary) []error {
 		return false
 	}
 
+	if e := c.Envelopes; e != nil {
+		for _, k := range e.Emits {
+			if !emitRe.MatchString(k) {
+				bad("envelopes.emits %q must be kind@version", k)
+			}
+		}
+	}
+
 	seen := map[string]bool{}
 	for _, it := range c.Contributions {
 		id := it.Kind + "/" + it.Key
+		if it.Kind == "menu.item" {
+			id += "@" + it.EffectiveRegion() // unique per (region, module, key)
+		}
 		switch {
 		case !in(v.Kinds, it.Kind):
 			bad("kind %q is not in the vocabulary", it.Kind)
@@ -275,6 +331,20 @@ func Validate(c Contribution, v Vocabulary) []error {
 		case "slot":
 			// opens is optional; whether it names a real dock.tab is checked when
 			// contributions from every selected module are merged.
+		case "menu.item", "command":
+			if it.Label == "" {
+				bad("needs a label")
+			}
+			if it.Risk != "" && !risks[it.Risk] {
+				bad("risk %q must be low, medium or high", it.Risk)
+			}
+			if it.Order < 0 {
+				bad("order %d must not be negative", it.Order)
+			}
+			if it.When != "" && (!strings.HasPrefix(region, RegionMenuPrefix) || !keyRe.MatchString(it.When)) {
+				bad("when %q applies only to a menu:<subject-kind> region and must be a subject kind", it.When)
+			}
+			checkAction(it.Action, bad)
 		}
 	}
 
@@ -314,6 +384,8 @@ var kindFields = map[string][]string{
 	"dock.tab":        {"view", "shortcut", "placements"},
 	"widget":          {"view"},
 	"slot":            {"opens"},
+	"menu.item":       {"action", "risk", "order", "when", "shortcut"},
+	"command":         {"action", "risk", "keywords", "group"},
 }
 
 // setFields reports which kind-specific fields the item sets.
@@ -324,6 +396,8 @@ func (it Item) setFields() map[string]bool {
 		"section_id": it.SectionID != "", "groups": len(it.Groups) > 0,
 		"layout": it.Layout != "", "title": it.Title != "",
 		"shortcut": it.Shortcut != "", "placements": len(it.Placements) > 0, "opens": it.Opens != "",
+		"action": it.Action != nil, "risk": it.Risk != "", "order": it.Order != 0, "when": it.When != "",
+		"keywords": len(it.Keywords) > 0, "group": it.Group != "",
 	}
 }
 
@@ -343,6 +417,29 @@ func regionOK(it Item, region string, v Vocabulary) bool {
 		return region == RegionAsidePanels
 	case "widget":
 		return region == RegionWidgetsGrid
+	case "command":
+		return region == RegionCommandPalette
+	case "menu.item":
+		switch {
+		case region == RegionRowActions || region == RegionToolbarPrimary:
+			return true
+		case strings.HasPrefix(region, RegionMenuPrefix):
+			return keyRe.MatchString(strings.TrimPrefix(region, RegionMenuPrefix))
+		case region == RegionCommandPalette:
+			return false
+		}
+		// A host-defined, non-docked region may also hold a menu.item; whether the
+		// host declares it, and that it is not docked, is checked when the
+		// contributions are merged.
+		if len(v.Regions) == 0 {
+			return keyRe.MatchString(region)
+		}
+		for _, r := range v.Regions {
+			if r == region {
+				return true
+			}
+		}
+		return false
 	}
 	// dock.tab and slot go in host-defined regions (a docked region, an inline
 	// slot). When the host publishes its regions, hold the item to them.
@@ -366,5 +463,49 @@ func frontendRoute(route string, bad func(string, ...any)) {
 		bad("route %q is a backend path: frontend routes must never equal an API path", route)
 	case strings.Contains(route, "..") || strings.ContainsAny(route, "?#"):
 		bad("route %q must be a plain path", route)
+	}
+}
+
+// checkAction validates the shared action reference of a menu.item or command.
+// Whether a navigate target is a registered route, and a region and tab exist,
+// is checked when contributions from every selected module are merged.
+func checkAction(a *Action, bad func(string, ...any)) {
+	if a == nil {
+		bad("needs an action")
+		return
+	}
+	set := 0
+	for _, s := range []string{a.Navigate, a.OpenRegion, a.Call} {
+		if s != "" {
+			set++
+		}
+	}
+	if set != 1 {
+		bad("action must set exactly one of navigate, openRegion and call")
+		return
+	}
+	switch {
+	case a.Navigate != "":
+		frontendRoute(a.Navigate, bad)
+		if a.Tab != "" || a.Input != nil {
+			bad("action navigate takes no tab or input")
+		}
+	case a.OpenRegion != "":
+		if !keyRe.MatchString(a.OpenRegion) {
+			bad("action openRegion %q is not a region name", a.OpenRegion)
+		}
+		if a.Tab != "" && !keyRe.MatchString(a.Tab) {
+			bad("action tab %q is not a dock.tab key", a.Tab)
+		}
+		if a.Input != nil {
+			bad("action openRegion takes no input")
+		}
+	case a.Call != "":
+		if !callRe.MatchString(a.Call) {
+			bad("action call %q is not a catalog function name", a.Call)
+		}
+		if a.Tab != "" {
+			bad("action call takes no tab")
+		}
 	}
 }

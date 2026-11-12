@@ -91,3 +91,47 @@ func TestHostRegionCatalogIsValidated(t *testing.T) {
 		}
 	}
 }
+
+func TestDockAttributesAreValidated(t *testing.T) {
+	base := "app: x\nvariant: app-host\nprofiles: [minimal]\nfrontend:\n  regions:\n    - {name: chat.composer}\n"
+	dock := func(attrs string) string {
+		return base + "    - {name: chat.drawer, docked: true, anchor: chat.composer, " + attrs + "}\n"
+	}
+	for name, c := range map[string]struct{ src, want string }{
+		"all of them":           {dock(`open_state: open, exclusive: true, sizes: {options: [sm, md, lg], default: md}, dismiss_key: Esc, mobile: bottom-sheet, edge: side`), ""},
+		"a bottom dock":         {dock(`edge: bottom, height_px: {min: 100, default: 300, max: 700}`), ""},
+		"height defaults":       {dock(`edge: bottom, height_px: {}`), ""},
+		"bad open_state":        {dock(`open_state: ajar`), "open_state"},
+		"bad size":              {dock(`sizes: {options: [xl], default: xl}`), "sm, md and lg"},
+		"no sizes":              {dock(`sizes: {options: [], default: md}`), "at least one size"},
+		"default not offered":   {dock(`sizes: {options: [sm], default: lg}`), "not one of the options"},
+		"duplicate size":        {dock(`sizes: {options: [sm, sm], default: sm}`), "twice"},
+		"bad dismiss key":       {dock(`dismiss_key: Enter`), "dismiss_key"},
+		"bad mobile":            {dock(`mobile: fullscreen`), "mobile"},
+		"bad edge":              {dock(`edge: top`), "edge"},
+		"height on a side dock": {dock(`height_px: {min: 100}`), "only to edge bottom"},
+		"height out of order":   {dock(`edge: bottom, height_px: {min: 500, default: 300, max: 700}`), "min <= default <= max"},
+		"on an inline region":   {base + "    - {name: chat.message, open_state: open}\n", "docked regions only"},
+		"menu region is core":   {base + "    - {name: \"menu:plugin\"}\n", "core region"},
+		"palette is core":       {base + "    - {name: command.palette}\n", "core region"},
+	} {
+		m, err := Parse([]byte(c.src))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		errs := m.Validate()
+		if c.want == "" {
+			if len(errs) != 0 {
+				t.Errorf("%s: %v", name, errs)
+			}
+			continue
+		}
+		found := false
+		for _, e := range errs {
+			found = found || strings.Contains(e.Error(), c.want)
+		}
+		if !found {
+			t.Errorf("%s: %v, want one containing %q", name, errs, c.want)
+		}
+	}
+}

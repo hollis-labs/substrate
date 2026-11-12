@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -237,5 +238,143 @@ func TestBadContributionsAreRefused(t *testing.T) {
 	boom := errors.New("boom")
 	if _, err := Build(mf("minimal"), b, ui.Default, func(string) ([]byte, bool, error) { return nil, false, boom }); !errors.Is(err, boom) {
 		t.Errorf("loader error lost: %v", err)
+	}
+}
+
+// v0.4: the cross-module rules for menu.item and command, ordering, and bindings.
+func TestMenuActionsMustLandOnWhatTheManifestDeclares(t *testing.T) {
+	b := realBOM(t)
+	surface := `{"kind":"surface","key":"plugins","route":"/plugins","layout":"list","title":"Plugins"}`
+	tab := `{"kind":"dock.tab","key":"scratch","region":"chat.drawer","view":"v"}`
+	item := func(action string) string {
+		return `{"kind":"menu.item","key":"m","label":"M","region":"menu:plugin","action":` + action + `}`
+	}
+	build := func(regions []manifest.Region, parts map[string]string) error {
+		_, err := Build(withRegions(mf("minimal", "auth", "events"), regions), b, ui.Default, loaders(parts))
+		return err
+	}
+	for name, ok := range map[string]map[string]string{
+		"navigate to a surface route":   {"auth": surface, "events": item(`{"navigate":"/plugins"}`)},
+		"open a docked region":          {"auth": item(`{"openRegion":"chat.drawer"}`)},
+		"open a tab in its region":      {"auth": tab, "events": item(`{"openRegion":"chat.drawer","tab":"scratch"}`)},
+		"call is the gateway's to find": {"auth": item(`{"call":"anything.at.all"}`)},
+		"a non-docked host region":      {"auth": `{"kind":"menu.item","key":"h","label":"H","region":"chat.composer","action":{"call":"x"}}`},
+	} {
+		if err := build(chatRegions, ok); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, c := range map[string]struct {
+		parts map[string]string
+		want  string
+	}{
+		"navigate to no route":              {map[string]string{"auth": item(`{"navigate":"/nowhere"}`)}, "no selected module declares as a surface route"},
+		"navigate to a nav item only":       {map[string]string{"auth": `{"kind":"nav.item","key":"n","label":"N","route":"/only-nav"},` + item(`{"navigate":"/only-nav"}`)}, "no selected module declares as a surface route"},
+		"open an undeclared region":         {map[string]string{"auth": item(`{"openRegion":"ghost.drawer"}`)}, "does not declare"},
+		"open an inline region":             {map[string]string{"auth": item(`{"openRegion":"chat.composer"}`)}, "not docked"},
+		"open a tab in another region":      {map[string]string{"auth": tab, "events": item(`{"openRegion":"other.drawer","tab":"scratch"}`)}, "no selected module declares that tab there"},
+		"open a tab nobody declares":        {map[string]string{"auth": item(`{"openRegion":"chat.drawer","tab":"ghost"}`)}, "no selected module declares that tab there"},
+		"menu.item in a docked host region": {map[string]string{"auth": `{"kind":"menu.item","key":"h","label":"H","region":"chat.drawer","action":{"call":"x"}}`}, "docked region"},
+		"menu.item in an undeclared region": {map[string]string{"auth": `{"kind":"menu.item","key":"h","label":"H","region":"ghost.menu","action":{"call":"x"}}`}, "does not declare"},
+	} {
+		if err := build(chatRegions, c.parts); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s: %v, want %q", name, err, c.want)
+		}
+	}
+}
+
+func TestMenuItemsAreOrderedByOrderThenModuleThenKey(t *testing.T) {
+	b := realBOM(t)
+	mi := func(key string, order int) string {
+		o := ""
+		if order != 0 {
+			o = `,"order":` + string(rune('0'+order/10)) + string(rune('0'+order%10))
+		}
+		return `{"kind":"menu.item","key":"` + key + `","label":"L","region":"toolbar.primary","action":{"call":"x"}` + o + `}`
+	}
+	fm, err := Build(mf("minimal", "auth", "events"), b, ui.Default, loaders(map[string]string{
+		"auth":   mi("b", 0) + "," + mi("a", 20),
+		"events": mi("c", 20) + "," + mi("d", 99),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, it := range fm.Items {
+		got = append(got, it.Module+"/"+it.Key)
+	}
+	// order 20 (auth/a, events/c), then 99 (events/d), then the default 100 (auth/b)
+	if s := strings.Join(got, ","); s != "auth/a,events/c,events/d,auth/b" {
+		t.Fatalf("order = %s", s)
+	}
+}
+
+func TestBindingsAreTheEmittedEnvelopeKinds(t *testing.T) {
+	b := realBOM(t)
+	load := func(name string) ([]byte, bool, error) {
+		switch name {
+		case "auth":
+			return []byte(`{"schema_version":0,"module":"auth","envelopes":{"emits":["card@1","list@2"]}}`), true, nil
+		case "events":
+			return []byte(`{"schema_version":0,"module":"events","envelopes":{"emits":["card@1","card@2"]}}`), true, nil
+		}
+		return nil, false, nil
+	}
+	fm, err := Build(mf("minimal", "auth", "events"), b, ui.Default, load)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fm.Bindings) != 3 || fm.Bindings[0] != (Binding{"card", "1"}) || fm.Bindings[1] != (Binding{"card", "2"}) || fm.Bindings[2] != (Binding{"list", "2"}) {
+		t.Fatalf("bindings = %v, want card@1, card@2, list@2 sorted and unique", fm.Bindings)
+	}
+	none, err := Build(mf("minimal", "auth"), b, ui.Default, func(string) ([]byte, bool, error) { return nil, false, nil })
+	if err != nil || none.Bindings == nil {
+		t.Fatalf("a manifest with no envelopes still carries an empty bindings list: %v %v", none.Bindings, err)
+	}
+}
+
+// The shell reads this JSON; its key names are the contract. A Go field rename
+// must not change them (the region keys were once the exported Go names).
+func TestWireShapeOfRegionsAndNewItems(t *testing.T) {
+	b := realBOM(t)
+	regions := []manifest.Region{
+		{Name: "chat.composer"},
+		{Name: "chat.drawer", Docked: true, Anchor: "chat.composer", OpenState: "open", Edge: "side",
+			Sizes: &manifest.DockSizes{Options: []string{"sm", "md"}, Default: "md"}, DismissKey: "Esc", Mobile: "bottom-sheet"},
+	}
+	fm, err := Build(withRegions(mf("minimal", "auth"), regions), b, ui.Default, loaders(map[string]string{
+		"auth": `{"kind":"command","key":"c","label":"C","keywords":["k"],"group":"G","risk":"low","action":{"openRegion":"chat.drawer"}}`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(fm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Regions  []map[string]any `json:"regions"`
+		Items    []map[string]any `json:"items"`
+		Bindings []any            `json:"bindings"`
+	}
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatal(err)
+	}
+	if got := wire.Regions[0]; got["name"] != "chat.composer" || got["docked"] != false || got["anchor"] != nil {
+		t.Errorf("inline region on the wire: %v", got)
+	}
+	d := wire.Regions[1]
+	sizes, _ := d["sizes"].(map[string]any)
+	if d["name"] != "chat.drawer" || d["docked"] != true || d["anchor"] != "chat.composer" || d["open_state"] != "open" ||
+		d["edge"] != "side" || d["dismiss_key"] != "Esc" || d["mobile"] != "bottom-sheet" || sizes["default"] != "md" {
+		t.Errorf("docked region on the wire: %v", d)
+	}
+	it := wire.Items[0]
+	action, _ := it["action"].(map[string]any)
+	if it["kind"] != "command" || it["module"] != "auth" || it["group"] != "G" || it["risk"] != "low" || action["openRegion"] != "chat.drawer" {
+		t.Errorf("command on the wire: %v", it)
+	}
+	if wire.Bindings == nil {
+		t.Error("bindings is absent from the wire")
 	}
 }

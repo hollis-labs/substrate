@@ -41,6 +41,18 @@ type Manifest struct {
 	// which regions are docked and where they are anchored.
 	Regions []manifest.Region `json:"regions"`
 	Kits    []Kit             `json:"kits"`
+	// Bindings is the binding-table input: the envelope kinds the selected
+	// modules emit (kind@version in their ui.json), which the shell resolves to
+	// renderers. Sorted and unique.
+	Bindings []Binding `json:"bindings"`
+}
+
+// Binding is one envelope kind the app draws, in the shape design-bindings'
+// BindingDemand takes. Origin is left out: a module's emits do not say whether
+// the envelope comes from the host or an agent.
+type Binding struct {
+	Kind    string `json:"kind"`
+	Version string `json:"version"`
 }
 
 // DefaultPriority orders contributions that name none.
@@ -75,10 +87,11 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	}
 	out := &Manifest{
 		ManifestVersion: ManifestVersion, App: m.App, Variant: m.Variant, Profiles: m.Profiles, Modules: mods,
-		Contributions: []ui.Contribution{}, Items: []Item{}, Routes: []Route{}, Kits: []Kit{},
+		Contributions: []ui.Contribution{}, Items: []Item{}, Routes: []Route{}, Kits: []Kit{}, Bindings: []Binding{},
 		Regions: append([]manifest.Region{}, m.Frontend.Regions...),
 	}
 	want := map[string]bool{}
+	bindings := map[Binding]bool{}
 	var items []Item
 	for _, name := range mods {
 		data, ok, err := load(name)
@@ -99,6 +112,12 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 			return nil, errs[0]
 		}
 		out.Contributions = append(out.Contributions, c)
+		if c.Envelopes != nil {
+			for _, e := range c.Envelopes.Emits {
+				kind, version, _ := strings.Cut(e, "@")
+				bindings[Binding{kind, version}] = true
+			}
+		}
 		for _, it := range c.Contributions {
 			items = append(items, Item{it, name})
 		}
@@ -117,6 +136,15 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	if out.Items, err = merge(items, out.Routes, m.Frontend.Regions); err != nil {
 		return nil, err
 	}
+	for b := range bindings {
+		out.Bindings = append(out.Bindings, b)
+	}
+	sort.Slice(out.Bindings, func(i, j int) bool {
+		if out.Bindings[i].Kind != out.Bindings[j].Kind {
+			return out.Bindings[i].Kind < out.Bindings[j].Kind
+		}
+		return out.Bindings[i].Version < out.Bindings[j].Version
+	})
 	names := make([]string, 0, len(want))
 	for n := range want {
 		names = append(names, n)
@@ -180,6 +208,12 @@ func merge(in []Item, routes []Route, regions []manifest.Region) ([]Item, error)
 	for _, r := range regions {
 		catalog[r.Name] = r
 	}
+	surfaceRoutes := map[string]bool{} // routes a navigate action may name
+	for _, it := range out {
+		if it.Kind == "surface" {
+			surfaceRoutes[strings.TrimSuffix(it.Route, "/")] = true
+		}
+	}
 	tabRegion := map[string]string{} // dock.tab key -> its region
 	for _, it := range out {
 		if it.Kind == "dock.tab" {
@@ -209,6 +243,21 @@ func merge(in []Item, routes []Route, regions []manifest.Region) ([]Item, error)
 				return nil, fmt.Errorf("slot %q (%s) in region %q opens dock.tab %q in region %q, which is not anchored under %q", it.Key, it.Module, it.EffectiveRegion(), it.Opens, region, it.EffectiveRegion())
 			}
 		}
+		if it.Kind == "menu.item" && !coreMenuRegion(it.EffectiveRegion()) {
+			// Not a core menu region, so the host must declare it, and not docked.
+			r, ok := catalog[it.EffectiveRegion()]
+			switch {
+			case !ok:
+				return nil, fmt.Errorf("menu.item %q (%s) is in region %q, which the manifest does not declare under frontend.regions", it.Key, it.Module, it.EffectiveRegion())
+			case r.Docked:
+				return nil, fmt.Errorf("menu.item %q (%s) is in the docked region %q; a menu.item goes in a menu region or a non-docked host region", it.Key, it.Module, r.Name)
+			}
+		}
+		if a := it.Action; a != nil && (it.Kind == "menu.item" || it.Kind == "command") {
+			if err := checkAction(it, catalog, tabRegion, surfaceRoutes, backend); err != nil {
+				return nil, err
+			}
+		}
 		switch {
 		case it.Kind == "nav.item" && strings.HasPrefix(it.EffectiveRegion(), ui.RegionNavGroupPrefix):
 			g := strings.TrimPrefix(it.EffectiveRegion(), ui.RegionNavGroupPrefix)
@@ -219,13 +268,7 @@ func merge(in []Item, routes []Route, regions []manifest.Region) ([]Item, error)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
-		pa, pb := a.Priority, b.Priority
-		if pa == 0 {
-			pa = DefaultPriority
-		}
-		if pb == 0 {
-			pb = DefaultPriority
-		}
+		pa, pb := order(a), order(b)
 		switch {
 		case pa != pb:
 			return pa < pb
@@ -235,4 +278,59 @@ func merge(in []Item, routes []Route, regions []manifest.Region) ([]Item, error)
 		return a.Key < b.Key
 	})
 	return out, nil
+}
+
+// order is the sort position of an item: a menu.item sorts by its order
+// (default 100), every other kind by its priority (default 10). The two scales
+// are never compared in practice, since the shell lays items out per region.
+func order(it Item) int {
+	if it.Kind == "menu.item" {
+		if it.Order == 0 {
+			return ui.DefaultMenuOrder
+		}
+		return it.Order
+	}
+	if it.Priority == 0 {
+		return DefaultPriority
+	}
+	return it.Priority
+}
+
+// coreMenuRegion reports whether region is one of the core regions a menu.item
+// may name without the host declaring it.
+func coreMenuRegion(region string) bool {
+	return region == ui.RegionRowActions || region == ui.RegionToolbarPrimary || strings.HasPrefix(region, ui.RegionMenuPrefix)
+}
+
+// checkAction holds a menu.item or command's action to what the merged
+// manifest declares: a navigate names a surface's route, an openRegion names a
+// declared docked region, and its tab is a dock.tab anchored in that region.
+// A call is the gateway's to resolve at run time.
+func checkAction(it Item, catalog map[string]manifest.Region, tabRegion map[string]string, surfaceRoutes map[string]bool, backend map[string]string) error {
+	a := it.Action
+	where := fmt.Sprintf("%s %q (%s)", it.Kind, it.Key, it.Module)
+	switch {
+	case a.Navigate != "":
+		path := strings.TrimSuffix(a.Navigate, "/")
+		if m, clash := backend[path]; clash {
+			return fmt.Errorf("%s navigates to %s, which is a backend path served by %s", where, a.Navigate, m)
+		}
+		if !surfaceRoutes[path] {
+			return fmt.Errorf("%s navigates to %s, which no selected module declares as a surface route", where, a.Navigate)
+		}
+	case a.OpenRegion != "":
+		r, ok := catalog[a.OpenRegion]
+		switch {
+		case !ok:
+			return fmt.Errorf("%s opens region %q, which the manifest does not declare under frontend.regions", where, a.OpenRegion)
+		case !r.Docked:
+			return fmt.Errorf("%s opens region %q, which is not docked", where, a.OpenRegion)
+		}
+		if a.Tab != "" {
+			if region, ok := tabRegion[a.Tab]; !ok || region != a.OpenRegion {
+				return fmt.Errorf("%s opens dock.tab %q in region %q, but no selected module declares that tab there", where, a.Tab, a.OpenRegion)
+			}
+		}
+	}
+	return nil
 }

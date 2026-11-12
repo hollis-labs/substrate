@@ -74,17 +74,33 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
 - Errors use `apierr.Write(w, status, code, message, details)`, the flat `{code, message, details?}` body the
   frontend reads. Streaming handlers must not buffer; the wrapper in httphost passes `Flush` through.
 - The same file can carry UI `contributions`, `envelopes` and a companion `package`, validated against
-  `ui.Default`. The kinds are the design team's approved vocabulary (SF-2 v0.3): `nav.item`, `nav.group`,
-  `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`; do not invent others. Each kind takes only
+  `ui.Default`. The kinds are the design team's vocabulary (SF-2 v0.4): `nav.item`, `nav.group`,
+  `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`, `menu.item`, `command`; do not invent others. Each kind takes only
   its own fields (the validator refuses a stray one), and goes in its default region unless it names one
   (`nav.primary`, `nav.group:<key>`, `nav.footer`, `settings.sections`, `surface.page`, `aside.panels`,
-  `widgets.grid`; `dock.tab` and `slot` name a host-defined region such as `chat.drawer`).
+  `widgets.grid`; `dock.tab` and `slot` name a host-defined region such as `chat.drawer`; `menu.item` and
+  `command` use the menu regions below).
   - Settings are referenced, never defined: a `settings.region` lists `{id, scope_kind}` groups that the admin
     manifest serves.
   - `dock.tab` and `slot` name host-defined regions, which the app declares under `frontend.regions` in its
     manifest (docked regions name the inline `anchor` they sit under). The core regions are not declared. The
     builder fails on an undeclared region, a `dock.tab` outside a docked region, a `slot` inside one, and a
     `slot.opens` that does not name a `dock.tab` in the docked region anchored under the slot's region.
+  - `menu.item` and `command` (v0.4) carry an `action`: exactly one of `{navigate: <route>}`, `{openRegion: <region>,
+    tab?: <dock.tab key>}` or `{call: <catalog function>, input?: {...}}`. An action holds no code and no URL; the
+    host sends a `call` through its action gateway, which decides confirmation, not the plugin. `risk` is `low`
+    (default), `medium` or `high`. A `menu.item` goes in a core menu region (`menu:<subject-kind>`, `row.actions`,
+    `toolbar.primary`) or a declared non-docked host region, takes `label`, `icon`, `order` (default 100, lower
+    first), `shortcut` (a display hint) and `when` (a subject kind, only in a `menu:` region); a `command` goes
+    in `command.palette` (its default) and takes `label`, `icon`, `keywords`, `group`. The builder checks that a
+    `navigate` names a `surface` route that is not a backend path, an `openRegion` names a declared docked
+    region, and its `tab` is a `dock.tab` in that region. A `menu.item` key is unique per region and module.
+  - `envelopes.emits` lists `kind@version` strings; the frontend manifest turns them into `bindings`
+    (`{kind, version}`, sorted, unique) for the shell's binding table.
+  - Docked regions in `frontend.regions` may set dock attributes: `open_state` (`hidden`, `open`), `exclusive`,
+    `sizes` (`options` from `sm`, `md`, `lg`, and a `default`), `dismiss_key` (`Esc`), `mobile`
+    (`bottom-sheet`), `edge` (`side` or `bottom`) and, for a bottom dock, `height_px` (`min`, `default`, `max`).
+    They appear on the region in the frontend manifest in snake_case.
   - A frontend `route` is a path in the SPA and must never equal a backend path.
   - A companion npm package is named in `package.name` and must be pinned in the BOM's `kits:` section; the
     version lives only there.
