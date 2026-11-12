@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -519,6 +520,41 @@ func TestConfigErrorsAreRefused(t *testing.T) {
 	}
 	if _, err := boot.Start(context.Background(), "demo", []string{"health", "logging", "auth", "database", "httphost", "identity"}, `{"database":{"sqlite":{"path":":memory:"}}}`); err == nil {
 		t.Error("selecting identity with no identity block was accepted")
+	}
+}
+
+func TestRateLimitedAnswersCarryRetryAfter(t *testing.T) {
+	a := start(t, "enforce", "")
+	a.owner()
+	for i := 0; i < 5; i++ {
+		code(t, a.login("owner", "wrong password "+fmt.Sprint(i)), 401)
+	}
+	r := a.login("owner", password)
+	code(t, r, 429)
+	secs, err := strconv.Atoi(r.Header().Get("Retry-After"))
+	if err != nil || secs < 1 || secs > 300 {
+		t.Errorf("Retry-After = %q (%v), want 1..300 seconds", r.Header().Get("Retry-After"), err)
+	}
+	// An ordinary refusal carries none.
+	b := start(t, "enforce", "")
+	b.owner()
+	w := b.login("owner", "wrong")
+	code(t, w, 401)
+	if got := w.Header().Get("Retry-After"); got != "" {
+		t.Errorf("Retry-After on a 401 = %q", got)
+	}
+}
+
+func TestPairingRedeemRateLimitCarriesRetryAfter(t *testing.T) {
+	a := start(t, "enforce", "")
+	a.owner()
+	for i := 0; i < 5; i++ {
+		code(t, a.do("POST", "/api/pair", map[string]string{"code": "pair_nonsense"}), 401)
+	}
+	r := a.do("POST", "/api/pair", map[string]string{"code": "pair_nonsense"})
+	code(t, r, 429)
+	if r.Header().Get("Retry-After") == "" {
+		t.Error("no Retry-After on the pairing 429")
 	}
 }
 
