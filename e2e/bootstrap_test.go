@@ -97,7 +97,10 @@ type bootApp struct {
 	data string
 }
 
-func buildBootApp(t *testing.T) *bootApp {
+func buildBootApp(t *testing.T) *bootApp { return buildApp(t, bootAppMain, bootAppManifest) }
+
+// buildApp builds a scratch app from a main.go and a manifest the way an adopter does.
+func buildApp(t *testing.T, mainSrc, manifest string) *bootApp {
 	t.Helper()
 	r := root(t)
 	cli := filepath.Join(t.TempDir(), "substrate")
@@ -107,10 +110,10 @@ func buildBootApp(t *testing.T) *bootApp {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(bootAppMain), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte(mainSrc), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "substrate.yaml"), []byte(bootAppManifest), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "substrate.yaml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	bin := filepath.Join(dir, "bootapp")

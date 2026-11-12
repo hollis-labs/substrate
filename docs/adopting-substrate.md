@@ -174,6 +174,24 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    --out FILE` for each machine caller), then start the service, and check `GET /api/setup` answers
    `setup_required: false`. Script all of it; the commands never prompt when stdin is not a terminal. To keep the old
    HTTP first-run for local development only, set `identity: {setup: http}`.
+
+   **Modules the offline commands need.** `<app> identity setup` and `<app> identity key create` run inside the app's
+   own boot, so the command that runs them must start: `config`, `logging`, `health`, `auth`, `database`, `identity`
+   and `cli`, plus `secrets` when the app's boot hooks place its directory (a `boot.Options.Before["secrets"]` hook
+   on a list without `secrets` is a boot error). Of these, `auth`, `database`, `identity` and `cli` are required by the
+   commands themselves (drop `auth` or `database` and the boot fails; drop `identity` and the command does not exist;
+   drop `cli` and there is no root to run it from). `config` is required for agreement with the server: it applies the
+   `SUBSTRATE_CONFIG` override, so without it the command writes the manifest's database path while the server reads the
+   override's. `logging` and `health` are in the list because they are part of the app's normal boot, not because the
+   commands call them. No `httphost`, `mcp`, `queue` or other server module is needed. `TestOfflineCommandsStartOnlyTheDocumentedModules`
+   (`modules/identity/modulelist_test.go`) starts exactly this list and fails when a required module is dropped; if you
+   change the list, change the test and this paragraph together.
+
+   These two commands **create** the data directory contents, the database file and the signing key (starting the
+   identity module writes the key when it is absent), and `key create --out` writes a key file. They therefore belong
+   with the commands that are allowed to write (the migrate and bootstrap steps), not with read-only ones such as
+   `health`, `version`, an MCP stdio process or a status command. A read-only entry point must not select the commands'
+   module list with a data path it may not create.
 2. Wrap the final handler: `identity.From(app).Middleware(handler)`. Browser writes then need an `X-Requested-With`
    header and a same-origin `Origin`.
 3. Declare each route's scope. Either list routes in a module-style `ui.json` and bind handlers with
