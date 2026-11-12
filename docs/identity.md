@@ -66,8 +66,27 @@ Revoking the key at B ends A's access within the token lifetime.
 
 ## Keys and storage
 
-The signing key (Ed25519, PEM) is created `0600` at `identity.key_file` on first start, beside a public `<key_file>.jwks.json`. Losing it invalidates minted tokens, not sessions or keys. State lives in `identity_*` tables created at start in the app's database (SQLite or Postgres). Key rotation is not built yet.
+The signing key (Ed25519, PEM) is created `0600` at `identity.key_file` on first start, beside a public `<key_file>.jwks.json`. Losing it invalidates minted tokens, not sessions or keys. State lives in `identity_*` tables created at start in the app's database (SQLite or Postgres). See the next section to rotate the key without breaking live tokens.
+
+## Rotating the signing key
+
+An administrator (`<app>.admin`, which the owner holds through `*`) rotates the key on the running app:
+
+```sh
+curl -sX POST https://app/api/identity/signing-key/rotate -H "Authorization: Bearer $ADMIN_KEY" -d '{}'
+# {"kid":"<new>","retired_kid":"<old>","not_after":"2026-11-12T09:10:00Z"}
+curl -s https://app/api/identity/signing-key -H "Authorization: Bearer $ADMIN_KEY"
+# {"active":{"kid":"...","created_at":"..."},"retired":[{"kid":"...","retired_at":"...","not_after":"..."}]}
+```
+
+- **Overlap.** The old key stays published and keeps verifying until `not_after` (`retired_key_ttl`, default and minimum 70 minutes: the longest token life plus ten minutes of skew). No token dies before its own `exp`. The new key signs from the moment the call returns. Apps that trust this one through `auth.jwks_url` pick the new key up on their next fetch (every 5 minutes, or on the first token with an unknown `kid`); they keep the old key until it leaves the set. Rotate again inside the overlap and both retired keys stay, each with its own `not_after`.
+- **Compromised key.** `{"compromised": true}` removes the old key from the set at once: its outstanding tokens stop verifying here immediately and in other apps after their next fetch (up to about 5 minutes). Do this only when you must; live tokens are cut.
+- **Files** beside `key_file`: `<key_file>.retired.json` (public keys with `retired_at` and `not_after`, 0600) and the derived `<key_file>.jwks.json`. The new key is renamed over `key_file` as the commit point, after the retired record is on disk; a crash on either side loses no token. At start a retired entry equal to the active key (a crash before the commit) is dropped and the JWKS is rebuilt. A corrupt `.retired.json` refuses to start: delete it only to accept that retired keys stop verifying.
+- **One rotation at a time.** A second call while one runs gets `409 rotation_in_progress`.
+- **Limits.** One process per `key_file`; several instances sharing the directory would need a reload signal and are not supported. The emergency path that needs no running app is unchanged: delete `key_file` and restart, which invalidates every minted token. Every rotation is logged at warn level with the caller.
+
+Go: `identity.From(app).RotateSigningKey(compromised)` and `.SigningKey()` do the same in process. Boot hooks must not register modules.
 
 ## Config
 
-See the package comment for the full list: `key_file`, `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `trusted_proxy`, `allowed_origins`.
+See the package comment for the full list: `key_file`, `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).

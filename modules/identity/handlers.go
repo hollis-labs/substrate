@@ -22,24 +22,26 @@ var usernameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,63}$`)
 func (s *Service) handlers() map[string]http.Handler {
 	h := func(f http.HandlerFunc) http.Handler { return f }
 	return map[string]http.Handler{
-		"GET /api/setup":                   h(s.setupStatus),
-		"POST /api/setup":                  h(s.setup),
-		"POST /api/login":                  h(s.login),
-		"GET /api/identity/jwks":           h(s.jwksHandler),
-		"POST /api/pair":                   h(s.pair),
-		"POST /api/logout":                 h(s.logout),
-		"PUT /api/password":                h(s.changePassword),
-		"PUT /api/identity/profile":        h(s.updateProfile),
-		"POST /api/token":                  h(s.tokenHandler),
-		"GET /api/identity/sessions":       h(s.sessions),
-		"DELETE /api/identity/sessions/":   h(s.revokeSession),
-		"GET /api/identity/users":          h(s.listUsers),
-		"POST /api/identity/users":         h(s.createUser),
-		"PUT /api/identity/users/":         h(s.updateUser),
-		"GET /api/identity/keys":           h(s.listKeys),
-		"POST /api/identity/keys":          h(s.createKey),
-		"DELETE /api/identity/keys/":       h(s.revokeKey),
-		"POST /api/identity/pairing-codes": h(s.createPairingCode),
+		"GET /api/setup":                        h(s.setupStatus),
+		"POST /api/setup":                       h(s.setup),
+		"POST /api/login":                       h(s.login),
+		"GET /api/identity/jwks":                h(s.jwksHandler),
+		"POST /api/pair":                        h(s.pair),
+		"POST /api/logout":                      h(s.logout),
+		"PUT /api/password":                     h(s.changePassword),
+		"PUT /api/identity/profile":             h(s.updateProfile),
+		"POST /api/token":                       h(s.tokenHandler),
+		"GET /api/identity/sessions":            h(s.sessions),
+		"DELETE /api/identity/sessions/":        h(s.revokeSession),
+		"GET /api/identity/users":               h(s.listUsers),
+		"POST /api/identity/users":              h(s.createUser),
+		"PUT /api/identity/users/":              h(s.updateUser),
+		"GET /api/identity/keys":                h(s.listKeys),
+		"POST /api/identity/keys":               h(s.createKey),
+		"DELETE /api/identity/keys/":            h(s.revokeKey),
+		"POST /api/identity/pairing-codes":      h(s.createPairingCode),
+		"POST /api/identity/signing-key/rotate": h(s.rotateSigningKey),
+		"GET /api/identity/signing-key":         h(s.signingKeyState),
 	}
 }
 
@@ -584,7 +586,7 @@ func (s *Service) pair(w http.ResponseWriter, r *http.Request) {
 func (s *Service) jwksHandler(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "public, max-age=300")
-	_, _ = w.Write(s.jwks)
+	_, _ = w.Write(s.publishedJWKS())
 }
 
 // tokenHandler trades the caller's credential (a session, an API key or a token)

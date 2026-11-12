@@ -11,7 +11,7 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 - Boot hooks: `boot.StartWith` with `AfterConfig` (once, after the config override) and `Before[<module>]` (just before that module starts); `boot.Start` is unchanged. No first-class data directory yet.
 - Examples: hello-service, hello-app-host, hello-cli, hello-agentic. Acceptance: flag test (`e2e/`) compares the
   linked modules and size of minimal vs agentic from one source (about 9.4 MB vs 13.7 MB on arm64 macOS).
-- Identity: `Service.User` lookup accessor (public view, no secrets). Signing-key rotation is not built yet.
+- Identity: `Service.User` lookup accessor (public view, no secrets). Signing-key rotation: `POST /api/identity/signing-key/rotate` (`<app>.admin`), overlap with a retired key set (`retired_key_ttl`, min 70m), `compromised` cut-off; single process per `key_file`.
 
 - App UI contributions (`frontend.contributions`: the app's own file, validated and merged like a module's) and an app
   config block (`config.<app>`) in the manifest.
