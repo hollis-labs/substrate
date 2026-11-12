@@ -26,14 +26,15 @@ type claims struct {
 
 // mint signs a token.
 func (s *Service) mint(c claims) (string, error) {
-	hdr, _ := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT", "kid": s.keyID})
+	st := s.keys.Load()
+	hdr, _ := json.Marshal(map[string]string{"alg": "EdDSA", "typ": "JWT", "kid": st.kid})
 	body, err := json.Marshal(c)
 	if err != nil {
 		return "", err
 	}
 	enc := base64.RawURLEncoding
 	signing := enc.EncodeToString(hdr) + "." + enc.EncodeToString(body)
-	sig := ed25519.Sign(s.signKey, []byte(signing))
+	sig := ed25519.Sign(st.priv, []byte(signing))
 	return signing + "." + enc.EncodeToString(sig), nil
 }
 

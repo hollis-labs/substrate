@@ -20,6 +20,8 @@
     { "method": "GET",    "path": "/api/identity/keys",            "scope": "{app}.admin" },
     { "method": "POST",   "path": "/api/identity/keys",            "scope": "{app}.admin" },
     { "method": "DELETE", "path": "/api/identity/keys/",           "scope": "{app}.admin" },
-    { "method": "POST",   "path": "/api/identity/pairing-codes",   "scope": "{app}.admin" }
+    { "method": "POST",   "path": "/api/identity/pairing-codes",   "scope": "{app}.admin" },
+    { "method": "POST",   "path": "/api/identity/signing-key/rotate", "scope": "{app}.admin" },
+    { "method": "GET",    "path": "/api/identity/signing-key",     "scope": "{app}.admin" }
   ]
 }

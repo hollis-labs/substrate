@@ -35,8 +35,19 @@
 //	secure_cookies:  "auto" (default: secure when the request arrived over TLS or
 //	                 trusted_proxy is set and says https), "always" or "never".
 //	trusted_proxy:   true to believe a single X-Forwarded-Proto from the proxy.
+//	retired_key_ttl: how long a rotated-out signing key stays published and
+//	                 verifies. Default and minimum "70m" (the longest token life
+//	                 plus ten minutes); a lower value refuses to start.
 //	allowed_origins: extra exact origins whose cookie-authenticated writes are
 //	                 accepted; the request's own origin always is.
+//
+// Signing-key rotation: POST /api/identity/signing-key/rotate (scope
+// "<app>.admin", body {"compromised": bool}) swaps the signing key in the
+// running process; GET /api/identity/signing-key reports the active and retired
+// keys. The old key stays in the published set and keeps verifying until
+// retired_key_ttl has passed, so no token dies before its own exp, unless
+// "compromised" is set, which drops it at once. Single process per key_file.
+// Boot hooks (boot.Options) must not register modules; nothing here does.
 //
 // Strict-mode extras (passkeys, signed operation approval) are not here; they
 // belong to a later, opt-in layer on the same users and sessions.
@@ -44,18 +55,13 @@ package identity
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/x509"
 	_ "embed"
-	"encoding/base64"
-	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
-	"os"
+	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
@@ -94,10 +100,10 @@ type Service struct {
 	db  db
 	cfg config
 
-	keyID   string
-	signKey ed25519.PrivateKey
-	jwks    []byte
-	jwt     libauth.Verifier
+	keys  atomic.Pointer[keyState] // the signing key ring; see keyring.go
+	rot   sync.Mutex               // serialises rotation and pruning
+	now   func() time.Time
+	fault func(point string) error // test hook at rotation steps; nil in production
 
 	limiter *limiter
 	cancel  context.CancelFunc
@@ -112,6 +118,7 @@ type config struct {
 	trustedProxy             bool
 	origins                  map[string]bool
 	keyFile                  string
+	retiredTTL               time.Duration
 }
 
 const maxTokenTTL = time.Hour
@@ -125,18 +132,13 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if st == nil {
 		return errors.New("identity: needs the database module")
 	}
-	svc := &Service{app: app, db: db{st}, cfg: cfg, limiter: newLimiter()}
+	svc := &Service{app: app, db: db{st}, cfg: cfg, limiter: newLimiter(), now: time.Now}
 	if err := svc.db.migrate(ctx); err != nil {
 		return err
 	}
 	if err := svc.loadKey(); err != nil {
 		return err
 	}
-	jv, err := libauth.NewJWTVerifier(libauth.JWTConfig{Issuer: cfg.issuer, Audience: cfg.audience, BootstrapKeyFile: cfg.keyFile + ".jwks.json"})
-	if err != nil {
-		return fmt.Errorf("identity: token verifier: %w", err)
-	}
-	svc.jwt = jv
 	if err := auth.AddVerifier(app, svc); err != nil {
 		return fmt.Errorf("identity: %w", err)
 	}
@@ -199,6 +201,12 @@ func parseConfig(app *module.App) (config, error) {
 	if c.tokenTTL > maxTokenTTL {
 		return c, errors.New("identity: token_ttl is at most 1h")
 	}
+	if c.retiredTTL, err = dur("retired_key_ttl", "70m"); err != nil {
+		return c, err
+	}
+	if c.retiredTTL < minRetiredTTL {
+		return c, fmt.Errorf("identity: retired_key_ttl %s is below the minimum %s (an hour of token life plus ten minutes of skew); a lower value would cut off live tokens", c.retiredTTL, minRetiredTTL)
+	}
 	if c.cost < 4 || c.cost > 14 {
 		return c, errors.New("identity: bcrypt_cost must be between 4 and 14")
 	}
@@ -215,53 +223,6 @@ func parseConfig(app *module.App) (config, error) {
 		}
 	}
 	return c, nil
-}
-
-// ---- the signing key ----
-
-// loadKey reads the signing key, creating it (and its public JWKS) when absent.
-func (s *Service) loadKey() error {
-	b, err := os.ReadFile(s.cfg.keyFile)
-	switch {
-	case err == nil:
-		blk, _ := pem.Decode(b)
-		if blk == nil {
-			return fmt.Errorf("identity: %s is not a PEM key", s.cfg.keyFile)
-		}
-		k, err := x509.ParsePKCS8PrivateKey(blk.Bytes)
-		if err != nil {
-			return fmt.Errorf("identity: %s: %w", s.cfg.keyFile, err)
-		}
-		ek, ok := k.(ed25519.PrivateKey)
-		if !ok {
-			return fmt.Errorf("identity: %s is not an Ed25519 key", s.cfg.keyFile)
-		}
-		s.signKey = ek
-	case errors.Is(err, os.ErrNotExist):
-		_, priv, err := ed25519.GenerateKey(rand.Reader)
-		if err != nil {
-			return err
-		}
-		der, err := x509.MarshalPKCS8PrivateKey(priv)
-		if err != nil {
-			return err
-		}
-		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
-		if err := os.WriteFile(s.cfg.keyFile, pemBytes, 0o600); err != nil {
-			return fmt.Errorf("identity: cannot write the signing key: %w", err)
-		}
-		s.signKey = priv
-	default:
-		return fmt.Errorf("identity: signing key: %w", err)
-	}
-	pub := s.signKey.Public().(ed25519.PublicKey)
-	s.keyID = base64.RawURLEncoding.EncodeToString(pub[:8])
-	doc, _ := json.Marshal(map[string]any{"keys": []map[string]string{{
-		"kty": "OKP", "crv": "Ed25519", "use": "sig", "alg": "EdDSA", "kid": s.keyID,
-		"x": base64.RawURLEncoding.EncodeToString(pub),
-	}}})
-	s.jwks = doc
-	return os.WriteFile(s.cfg.keyFile+".jwks.json", doc, 0o644) // #nosec G306 -- a public key set
 }
 
 // ---- the verifier the guard consults ----
@@ -286,7 +247,7 @@ func (s *Service) Verify(ctx context.Context, token string) (libauth.Principal, 
 		return libauth.Principal{Verified: true, ID: "key:" + c.ID, Kind: "service", Display: c.Name,
 			Scopes: c.Scopes, Audience: s.cfg.audience, TokenID: c.ID, ExpiresAt: c.ExpiresAt}, nil
 	}
-	return s.jwt.Verify(ctx, token)
+	return s.current().jwt.Verify(ctx, token)
 }
 
 const (
@@ -306,6 +267,9 @@ func (s *Service) sweep(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+			if err := s.prune(); err != nil {
+				slog.Warn("identity: pruning retired signing keys", "error", err)
+			}
 			cutoff := time.Now().Add(-24 * time.Hour).Unix()
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_sessions WHERE expires_at < ? OR (revoked_at <> 0 AND revoked_at < ?)`), cutoff, cutoff)
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_pairing_codes WHERE expires_at < ?`), cutoff)
