@@ -48,6 +48,7 @@ export function Entry({ onReady }: { onReady: (name: string) => void }) {
   }, [error])
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (busy) return
     const form = event.currentTarget
     const data = new FormData(form)
     setBusy(true)
