@@ -14,7 +14,7 @@ Answer these first; most of the surprises in a port were one of them.
 
 | Question | Why it matters |
 |---|---|
-| Clean break or migrated data? | The default is a clean break (new schema, no data migration, old data moved aside). A real cutover for an app in use is a plan of its own: section 11. |
+| Migrated data or fresh start? | The clean break is about code and compatibility (no shims, no fallbacks), not about data. An app with real usage or data migrates all of it; loss is not acceptable. An app nobody uses starts with a fresh schema and the old data moved aside. Decide per app before coding; an in-use app has a cutover plan of its own (section 11). |
 | What is the app's binary? | `variant` is `app-host` (serves HTTP and a UI), `service`, `headless`, `cli` or `microservice`. Most apps are `app-host`. |
 | Who issues identity? | Own accounts (the `identity` module), trust another issuer (`auth.jwks_url`), fixed service keys, or nothing for local use. Per app; see `docs/identity.md`. |
 | Which routes are public, which need a scope, which authenticate themselves? | Every `/api/` route needs a scope. A route that authenticates its own callers (a device protocol, a webhook) is an open mount. |
@@ -78,6 +78,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 
 ## 4. Persistence
 
+- Data policy first (section 0). The notes below on a startup guard apply to fresh-start apps. An app that migrates
+  data ships a tested one-way migration instead: backup, rehearsal on a copy of the real data, row counts and
+  integrity checks before and after, and a documented rollback.
 - Use the `database` module's store (`database.From(app)`), not your own `sql.Open`. SQLite and Postgres are both
   supported by the module; if your SQL uses `?` placeholders and SQLite syntax, say in the architecture note that the
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
@@ -165,8 +168,9 @@ Map every old environment variable to a config key (or drop it on purpose) and w
 For an app in use, the port is not done when the tests pass. Write the plan before the work and keep it with the
 app's Torque task:
 
-1. **Data**: migrate or start clean? If migrating, a tested one-way migration with a backup and a rehearsal on a copy.
-   If clean, the old data directory is moved aside, never deleted, and the owner decides when to delete it.
+1. **Data**: an app with real data migrates all of it: a tested one-way migration with a backup and a rehearsal on a
+   copy of production data. Only an app nobody uses starts clean; then the old data directory is moved aside, never
+   deleted, and the owner decides when to delete it.
 2. **Clients**: list every caller of the old API and protocol (other apps, a CLI, native clients, MCP clients, the
    UI). Each either keeps working unchanged or has a named change and an owner. Run each against the new build.
 3. **Config and supervision**: the old environment variables and unit/descriptor entries that no longer mean anything
