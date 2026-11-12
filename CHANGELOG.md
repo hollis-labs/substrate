@@ -11,6 +11,8 @@ minor releases may break APIs.
 
 ### Added
 
+- BOM `app_libs`: `libs/mesh/core v0.6.0` (the Tether client, for apps that launch agent sessions).
+
 - `auth` plumbing from libs `go-auth`: `denylist_url` polls the issuer's revocation list so a revoked jti, principal or session stops working within the poll interval; `token_file` (a non-expiring service token, re-read on use) or `mint_url` (a refreshed short-lived token) give an app, or its CLI, an outbound credential via `auth.Token`, `auth.Transport` and `auth.HTTPClient`, with an optional host allowlist so the token cannot leak to other hosts. Nothing is attached when neither is set (the dev default).
 - Host region catalog (`frontend.regions` in `substrate.yaml`, from the design team): host-defined regions (`chat.composer`, `chat.drawer`, ...) are declared once per app, docked regions name their `anchor`, and the generated frontend manifest carries the catalog as `regions`. The builder fails on an undeclared region for a `dock.tab` or `slot`, a `dock.tab` outside a docked region, a `slot` inside one, and a `slot.opens` that names a tab outside the drawer anchored under the slot's region.
 - `pins check --npm` also verifies the kits' own dependency and peer ranges against the BOM's pins: two installed versions of a binding contract or token set is the failure it prevents. Known incoherences the repo does not control are listed in the BOM's `kit_exceptions` and reported as accepted, not hidden. The first run found that the previous kit pins were not coherent (kit-admin needed an unpinned kit-observe; kit-settings and plugin-host-ui 0.2.0 depended on design tokens 0.4).
