@@ -10,9 +10,15 @@ Status: **not started** (pull requests #21, #24, #25 and this one are drafts).
 
 None to migrate. The only state is the optional `~/.folio/presets/local` directory (read by Folio, never
 written) and the `.folio.yaml` breadcrumb inside each project Folio rendered. Existing breadcrumbs keep
-their old preset ids and versions and stay valid as records (`folio inspect` still reads them; `sysop-ui`
-still resolves to `app-dashboard`). They are not rewritten and nothing syncs them (`folio sync` is
-reserved). Projects already generated from the go-webui or Chimera presets are not touched and are not
+their old preset ids and versions and stay on disk as records; they are not rewritten and nothing syncs
+them (`folio sync` is reserved). What the new `folio` does with them: `folio inspect` of a project whose
+breadcrumb names a removed preset (`go-service-app`, `chat-app`, `app-dashboard-chimera-plugin`,
+`chat-app-chimera-plugin`, `chimera-plugin-fixture`, or `app-dashboard`/`sysop-ui` below 3.0.0) fails with
+`preset_removed` and one sentence naming the preset, its version and `folio/v0.0.1`, the last release that
+has it, writes nothing and never re-renders it onto the new `app-dashboard`; `folio new` and `folio plan`
+of a removed id say the same. To inspect such a project, install that release. Breadcrumbs from the
+unchanged presets (`base`, `go-baseline`, `go-lib`, `go-package`, `nanite-plugin`, `ts-plugin`) inspect
+as before. Projects already generated from the go-webui or Chimera presets are not touched and are not
 migrated by this change.
 
 ## 2. Callers and what changes for each
