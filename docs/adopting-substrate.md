@@ -84,6 +84,15 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   `httphost.Serve(ctx, app, handler, ...)`, which also checks the bind address against the auth mode.
 - Shut down on `SIGINT` and `SIGTERM` (`signal.NotifyContext`), stop accepting work, drain, then stop modules. Test
   the signal path with a real process; a daemon that ignores `SIGTERM` is killed by its supervisor mid-write.
+- Long-lived handlers (SSE, WebSocket, long poll) must watch `httphost.Stopping(r)`, a channel closed when `Serve`'s
+  context ends. `http.Server.Shutdown` cannot end a stream and does not track a hijacked connection, so without this
+  a handler holds `Serve` for `GracePeriod` (default 10 s), after which `r.Context()` is cancelled, connections are
+  closed and `Serve` returns an error. `Serve` returns nil only after every handler, hijacked ones too, has returned.
+  The pattern: `select { case <-httphost.Stopping(r): /* send a close frame or final event, return */ case
+  <-r.Context().Done(): /* client left */ case ev := <-events: ... }`. It reaches the handler through the host check,
+  identity, the guard and `apierr.Normalize` (it rides the request context). `r.Context()` is deliberately not
+  cancelled when a graceful stop begins, so a request doing real work (a database call) finishes; only the grace
+  expiry cancels it. Outside `Serve` (httptest) `Stopping` is a nil channel and never fires.
 
 ## 4. Persistence
 
