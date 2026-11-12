@@ -108,7 +108,7 @@ func secondAttemptGap(t *testing.T, startCfg string) time.Duration {
 
 func TestRetryAfterSecsDelaysTheNextAttempt(t *testing.T) {
 	// memory driver: exact delay.
-	if gap := secondAttemptGap(t, `{"queue":{"driver":"memory","poll_ms":10,"max_tries":2,"retry_after_secs":1}}`); gap < 900*time.Millisecond {
+	if gap := secondAttemptGap(t, `{"database":{"sqlite":{"path":":memory:"}},"queue":{"driver":"memory","poll_ms":10,"max_tries":2,"retry_after_secs":1}}`); gap < 900*time.Millisecond {
 		t.Errorf("memory: retried after %v, want about 1s", gap)
 	}
 	// sqlite driver: whole seconds, so at least one second must pass between the two.
