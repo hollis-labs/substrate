@@ -38,6 +38,10 @@
 //	retired_key_ttl: how long a rotated-out signing key stays published and
 //	                 verifies. Default and minimum "70m" (the longest token life
 //	                 plus ten minutes); a lower value refuses to start.
+//	setup:           "offline" (default) or "http". Under "offline" POST /api/setup is
+//	                 always refused (403 setup_offline): the owner is created with
+//	                 "<app> identity setup" before the service starts. "http" keeps the
+//	                 first-run setup over HTTP, for local development only.
 //	allowed_origins: extra exact origins whose cookie-authenticated writes are
 //	                 accepted; the request's own origin always is.
 //
@@ -68,6 +72,7 @@ import (
 
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/auth"
+	"github.com/hollis-labs/substrate/modules/cli"
 	"github.com/hollis-labs/substrate/modules/database"
 	"github.com/hollis-labs/substrate/ui"
 )
@@ -119,6 +124,7 @@ type config struct {
 	origins                  map[string]bool
 	keyFile                  string
 	retiredTTL               time.Duration
+	setupHTTP                bool // identity.setup: http
 }
 
 const maxTokenTTL = time.Hour
@@ -148,6 +154,7 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	go svc.sweep(runCtx)
 	m.svc = svc
 	app.Set(Key, svc)
+	cli.AddCommand(app, svc.cliCommand()) // the offline bootstrap; see cli.go
 	return module.AddRoutes(app, m.UI(), svc.handlers())
 }
 
@@ -209,6 +216,13 @@ func parseConfig(app *module.App) (config, error) {
 	}
 	if c.cost < 4 || c.cost > 14 {
 		return c, errors.New("identity: bcrypt_cost must be between 4 and 14")
+	}
+	switch str("setup", "offline") {
+	case "offline":
+	case "http":
+		c.setupHTTP = true
+	default:
+		return c, errors.New(`identity: setup must be "offline" or "http"`)
 	}
 	switch c.secure {
 	case "auto", "always", "never":

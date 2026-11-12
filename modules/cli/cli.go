@@ -36,7 +36,30 @@ func (mod) Start(_ context.Context, app *module.App) error {
 	root := &cobra.Command{Use: app.Name, SilenceUsage: true}
 	root.AddCommand(versionCmd(app), configCmd(app), healthCmd(app))
 	app.Set(Key, root)
+	if v, ok := app.Value(pendingKey); ok {
+		for _, c := range v.([]*cobra.Command) {
+			root.AddCommand(c)
+		}
+		delete(app.Values, pendingKey)
+	}
 	return nil
+}
+
+const pendingKey = "cli.pending"
+
+// AddCommand adds a command to the app's root, whichever of the calling module
+// and the cli module starts first: if the root does not exist yet the command
+// is queued and added when cli starts. A module uses it to contribute
+// subcommands to every app that selects both. With no cli module selected
+// the command is queued and never used.
+func AddCommand(app *module.App, c *cobra.Command) {
+	if root := Root(app); root != nil {
+		root.AddCommand(c)
+		return
+	}
+	l, _ := app.Value(pendingKey)
+	list, _ := l.([]*cobra.Command)
+	app.Set(pendingKey, append(list, c))
 }
 
 func (mod) Stop(context.Context) error { return nil }

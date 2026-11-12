@@ -133,7 +133,9 @@ func (s *Service) setupStatus(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"setup_required": n == 0})
+	// setup_over_http says whether POST /api/setup can complete it; false means
+	// the owner is created offline ("<app> identity setup").
+	writeJSON(w, http.StatusOK, map[string]any{"setup_required": n == 0, "setup_over_http": s.cfg.setupHTTP})
 }
 
 type credentials struct {
@@ -168,6 +170,10 @@ func (s *Service) newUser(c credentials, scopes []string) (User, error) {
 
 // setup makes the owner, once, and signs them in.
 func (s *Service) setup(w http.ResponseWriter, r *http.Request) {
+	if !s.cfg.setupHTTP {
+		apierr.Write(w, http.StatusForbidden, "setup_offline", "first-run setup over HTTP is disabled; create the owner on the host with `"+s.app.Name+" identity setup`", nil)
+		return
+	}
 	if !s.sameOrigin(r) {
 		apierr.Write(w, http.StatusForbidden, "bad_origin", "the request did not come from this app", nil)
 		return
