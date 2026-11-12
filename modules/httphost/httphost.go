@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -174,7 +175,9 @@ type ServeOptions struct {
 // serves the same way. The address comes from config httphost.addr; when the auth
 // module is started the bind is validated against its mode (off and permissive
 // refuse a wildcard or public address). There is no write timeout, so streams
-// (SSE) are not cut off; header and idle timeouts are set. Serve returns nil
+// (SSE) are not cut off; header and idle timeouts are set. In off or permissive
+// mode Serve logs the "auth is not enforcing" warning (the auth module itself
+// stays quiet at Start, so short-lived commands print nothing). Serve returns nil
 // after a clean shutdown.
 func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions) error {
 	addr := o.Addr
@@ -189,6 +192,11 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 		if g, ok := v.(interface{ Mode() libauth.Mode }); ok {
 			if err := libauth.ValidateBind(addr, g.Mode()); err != nil {
 				return fmt.Errorf("httphost: %w", err)
+			}
+			// The auth module stays quiet at Start so a short-lived command
+			// prints nothing; a listener is where the warning belongs.
+			if m := g.Mode(); m != libauth.ModeEnforce {
+				slog.Warn("auth is not enforcing", "auth", string(m), "addr", addr)
 			}
 		}
 	}

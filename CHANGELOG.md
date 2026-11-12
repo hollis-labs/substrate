@@ -28,6 +28,8 @@ minor releases may break APIs.
 
 ### Fixed
 
+- The `auth` module no longer logs "auth is not enforcing" at Start, which printed a warning on stderr for every command of a CLI-variant app in off mode. `httphost.Serve` logs it (once, with the mode and address) when a listener starts in off or permissive mode, so a server still warns. The guard's other log records are untouched.
+
 - The generated frontend manifest wrote each region as `{"Name","Docked","Anchor"}`; it is now `{"name","docked","anchor"}` as the shell reads it, and a test fixes the key names.
 
 - `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list`: one call per request with every tool name, returning the names to list (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
