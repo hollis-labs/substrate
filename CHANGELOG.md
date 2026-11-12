@@ -9,6 +9,10 @@ minor releases may break APIs.
 
 - The `sqlite` module is now `database`, on libs `core/store` with a `driver` of `sqlite` (default) or `postgres`. Config moves from `sqlite.*` to `database.sqlite.*`; `sqlite.UseMigrations` and `sqlite.From` become `database.UseMigrations` and `database.From`. Postgres connection strings are secrets: `dsn_file`/`dsn_env` (and `migrate_dsn_*`), never written in config. (migration: none; pre-release, no consumers)
 
+### Changed
+
+- The `config` module deep-merges the `SUBSTRATE_CONFIG` override: maps merge recursively (an override of only `database.sqlite.path` keeps the other `sqlite` keys); scalars and lists replace; an explicit `null` removes the key so the module default applies; a key only in the override is added; on a type clash the override wins. Before, the merge was one level deep and a nested block replaced the whole manifest block. A module block in the override that is not a map is now an error naming the module. A behaviour change under the compat policy's pre-1.0 rule: an override that relied on a nested block replacing the manifest block must now `null` the keys it wants gone.
+
 ### Added
 
 - `identity` module: an app that selects it is its own identity provider. First-run owner setup, users, password sign-in and sign-out, password change, profile, session list and revoke (session cookie with a same-origin and header check on writes); API keys with scopes and audiences; pairing codes another app redeems for a key; `POST /api/token` (any credential for a short-lived EdDSA JWT, Tether-mint-shaped, so a client sets `auth.mint_url` at it); a published key set at `/api/identity/jwks` so another app can trust this one. Accepted by the app's guard in any mode through `auth.AddVerifier`; `enforce` needs no other verifier. Docs: `docs/identity.md`. Strict-mode proofs (passkeys, signed approvals) are not included. Needs `golang.org/x/crypto` (BOM third_party).
