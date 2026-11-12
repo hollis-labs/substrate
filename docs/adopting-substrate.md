@@ -157,6 +157,14 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    `identity:` block. It provides `/api/setup`, `/api/login`, `/api/logout`, `/api/password`, `/api/identity/*`,
    `/api/token`, `/api/pair` and `/api/identity/jwks`. Do not rebuild setup, login, sessions, passwords, API keys or
    pairing in the app.
+   **First-run rule: never open setup over HTTP on a host where agents run; loopback is not a boundary.** The module
+   closes it by default (`identity.setup: offline`: `POST /api/setup` is always refused). Create the owner and the first
+   keys offline with the commands the cli module adds (select `cli` next to `identity`; see `docs/identity.md`, Offline
+   bootstrap). The sequence is: migrate-data (the app's migration, which creates the database), then bootstrap
+   (`<app> identity setup --username ...` with the password on stdin, then `<app> identity key create --name ... --scope ...
+   --out FILE` for each machine caller), then start the service, and check `GET /api/setup` answers
+   `setup_required: false`. Script all of it; the commands never prompt when stdin is not a terminal. To keep the old
+   HTTP first-run for local development only, set `identity: {setup: http}`.
 2. Wrap the final handler: `identity.From(app).Middleware(handler)`. Browser writes then need an `X-Requested-With`
    header and a same-origin `Origin`.
 3. Declare each route's scope. Either list routes in a module-style `ui.json` and bind handlers with
@@ -269,7 +277,7 @@ app's Torque task:
 4. **Deploy**: build once in CI, install from GitHub (`fleet-install deploy <app> --commit <sha>` with
    `--dry-run` first), keep the previous version for rollback, health-check `/healthz`.
 5. **Rollback**: the previous release is relinked and the moved-aside data is restored. State it before you start.
-6. **Verify live**: setup or sign-in, one write, one read through the real proxy URL, and an unknown `Host` refused.
+6. **Verify live**: sign-in (the owner already exists from the offline bootstrap; `GET /api/setup` says `setup_required: false`), one write, one read through the real proxy URL, and an unknown `Host` refused.
 
 ## 12. Evidence before you open the PR
 
