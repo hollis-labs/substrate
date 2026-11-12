@@ -108,7 +108,7 @@ func secondAttemptGap(t *testing.T, startCfg string) time.Duration {
 
 func TestRetryAfterSecsDelaysTheNextAttempt(t *testing.T) {
 	// memory driver: exact delay.
-	if gap := secondAttemptGap(t, `{"queue":{"driver":"memory","poll_ms":10,"max_tries":2,"retry_after_secs":1}}`); gap < 900*time.Millisecond {
+	if gap := secondAttemptGap(t, `{"database":{"sqlite":{"path":":memory:"}},"queue":{"driver":"memory","poll_ms":10,"max_tries":2,"retry_after_secs":1}}`); gap < 900*time.Millisecond {
 		t.Errorf("memory: retried after %v, want about 1s", gap)
 	}
 	// sqlite driver: whole seconds, so at least one second must pass between the two.
@@ -136,7 +136,7 @@ func TestMemoryDriverAndCustomDriver(t *testing.T) {
 	t.Cleanup(queue.Reset)
 	var ran atomic.Bool
 	queue.Handle("ping", func(context.Context, *libqueue.QueuedJob) error { ran.Store(true); return nil })
-	run := start(t, `{"queue":{"driver":"memory","poll_ms":10}}`)
+	run := start(t, `{"database":{"sqlite":{"path":":memory:"}},"queue":{"driver":"memory","poll_ms":10}}`)
 	_ = queue.Push(context.Background(), run.App, "ping", []byte(`1`))
 	eventually(t, "the memory-backed job", ran.Load)
 }
@@ -272,7 +272,7 @@ func TestAutostartFalseHoldsJobsUntilRun(t *testing.T) {
 	t.Cleanup(queue.Reset)
 	var ran atomic.Bool
 	queue.Handle("held", func(context.Context, *libqueue.QueuedJob) error { ran.Store(true); return nil })
-	run := start(t, `{"queue":{"driver":"memory","poll_ms":10,"autostart":false}}`)
+	run := start(t, `{"database":{"sqlite":{"path":":memory:"}},"queue":{"driver":"memory","poll_ms":10,"autostart":false}}`)
 	_ = queue.Push(context.Background(), run.App, "held", []byte(`1`))
 	time.Sleep(200 * time.Millisecond)
 	if ran.Load() {

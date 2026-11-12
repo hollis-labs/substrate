@@ -15,11 +15,22 @@
 //	             integer 1 to 64; unset keeps the libs default, 4. The write side
 //	             is always one connection. Ignored for ":memory:", which has one
 //	             connection for everything).
+//	             open_lock_timeout (Go duration, default 30s; see below).
 //	postgres:    dsn_file or dsn_env (the connection string is a secret, so it is
 //	             read from a file or an environment variable, never from config),
 //	             migrate_dsn_file or migrate_dsn_env (schema-owner role, used only
 //	             to migrate), allow_insecure (tests and local containers),
 //	             max_conns, application_name (default the app name).
+//
+// Concurrent starts. On SQLite a file database is opened and migrated while
+// holding an exclusive advisory lock (flock) on "<path>.open.lock", so two
+// processes starting at once on one new file take turns: the second waits for
+// the first to finish migrating, then opens and finds the schema current. The
+// kernel releases the lock when its holder exits, so a crash leaves nothing
+// stale (the lock file stays on disk and its existence means nothing). Waiting
+// longer than open_lock_timeout fails the start with an error naming the lock
+// file. Not taken for ":memory:" or Postgres. Where flock is unavailable
+// (non-unix builds) the lock is a no-op.
 package database
 
 import (
@@ -30,6 +41,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hollis-labs/libs/core/store"
 	"github.com/hollis-labs/libs/core/store/migrate"
@@ -72,6 +84,17 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	sc, err := configFrom(app)
 	if err != nil {
 		return err
+	}
+	lockTimeout, err := openLockTimeout(app)
+	if err != nil {
+		return err
+	}
+	if sc.Driver == store.DriverSQLite && !isMemory(sc.SQLite.Path) {
+		release, err := acquireOpenLock(ctx, sc.SQLite.Path, lockTimeout)
+		if err != nil {
+			return err
+		}
+		defer release()
 	}
 	st, err := store.Open(ctx, sc)
 	if err != nil {
@@ -206,6 +229,28 @@ func secretFrom(m map[string]any, name string) (string, error) {
 		return "", fmt.Errorf("database: postgres needs dsn_file or dsn_env")
 	}
 	return "", errUnset
+}
+
+const defaultOpenLockTimeout = 30 * time.Second
+
+// openLockTimeout reads database.sqlite.open_lock_timeout (a Go duration).
+func openLockTimeout(app *module.App) (time.Duration, error) {
+	cfg, _ := app.Config["database"].(map[string]any)
+	s, _ := cfg["sqlite"].(map[string]any)
+	v, ok := s["open_lock_timeout"].(string)
+	if !ok || v == "" {
+		return defaultOpenLockTimeout, nil
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil || d <= 0 {
+		return 0, fmt.Errorf("database: sqlite.open_lock_timeout %q must be a positive duration such as 30s", v)
+	}
+	return d, nil
+}
+
+// isMemory reports the SQLite in-memory spellings, which have no file to lock.
+func isMemory(p string) bool {
+	return p == ":memory:" || strings.HasPrefix(p, "file::memory:")
 }
 
 func orDefault(s, def string) string {

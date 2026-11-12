@@ -119,6 +119,14 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
     from scratch on `SQLITE_BUSY`.
   - SQLite in memory (`:memory:`) uses a single shared connection for reads and writes, so there even a `Reader()`
     query inside an open cursor waits. Tests on `:memory:` hang sooner, not differently.
+  - Starting the same app twice at once on one new SQLite file is safe: the `database` module opens and migrates
+    under an exclusive advisory lock (`flock`) on `<db path>.open.lock`, so the second process waits, then finds the
+    schema current. The kernel drops the lock when its holder exits, so a crash leaves nothing stale (the leftover
+    file is harmless and is not removed). A wait longer than `database.sqlite.open_lock_timeout` (default `30s`) fails
+    the start with an error naming the lock file. Limits: the lock covers only processes that start through the
+    `database` module (a tool that opens the file itself, such as the `sqlite3` shell, is not serialised); it is not
+    taken for `:memory:` or Postgres; on a non-unix build it is a no-op; and flock on a network file system is only as
+    good as that file system.
   - Postgres has one pool (`Reader()` and `DB()` share it), so the deadlock is SQLite's. Keep the same discipline
     anyway: the code has to run on both.
 

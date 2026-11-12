@@ -97,7 +97,7 @@ func (s *Service) jwksPath() string    { return s.cfg.keyFile + ".jwks.json" }
 // writeAtomic writes data to a temp file beside path, syncs it and renames it
 // over path.
 func writeAtomic(path string, data []byte, perm os.FileMode) error {
-	tmp := path + ".tmp"
+	tmp := tmpName(path)
 	if err := writeSynced(tmp, data, perm); err != nil {
 		return err
 	}
@@ -160,7 +160,7 @@ func (s *Service) readRetired() ([]retiredKey, error) {
 // (the libs verifier reads its keys from a file). The caller renames the staged
 // file into place with commitJWKS.
 func (s *Service) stageJWKS(doc []byte) (libauth.Verifier, error) {
-	tmp := s.jwksPath() + ".tmp"
+	tmp := tmpName(s.jwksPath())
 	if err := writeSynced(tmp, doc, 0o644); err != nil { // #nosec G302 -- a public key set
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func (s *Service) stageJWKS(doc []byte) (libauth.Verifier, error) {
 	return jv, nil
 }
 
-func (s *Service) commitJWKS() error { return os.Rename(s.jwksPath()+".tmp", s.jwksPath()) }
+func (s *Service) commitJWKS() error { return os.Rename(tmpName(s.jwksPath()), s.jwksPath()) }
 
 // ---- start ----
 
@@ -184,29 +184,15 @@ func (s *Service) loadKey() error {
 	b, err := os.ReadFile(s.cfg.keyFile)
 	switch {
 	case err == nil:
-		blk, _ := pem.Decode(b)
-		if blk == nil {
-			return fmt.Errorf("identity: %s is not a PEM key", s.cfg.keyFile)
+		if priv, err = s.parseKey(b); err != nil {
+			return err
 		}
-		k, err := x509.ParsePKCS8PrivateKey(blk.Bytes)
-		if err != nil {
-			return fmt.Errorf("identity: %s: %w", s.cfg.keyFile, err)
-		}
-		ek, ok := k.(ed25519.PrivateKey)
-		if !ok {
-			return fmt.Errorf("identity: %s is not an Ed25519 key", s.cfg.keyFile)
-		}
-		priv = ek
 	case errors.Is(err, os.ErrNotExist):
 		if err := s.refuseSecondIssuer(); err != nil {
 			return err
 		}
-		_, priv, err = ed25519.GenerateKey(rand.Reader)
-		if err != nil {
+		if priv, err = s.createSigningKey(); err != nil {
 			return err
-		}
-		if err := os.WriteFile(s.cfg.keyFile, encodeKey(priv), 0o600); err != nil {
-			return fmt.Errorf("identity: cannot write the signing key: %w", err)
 		}
 	default:
 		return fmt.Errorf("identity: signing key: %w", err)
@@ -244,6 +230,56 @@ func (s *Service) loadKey() error {
 	s.keys.Store(&keyState{kid: kid, priv: priv, created: created, retired: kept, jwt: jv})
 	return nil
 }
+
+func (s *Service) parseKey(b []byte) (ed25519.PrivateKey, error) {
+	blk, _ := pem.Decode(b)
+	if blk == nil {
+		return nil, fmt.Errorf("identity: %s is not a PEM key", s.cfg.keyFile)
+	}
+	k, err := x509.ParsePKCS8PrivateKey(blk.Bytes)
+	if err != nil {
+		return nil, fmt.Errorf("identity: %s: %w", s.cfg.keyFile, err)
+	}
+	ek, ok := k.(ed25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("identity: %s is not an Ed25519 key", s.cfg.keyFile)
+	}
+	return ek, nil
+}
+
+// createSigningKey makes the first signing key with an exclusive create, so two
+// processes starting at once on one new data directory end with the SAME key.
+// The key is written in full to a private temp file and hard-linked to key_file:
+// link fails if key_file exists, and nobody can ever read a half-written key.
+// The process that loses the race reads the winner's key and uses it.
+func (s *Service) createSigningKey() (ed25519.PrivateKey, error) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	tmp := tmpName(s.cfg.keyFile) + ".create"
+	_ = os.Remove(tmp)
+	if err := writeSynced(tmp, encodeKey(priv), 0o600); err != nil {
+		return nil, fmt.Errorf("identity: cannot write the signing key: %w", err)
+	}
+	defer func() { _ = os.Remove(tmp) }()
+	switch err := os.Link(tmp, s.cfg.keyFile); {
+	case err == nil:
+		return priv, nil
+	case errors.Is(err, os.ErrExist):
+		b, err := os.ReadFile(s.cfg.keyFile)
+		if err != nil {
+			return nil, fmt.Errorf("identity: signing key: %w", err)
+		}
+		return s.parseKey(b)
+	default:
+		return nil, fmt.Errorf("identity: cannot write the signing key: %w", err)
+	}
+}
+
+// tmpName is a per-process scratch name beside path, so processes starting
+// together never write the same temp file.
+func tmpName(path string) string { return fmt.Sprintf("%s.tmp.%d", path, os.Getpid()) }
 
 // refuseSecondIssuer stops a process from minting a signing key when the database
 // already holds identity rows (users or API keys) but no key file exists where
