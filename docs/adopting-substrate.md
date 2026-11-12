@@ -119,7 +119,7 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 ## 6. Configuration
 
 Defaults live in the manifest and in `internal/settings`; operators override any key in the YAML file named by
-`SUBSTRATE_CONFIG`. The merge is one level deep: a nested block such as `database.sqlite` replaces the whole block.
+`SUBSTRATE_CONFIG`. The merge is deep: maps merge key by key, so an override of only `database: {sqlite: {path: /data/app.db}}` changes the path and keeps the manifest's other `sqlite` keys; scalars and lists replace the manifest value whole; a key only in the override is added; an explicit `null` removes the key so the module's own default applies; a map over a scalar (or the reverse) replaces it. The rules are in the `config` package comment.
 Map every old environment variable to a config key (or drop it on purpose) and write the table in
 `docs/conversion-notes.md`. Do not read `os.Getenv` for settings in new code, except the data-directory override.
 
