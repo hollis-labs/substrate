@@ -15,6 +15,18 @@ Per app, in the manifest config. These combine; the guard accepts a credential a
 
 `auth.mode` is the dial for all of them: `off`, `permissive` (log what `enforce` would refuse) or `enforce`.
 
+### Where off and permissive may listen
+
+"Off refuses a public address" does not mean "off is loopback only". `httphost.Serve` (and `auth.ValidateBind`) pass the listen address to libs `security/auth` `ValidateBind`, which in `off` and `permissive` accepts:
+
+- loopback: `127.0.0.0/8`, `::1`, and the name `localhost`;
+- the tailnet: the Tailscale address ranges (the CGNAT IPv4 block and the Tailscale IPv6 prefix), and any host name ending in `.ts.net`;
+- a unix socket (`unix:/path` or a path starting with `/`).
+
+It refuses a wildcard (`:8080`, `0.0.0.0`, `[::]`), any other IP and any other host name. `enforce` accepts every address.
+
+This is intended, not a leak in the check. The libs doc comment states the rule ("loopback or tailnet-bound"), the guard's reload rule treats tailnet as a non-loopback listener on purpose ("tailnet included"), and the dev posture is that the Tailscale network is the security boundary until identity and policy are enforced. What it does not do: a `.ts.net` name is matched by suffix, not resolved, so the check trusts the name and not where it points; and a tailnet listener in `off` serves every peer on the tailnet as the unverified operator. An app that wants loopback only needs its own check on the address (several apps carry one); an app that serves beyond a trusted network uses `enforce`.
+
 ```yaml
 modules:
   add: [database, auth, identity]

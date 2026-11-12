@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -61,6 +62,25 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// tooMany answers 429 rate_limited with a Retry-After of the whole seconds
+// (rounded up, at least 1) until the limiter lets the caller try again.
+func tooMany(w http.ResponseWriter, wait time.Duration) {
+	secs := int((wait + time.Second - 1) / time.Second)
+	if secs < 1 {
+		secs = 1
+	}
+	w.Header().Set("Retry-After", strconv.Itoa(secs))
+	apierr.Write(w, http.StatusTooManyRequests, "rate_limited", "too many attempts; wait a few minutes", nil)
+}
+
+// orEmpty turns a nil slice into an empty one so a list encodes as [] and not null.
+func orEmpty[T any](l []T) []T {
+	if l == nil {
+		return []T{}
+	}
+	return l
 }
 
 func bad(w http.ResponseWriter, msg string) {
@@ -182,8 +202,8 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 	username := strings.ToLower(strings.TrimSpace(c.Username))
 	key := username + "|" + clientAddr(r)
 	now := time.Now()
-	if s.limiter.blocked(key, now) {
-		apierr.Write(w, http.StatusTooManyRequests, "rate_limited", "too many attempts; wait a few minutes", nil)
+	if wait := s.limiter.wait(key, now); wait > 0 {
+		tooMany(w, wait)
 		return
 	}
 	u, err := s.db.userByUsername(r.Context(), username)
@@ -249,8 +269,8 @@ func (s *Service) changePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	key := "pw|" + u.ID
-	if s.limiter.blocked(key, time.Now()) {
-		apierr.Write(w, http.StatusTooManyRequests, "rate_limited", "too many attempts; wait a few minutes", nil)
+	if wait := s.limiter.wait(key, time.Now()); wait > 0 {
+		tooMany(w, wait)
 		return
 	}
 	if !s.verifyPassword(u.passwordHash, in.Current) {
@@ -357,7 +377,7 @@ func (s *Service) sessions(w http.ResponseWriter, r *http.Request) {
 	for i := range list {
 		list[i].Current = list[i].ID == p.SessionID
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": list})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": orEmpty(list)})
 }
 
 func (s *Service) revokeSession(w http.ResponseWriter, r *http.Request) {
@@ -386,7 +406,7 @@ func (s *Service) listUsers(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+	writeJSON(w, http.StatusOK, map[string]any{"users": orEmpty(users)})
 }
 
 func (s *Service) createUser(w http.ResponseWriter, r *http.Request) {
@@ -486,7 +506,7 @@ func (s *Service) listKeys(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+	writeJSON(w, http.StatusOK, map[string]any{"keys": orEmpty(keys)})
 }
 
 type keyRequest struct {
@@ -581,8 +601,8 @@ func (s *Service) pair(w http.ResponseWriter, r *http.Request) {
 	}
 	key := "pair|" + clientAddr(r)
 	now := time.Now().UTC()
-	if s.limiter.blocked(key, now) {
-		apierr.Write(w, http.StatusTooManyRequests, "rate_limited", "too many attempts; wait a few minutes", nil)
+	if wait := s.limiter.wait(key, now); wait > 0 {
+		tooMany(w, wait)
 		return
 	}
 	secretCode, ok := strings.CutPrefix(strings.TrimSpace(in.Code), "pair_")
