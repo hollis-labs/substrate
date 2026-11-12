@@ -15,6 +15,18 @@ Per app, in the manifest config. These combine; the guard accepts a credential a
 
 `auth.mode` is the dial for all of them: `off`, `permissive` (log what `enforce` would refuse) or `enforce`.
 
+### Where off and permissive may listen
+
+"Off refuses a public address" does not mean "off is loopback only". `httphost.Serve` (and `auth.ValidateBind`) pass the listen address to libs `security/auth` `ValidateBind`, which in `off` and `permissive` accepts:
+
+- loopback: `127.0.0.0/8`, `::1`, and the name `localhost`;
+- the tailnet: the Tailscale address ranges (the CGNAT IPv4 block and the Tailscale IPv6 prefix), and any host name ending in `.ts.net`;
+- a unix socket (`unix:/path` or a path starting with `/`).
+
+It refuses a wildcard (`:8080`, `0.0.0.0`, `[::]`), any other IP and any other host name. `enforce` accepts every address.
+
+This is intended, not a leak in the check. The libs doc comment states the rule ("loopback or tailnet-bound"), the guard's reload rule treats tailnet as a non-loopback listener on purpose ("tailnet included"), and the dev posture is that the Tailscale network is the security boundary until identity and policy are enforced. What it does not do: a `.ts.net` name is matched by suffix, not resolved, so the check trusts the name and not where it points; and a tailnet listener in `off` serves every peer on the tailnet as the unverified operator. An app that wants loopback only needs its own check on the address (several apps carry one); an app that serves beyond a trusted network uses `enforce`.
+
 ```yaml
 modules:
   add: [database, auth, identity]
@@ -29,8 +41,10 @@ With `identity` selected, `enforce` needs no other verifier.
 ## People
 
 1. First run: `GET /api/setup` says `{"setup_required": true}`. `POST /api/setup` with `{display_name, username, password}` creates the owner (scope `*`), closes setup for good, and signs in.
-2. `POST /api/login`, `POST /api/logout`, `PUT /api/password` (ends every other session), `PUT /api/identity/profile`, `GET /api/identity/sessions`, `DELETE /api/identity/sessions/{id}`.
+2. `POST /api/login`, `POST /api/logout`, `PUT /api/password` (ends every other session), `GET /api/identity/profile`, `PUT /api/identity/profile`, `GET /api/identity/sessions`, `DELETE /api/identity/sessions/{id}`.
 3. Administrators (`<app>.admin`, which the owner holds through `*`) manage users: `GET|POST /api/identity/users`, `PUT /api/identity/users/{id}` (disable, scopes, password). Nobody can grant a scope they do not hold.
+
+`GET /api/identity/profile` (scope `authenticated`) answers who the caller is: `{id, username, display_name, email, scopes, assurance}`, the same shape sign-in and `PUT /api/identity/profile` return plus `assurance`. `assurance` is `"local"` for every caller today (the module holds the credentials itself); `"verified"` is reserved for an external verifier and is never emitted. Answers: 200 for a signed-in person; 401 `unauthorized` with no or a bad credential (the guard's signed-out answer); 403 `user_required` when the credential is not a person, which is an API key, a token minted from a key, or a disabled or removed account. A machine caller does not get a principal back from this route: it already knows its own key and scopes, and `user_required` is what every other person-only route answers. A token minted from a person's session still names that person and gets the profile. `scopes` is the stored list (a copy); a UI shows `scopes` as the caller's capabilities.
 
 A browser keeps a `HttpOnly`, `SameSite=Strict` cookie. Wrap the app's final handler in `identity.From(app).Middleware(handler)`: it turns the cookie into the bearer the guard verifies, and requires an `X-Requested-With` header and a same-origin `Origin` on cookie-authenticated writes. Five wrong passwords for a username and address lock further attempts for five minutes.
 
