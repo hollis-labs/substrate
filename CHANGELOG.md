@@ -28,6 +28,8 @@ minor releases may break APIs.
 
 ### Fixed
 
+- Docs: `docs/adopting-substrate.md` section 4 states the store contract (one write connection, a separate read-only pool, `Reader()` for reads and `WriteTx` for writes, the deadlock from a second statement while a cursor is open on the write handle) with the safe pattern.
+
 - The generated frontend manifest wrote each region as `{"Name","Docked","Anchor"}`; it is now `{"name","docked","anchor"}` as the shell reads it, and a test fixes the key names.
 
 - `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list`: one call per request with every tool name, returning the names to list (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
