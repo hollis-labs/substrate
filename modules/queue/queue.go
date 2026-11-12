@@ -14,6 +14,11 @@
 //	driver:       "sqlite" (default; durable, on the database module's SQLite store)
 //	              or "memory" (tests, throwaway work). There is no Postgres driver in
 //	              libs: with Postgres, supply one with queue.UseDriver.
+//	table:        name of the sqlite driver's jobs table (default "jobs").
+//	failed_table: name of its failed-jobs table (default "failed_jobs"). Both
+//	              are for an app whose own tables collide with the defaults; each
+//	              must be a plain SQL identifier (letters, digits, underscore) and
+//	              they are refused with the memory driver.
 //	queues:       queue names the worker polls, in priority order (default ["default"]).
 //	concurrency:  polling goroutines (default 1).
 //	poll_ms:      sleep between empty polls (default 3000).
@@ -21,12 +26,17 @@
 //	autostart:    start the worker with the app (default true). Set false for an
 //	              app whose binary is also a CLI, and call queue.Run(app) from the
 //	              daemon command, so a short-lived command never runs jobs.
+//
+// A driver that needs the app's opened database cannot be built before
+// boot.Start, so queue.UseDriverFunc builds it when the module starts, after the
+// modules it requires (database.From(app) works), as scheduler.UseStoreFunc does.
 package queue
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sync"
 	"time"
 
@@ -46,7 +56,10 @@ var (
 	mu       sync.Mutex
 	handlers = map[string]libqueue.Handler{}
 	custom   libqueue.Queue
+	build    func(app *module.App) (libqueue.Queue, error)
 )
+
+var identifier = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,62}$`)
 
 // Handle registers the handler for a job type. Call before boot.Start.
 func Handle(jobType string, h libqueue.Handler) {
@@ -59,10 +72,21 @@ func Handle(jobType string, h libqueue.Handler) {
 // before boot.Start; it replaces the configured driver.
 func UseDriver(q libqueue.Queue) { mu.Lock(); custom = q; mu.Unlock() }
 
+// UseDriverFunc supplies the queue backend lazily: f runs when the module
+// starts, after the modules it requires, so it can build the driver over the
+// app's opened database (database.From(app)). Use it instead of UseDriver when
+// the driver cannot exist before boot.Start. Setting both is a start error. Call
+// before boot.Start.
+func UseDriverFunc(f func(app *module.App) (libqueue.Queue, error)) {
+	mu.Lock()
+	build = f
+	mu.Unlock()
+}
+
 // Reset clears registered handlers and the custom driver (for tests).
 func Reset() {
 	mu.Lock()
-	handlers, custom = map[string]libqueue.Handler{}, nil
+	handlers, custom, build = map[string]libqueue.Handler{}, nil, nil
 	mu.Unlock()
 }
 
@@ -85,16 +109,42 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 		return def
 	}
 	mu.Lock()
-	q, hs := custom, make(map[string]libqueue.Handler, len(handlers))
+	q, bf, hs := custom, build, make(map[string]libqueue.Handler, len(handlers))
 	for k, v := range handlers {
 		hs[k] = v
 	}
 	mu.Unlock()
+	if q != nil && bf != nil {
+		return errors.New("queue: set UseDriver or UseDriverFunc, not both")
+	}
+	if bf != nil {
+		built, err := bf(app)
+		if err != nil {
+			return fmt.Errorf("queue: driver: %w", err)
+		}
+		if built == nil {
+			return errors.New("queue: UseDriverFunc returned no driver")
+		}
+		q = built
+	}
 
 	if q == nil {
 		driver, _ := cfg["driver"].(string)
+		table, _ := cfg["table"].(string)
+		failedTable, _ := cfg["failed_table"].(string)
+		for k, v := range map[string]string{"table": table, "failed_table": failedTable} {
+			if v != "" && !identifier.MatchString(v) {
+				return fmt.Errorf("queue: %s %q must be a plain SQL identifier (letters, digits, underscore)", k, v)
+			}
+		}
+		if table != "" && table == failedTable {
+			return errors.New("queue: table and failed_table must differ")
+		}
 		switch driver {
 		case "memory":
+			if table != "" || failedTable != "" {
+				return errors.New("queue: table and failed_table apply to the sqlite driver only")
+			}
 			q = memory.New()
 		case "", "sqlite":
 			st := database.From(app)
@@ -104,7 +154,7 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 			if st.Config().Driver != store.DriverSQLite {
 				return errors.New("queue: libs has a SQLite queue driver only; with Postgres call queue.UseDriver")
 			}
-			d, err := qsqlite.New(st.DB(), qsqlite.Opts{})
+			d, err := qsqlite.New(st.DB(), qsqlite.Opts{Table: table, FailedTable: failedTable})
 			if err != nil {
 				return fmt.Errorf("queue: %w", err)
 			}

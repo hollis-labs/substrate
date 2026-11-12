@@ -82,6 +82,10 @@ Revoking the key at B ends A's access within the token lifetime.
 
 The signing key (Ed25519, PEM) is created `0600` at `identity.key_file` on first start, beside a public `<key_file>.jwks.json`. Losing it invalidates minted tokens, not sessions or keys. State lives in `identity_*` tables created at start in the app's database (SQLite or Postgres). See the next section to rotate the key without breaking live tokens.
 
+### One issuer per database
+
+A process creates the signing key only when the database has no identity rows (no users, no API keys): the fresh-instance path. If the database holds identity rows and `key_file` does not exist where this process's config points, start fails with an error naming the `key_file` path, because creating a key would make a second issuer that verifies only its own tokens (a child launched with an explicit database path and a default `key_file` beside it did exactly this). Fix the config so `key_file` points at the service's key, or the process at the right database. When the key is truly lost, or a new issuer is intended, set `identity.allow_new_signing_key: true` for that start; it is the deliberate way to create a key beside existing rows. An existing key file is always used as before. Lazy key creation (no key written by a process that never mints a token) is not built: the JWT verifier is built from the key at start, so it is not a small change.
+
 ## Rotating the signing key
 
 An administrator (`<app>.admin`, which the owner holds through `*`) rotates the key on the running app:
@@ -97,10 +101,10 @@ curl -s https://app/api/identity/signing-key -H "Authorization: Bearer $ADMIN_KE
 - **Compromised key.** `{"compromised": true}` removes the old key from the set at once: its outstanding tokens stop verifying here immediately and in other apps after their next fetch (up to about 5 minutes). Do this only when you must; live tokens are cut.
 - **Files** beside `key_file`: `<key_file>.retired.json` (public keys with `retired_at` and `not_after`, 0600) and the derived `<key_file>.jwks.json`. The new key is renamed over `key_file` as the commit point, after the retired record is on disk; a crash on either side loses no token. At start a retired entry equal to the active key (a crash before the commit) is dropped and the JWKS is rebuilt. A corrupt `.retired.json` refuses to start: delete it only to accept that retired keys stop verifying.
 - **One rotation at a time.** A second call while one runs gets `409 rotation_in_progress`.
-- **Limits.** One process per `key_file`; several instances sharing the directory would need a reload signal and are not supported. The emergency path that needs no running app is unchanged: delete `key_file` and restart, which invalidates every minted token. Every rotation is logged at warn level with the caller.
+- **Limits.** One process per `key_file`; several instances sharing the directory would need a reload signal and are not supported. The emergency path that needs no running app: delete `key_file` and restart with `identity.allow_new_signing_key: true` for that one start (the guard below otherwise refuses, because the database holds identity rows), which invalidates every minted token; remove the setting afterwards. Every rotation is logged at warn level with the caller.
 
 Go: `identity.From(app).RotateSigningKey(compromised)` and `.SigningKey()` do the same in process. Boot hooks must not register modules.
 
 ## Config
 
-See the package comment for the full list: `key_file`, `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).
+See the package comment for the full list: `key_file`, `allow_new_signing_key` (default false), `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).
