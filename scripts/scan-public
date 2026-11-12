@@ -400,7 +400,9 @@ def scan(args):
                 for mode, wanted in (("dir", do_tree), ("git", do_history)):
                     if not wanted or (mode == "git" and not is_git_repo(repo)):
                         continue
-                    own_repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                    # The repository the script lives in; `substrate scan-public` runs a copy from a
+                    # scratch directory and names the repository being scanned here instead.
+                    own_repo = os.environ.get("SCAN_PUBLIC_OWN_REPO") or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
                     reviewed_ignore = os.path.join(own_repo, ".gitleaksignore")
                     trusted_self_scan = (
                         not args.no_allowlist and not args.source
