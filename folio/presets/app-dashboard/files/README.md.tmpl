@@ -1,154 +1,53 @@
-{{ if eq .inputs.gui_host "chimera" -}}
-# {{ .computed.app_title }}
-{{ if .inputs.description }}{{ .inputs.description }}{{ end }}
+# {{ .inputs.repo_name }}
 
-This explicit `gui_host=chimera` scaffold imports the maintained public Go host
-`github.com/hollis-labs/chimera {{ .inputs.chimera_version }}`. Folio renders thin
-wiring; there is no copied host implementation, replace directive or go.work.
-The original frontend and app-owned API remain in this project.
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A Substrate app.{{ end }}
 
-## Reproducible dependencies
+Built on [Substrate](https://github.com/hollis-labs/substrate): the manifest (`cmd/{{ .inputs.repo_name }}/substrate.yaml`)
+selects the modules, `substrate generate` writes `substrate_wiring.go`, and `internal/` is the app.
 
-- Go {{ .inputs.go_version }} (the canonical portfolio floor).
-- Node 22.12+ and npm, compatible with the pinned Vite 7.3.6.
-- `chimera_gui_recipe={{ .inputs.chimera_gui_recipe }}`: published design packages 0.4.0,
-  React/ReactDOM 19.3.0 and the exact committed frontend lock/integrities.
-- The shared runtime/build lock entries are the reviewed Chimera389 closure;
-  the Folio starter adds its existing published kit and lint-tool dependencies.
-  Both root lock names are templated with the project name.
-
-`design_kit_version` and `go_webui_version` configure only the legacy `go-webui`
-branch. This branch uses the explicit fixed enum pins above, also recorded in
-`.folio.yaml` and `chimera-provenance.json`. An upgrade is a separately reviewed
-preset change with a new compatible lock, never a silent npm resolution.
-
-## Explicit build and run
+## First build
 
 ```sh
-cd frontend
-npm ci
-npm run typecheck
-npm run lint
-npm run build
-cd ..
 go mod tidy
-go test ./...
-go build -o {{ .inputs.project_name }} ./cmd/{{ .inputs.project_name }}
-./{{ .inputs.project_name }}
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate validate -f cmd/{{ .inputs.repo_name }}/substrate.yaml
+go build ./cmd/{{ .inputs.repo_name }}
 ```
 
-Folio itself performs none of these install/build/run operations. The frontend
-build writes into `internal/webui/dist`; the server embeds those bytes and
-imports Chimera directly. Full MIT terms are in `licenses/Chimera-MIT.txt`.
+## Run
 
-GUI base: `{{ .inputs.base_path }}`. Browser URL:
-<http://127.0.0.1:8080{{ trimSuffix "/" .inputs.base_path }}/>. Root `/` stays `/`,
-not `//`. Deep local routes reload through the same embedded SPA; assets use
-that canonical base. Reserved host bases `/api`, `/plugins` and `/healthz` are
-refused by Chimera. APIs remain at root `/api/health`.
-
-`LISTEN_ADDR` defaults to loopback 127.0.0.1:8080. Override it explicitly if needed;
-update Vite's API proxy if changing the development port. `make ui-dev` runs
-Vite separately, proxying the app's root `/api`. Ctrl+C/SIGTERM drains the
-maintained HTTP host. Missing `/api` routes return 404 rather than SPA content.
-
-The renderer preserves atomic materialization, LF-normalized breadcrumb file
-digests and read-only `folio inspect` drift reporting. `folio sync` remains an
-erroring stub. No publication, install/enable, persistence or business policy is
-provided by this shell recipe.
-{{ else -}}
-# {{ .computed.app_title }}
-{{ if .inputs.description }}
-{{ .inputs.description }}
-{{ end }}
-A **dashboard** application: a React frontend built on
-[`design-kit`](https://github.com/hollis-labs/design-kit) and `kit-dashboard` served by a
-Go binary through the [`go-webui`](https://github.com/hollis-labs/go-webui)
-embed harness. Scaffolded by `folio new app-dashboard`.
-
-## Layout
-
-```
-cmd/{{ .inputs.project_name }}/   Go entrypoint — HTTP server + /api
-internal/webui/             //go:embed all:dist + the go-webui handler
-frontend/                   Vite + React frontend (the dashboard UI)
-  src/App.tsx               AppShell — nav rail + page header
-  src/pages/                one page per screen
-  src/api/                  same-origin API client + typed context
-```
-
-The frontend builds into `internal/webui/dist/`, which the Go binary
-embeds — so a single binary serves both the API and the UI.
-
-## Prerequisites
-
-- Go {{ .inputs.go_version }}+
-- Node.js 20+ / npm
-
-## Develop
-
-Two processes during development:
+The owner is created offline, never over HTTP (see `docs/identity-bootstrap.md`):
 
 ```sh
-make run      # Go server on 127.0.0.1:8080 (serves /api and the last UI build)
-make ui-dev   # Vite dev server with hot reload — proxies /api to 127.0.0.1:8080
+./{{ .inputs.repo_name }} identity setup --username owner   # the password is typed twice at the terminal, not echoed
+./{{ .inputs.repo_name }} serve
 ```
 
-Open the Vite dev server URL — the app is served under
-`{{ .inputs.base_path }}/`, not the root path.
+For automation only, `identity setup` also reads the password from the first line of stdin when stdin is
+not a terminal; take it from your secret store, never from a shell variable or the command line.
 
-## Build a release binary
+Settings are keys in the YAML file named by `SUBSTRATE_CONFIG` (for example `httphost.addr`); the only
+environment variable the app reads is `{{ upper (replace "-" "_" .inputs.repo_name) }}_DATA_DIR`.
 
-```sh
-make all      # ui-build (vite → internal/webui/dist) then build
-./{{ .inputs.project_name }}
+## UI
+
+`frontend/` is a React app on app-shell and the BOM-pinned kits. **First step: `cd frontend && npm install`,
+then commit `package-lock.json`** (CI runs `npm ci` and fails without the lock). Then `make ui-build` builds into `internal/webui/dist`, which the binary
+embeds; `make ui-dev` runs the dev server (port 5173) against a running backend.
+
+**Signing in through the dev server.** The dev server proxies `/api` without changing the `Origin`, and
+identity refuses a cookie write from an origin that is not the backend's own (`403 bad_origin`). In your
+**development** override file (the one `SUBSTRATE_CONFIG` names on your machine), and only there, add:
+
+```yaml
+identity:
+  allowed_origins: ["http://127.0.0.1:5173"]
 ```
 
-The dashboard UI is then served at <http://localhost:8080{{ .inputs.base_path }}/>.
-Before the first `make ui-build`, `go-webui` serves a "not built"
-placeholder in place of the app. The server defaults to `127.0.0.1:8080`.
-For containers, set `LISTEN_ADDR=0.0.0.0:8080` explicitly to listen on all
-interfaces. Set `LISTEN_ADDR` to choose another address or port; if the port
-changes, update the development proxy in `frontend/vite.config.ts` too.
+Never put `allowed_origins` in `substrate.yaml` or in a deployed config.
 
-| Command | What it does |
-|---|---|
-| `make ui-build` | Build the frontend into `internal/webui/dist` |
-| `make ui-dev` | Run the Vite dev server (hot reload) |
-| `make build` | Build the Go binary |
-| `make all` | `ui-build` then `build` |
-| `make run` | Build and run the server |
-| `make install` | Build the embedded UI + install `{{ .inputs.project_name }}` to `$GOBIN` |
-| `make test` / `make vet` | Go test / vet |
+## Checks
 
-## Adding a page
-
-A page is generic kit chrome plus app-specific content. Add a component
-under `frontend/src/pages/`, then wire it into `frontend/src/App.tsx`
-(extend the `nav` array and the active-route switch). Add API endpoints
-to `frontend/src/api/client.ts`. See the
-[`kit-dashboard` README](https://github.com/hollis-labs/design-kit/tree/main/packages/kit-dashboard)
-for the `PageHeader` / `DataTable` / `SummaryCards` composition pattern.
-
-## Dependencies
-
-The design-kit version input defaults to 0.4.0, generating `^0.4.0` ranges.
-Tailwind v4 is declared explicitly to satisfy the styled packages' required peer.
-Existing generated apps keep their dependencies until intentionally updated.
-
-- **design-kit** (`^{{ .inputs.design_kit_version }}` from npm) — `design-tokens`,
-  `design-components` (including AppShell), `design-app-runtime` (API client/context
-  and shell reset), and `kit-dashboard` (nav, header, summary and theme).
-- **`@hollis-labs/eslint-config-design`** (`^{{ .inputs.design_kit_version }}`) —
-  the token contract gate. `npm run lint` runs Biome and this ESLint lane; CI
-  typechecks, lints and builds the frontend before compiling the embedded server.
-  Components name tokens, never raw colors or scale values. Import base controls
-  from `design-components`, app transport from `design-app-runtime`, dashboard
-  layout/table/chart surfaces from the matching `kit-dashboard` subpath.
-- **`github.com/hollis-labs/go-webui`** (`{{ .inputs.go_webui_version }}`) —
-  the SPA-serving harness.
-
-## License
-
-MIT — see [LICENSE](./LICENSE).
-{{ end -}}
+`go vet ./...`, `go test -race ./...`, `golangci-lint run`, `substrate pins check --app .` and
+`substrate scan-public --ref HEAD` (CI runs all of them).

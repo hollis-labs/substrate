@@ -32,10 +32,10 @@ func TestIntegration_ChatAppPreset_Render(t *testing.T) {
 			if mf.Presets[0].ID != "chat-app" {
 				t.Fatalf("preset = %s, want chat-app", mf.Presets[0].ID)
 			}
-			if embed := readFile(t, target, "internal/webui/embed.go"); !strings.Contains(embed, `BasePath = "`+base+`"`) {
+			if embed := readText(t, filepath.Join(target, "internal", "webui", "embed.go")); !strings.Contains(embed, `BasePath = "`+base+`"`) {
 				t.Errorf("Go mount did not receive custom base path: %s", embed)
 			}
-			if vite := readFile(t, target, "frontend/vite.config.ts"); !strings.Contains(vite, `base: "`+base+`/"`) {
+			if vite := readText(t, filepath.Join(target, "frontend", "vite.config.ts")); !strings.Contains(vite, `base: "`+base+`/"`) {
 				t.Errorf("Vite did not receive custom base path: %s", vite)
 			}
 			if _, err := svc.Inspect(service.InspectOptions{TargetDir: target}); err != nil {

@@ -26,34 +26,17 @@ Add `--json` to either for machine-readable output. A preset marked `[layer]`
 sources, and MCP / HTTP surfaces are deliberately deferred; see
 [`CHANGELOG.md`](./CHANGELOG.md) for the full deferred list.
 
-## Maintained GUI host opt-in
+## Substrate apps
 
-`app-dashboard` 2.1 and `chat-app` 1.1 retain `gui_host=go-webui` by default.
-Select `gui_host=chimera` for the thin public maintained Go host and the frozen
-published GUI recipe. Its `chimera_version` and `chimera_gui_recipe` inputs are
-finite tested pins; legacy `go_webui_version`/`design_kit_version` apply only to
-the legacy branch. The rendered frontend lock names match the project name;
-run `npm ci` explicitly on Node 22.12+ before the Go build. Folio never installs,
-builds or runs a rendered project. Canonical `/` and `/review` mounts share
-root-owned `/api/*` endpoints; host-reserved API/plugin/health bases are unavailable.
-
-For the separately licensed reviewed local widget, choose
-`app-dashboard-chimera-plugin` or `chat-app-chimera-plugin`. These compose the
-base app plus the explicit `chimera-plugin-fixture` layer; shell/default outputs
-contain none of its archive, vendor adapters or fixture code. The opt-in output
-carries the unchanged MIT host-ui archive, four immutable MIT Chimera adapters,
-individual raw SHA256/source provenance and the generation-bound fixture. The
-raw archive digest is separate from Folio's LF-normalized breadcrumb digest.
-This is an explicit reviewed main-origin local widget policy, not untrusted
-plugin isolation or an npm frontend release. Local count/unload affects only
-presentation; no business actions are supplied.
-
-The maintained Go pin is `v0.0.0-20261008115211-389155313ee5`;
-GUI recipe `design-0.4.0-react-19.3.0` retains accepted shared resolved packages
-and adds the existing Folio kit/lint closure. `scripts/check-chimera-consumers.cjs`
-is an explicit maintainer network/build/native proof, separate from rendering.
-It materializes root/subpath dashboard/chat consumers, checks checksums/locks,
-compiles them and exercises desktop/narrow/short-height native controls.
+`substrate-app` renders a [Substrate](https://github.com/hollis-labs/substrate) `app-host` backend:
+the manifest and its committed generated wiring, boot and serve, its own identity (the owner is
+created offline with `<name> identity setup`, never over HTTP), SQLite through the database module,
+scoped routes, CI, a build workflow and a fleet deploy descriptor. `app-dashboard` (3.0) is that plus
+a minimal app-shell frontend on the BOM-pinned kits. Both need `substrate_version` (and, for the UI,
+the six `kit_*` versions): there is no default, take them from the framework's `bom.yaml`.
+After rendering: `go mod tidy`, `substrate pins sync --app .`, `go mod tidy`, and for the UI
+`npm install` in `frontend/` and commit `package-lock.json`. Folio never installs, builds or runs a
+rendered project.
 
 ## Quickstart
 
@@ -230,88 +213,22 @@ in a scratch copy and requires exactly that check to fail.
 
 ```sh
 folio new app-dashboard /tmp/my-dashboard \
-  --input project_name=my_dashboard \
-  --input github_owner=hollis-labs \
+  --input repo_name=my-dashboard \
+  --input substrate_version=<framework version> \
+  --input kit_app_shell=<from bom.yaml> ... \
   --non-interactive
 ```
 
-`app-dashboard` renders the design-kit foundation plus kit-dashboard, with
-published npm packages (`design_kit_version`, default `0.4.0`). The generated
-frontend uses the real `AppShell`, same-origin API client/context, the kit theme
-and shell reset; its CI runs frontend typecheck, Biome/design-token lint and
-build before the Go checks. The manifest-driven admin shell is deferred.
+`app-dashboard` 3.0 renders a Substrate app (see above) with a React frontend on app-shell and the
+kit-dashboard theme: an app-owned sign-in screen and one list surface. It replaces the go-webui and
+Chimera dashboard of 2.x (clean break: `project_name`, `gui_host`, `chimera_*`, `design_kit_version`,
+`go_webui_version` and `base_path` are gone; a Substrate app serves at the root).
 
-`sysop-ui` remains a deprecated bundled alias: `new`, `plan`, `preset show` and
-`inspect` resolve it to `app-dashboard`. Discovery lists the canonical preset
-once, and new breadcrumbs record `app-dashboard`. Existing breadcrumbs with
-`sysop-ui` remain readable by `inspect`, which reports drift against the current
-dashboard template without updating the app or its breadcrumb. The old
-`sysop_ui_version` input is ignored with an undeclared-input warning; it cannot
-pin the frozen kit anymore. Choose `design_kit_version` for new scaffolds.
-There are no bundled `composes:` references to the old id.
-
-For an existing app, render the new preset into a temporary directory and port
-its imports, dependencies and CI intentionally. `folio sync` remains reserved;
-this rename performs no automatic migration of existing apps.
-
-The structural preset tests run offline. To verify a fresh generated consumer
-against the published packages (requires npm/network), run:
-
-```sh
-FOLIO_FRONTEND_E2E=1 go test . -run TestIntegration_AppDashboardPreset_Frontend -v
-```
-
-This installs the frontend dependencies, typechecks, runs Biome and the design
-ESLint gate, builds the embedded UI and compiles the generated Go application.
-All generated output and tool homes are temporary.
-
-## Chat apps
-
-```sh
-folio new chat-app /tmp/my-chat --input project_name=my_chat --non-interactive
-```
-
-The preset follows ops-chat's AppShell/sidebar and transcript/composer layout,
-using published design-kit and kit-chat with explicit Tailwind source registration.
-Its Go server provides a same-origin local echo endpoint so sending a message
-works immediately; replace the endpoint/client with your application's transport.
-Draft and transcript are app-owned, ephemeral state. No Nanite dependency,
-credentials, persistence or optional markdown renderer is included.
-
-`design_kit_version` is the single design-kit version input, defaulting to 0.4.0.
-The generated `^0.4.0` ranges select the published 0.4.x packages, including the
-kit-chat control-font and composer fixes, the 6px small-control radius and
-stronger keyboard focus indicators.
-Existing generated apps keep their dependencies until intentionally updated.
-
-The normal preset/discovery tests stay offline. To install published packages,
-typecheck, lint, build the UI and compile the generated Go server:
-
-```sh
-FOLIO_FRONTEND_E2E=1 go test . -run TestIntegration_ChatAppPreset_Frontend -v
-```
-
-For computed-style and interaction verification against the actual embedded app,
-install Playwright in a scratch tool directory and provide its module/browser:
-
-```sh
-npm install --prefix /path/to/browser-tools playwright
-/path/to/browser-tools/node_modules/.bin/playwright install chromium
-FOLIO_FRONTEND_E2E=1 FOLIO_BROWSER_E2E=1 \
-  FOLIO_PLAYWRIGHT_MODULE=/path/to/browser-tools/node_modules/playwright \
-  go test . -run TestIntegration_ChatAppPreset_Frontend -v
-```
-
-`FOLIO_CHROMIUM_EXECUTABLE` optionally selects an existing Chromium executable.
-`FOLIO_SCREENSHOT_DIR` optionally saves desktop/narrow screenshots. The browser
-check verifies user-row alignment, token radius, bubble background/width,
-composer border/radius, scroll layout, emitted chat utilities, message send and
-reset, one Send control with a 6px radius, and bubble/composer typography
-matching the 13px control token at desktop and narrow widths. It also reaches
-Send with Tab, requires its ring to reach 3:1 against the actual composited
-surround, and checks page and console errors. The registry 0.4.0 packages retain
-the 0.3.0 typography/radius fixes and strengthen focus indicators. The Go app
-runs on a temporary loopback port; tool homes/output are temporary.
+`sysop-ui` remains a deprecated alias: `new`, `plan`, `preset show` and `inspect` resolve it to
+`app-dashboard`, and new breadcrumbs record `app-dashboard`. Existing breadcrumbs, whatever preset
+generated them, stay readable by `inspect`, which reports drift against the current templates without
+updating the app or its breadcrumb. `folio sync` remains reserved; nothing migrates an already generated
+app.
 
 ## License
 

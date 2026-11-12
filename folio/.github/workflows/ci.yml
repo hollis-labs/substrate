@@ -28,7 +28,24 @@ jobs:
       - name: go vet
         run: go vet ./...
 
+      # The framework-dependent preset tests (render, build and run a Substrate app against the real
+      # framework) are required here, not skipped. FOLIO_SUBSTRATE_VERSION is HAND-MAINTAINED, a pseudo-version
+      # of hollis-labs/substrate main (4f82c47f3f4d), until the framework mirrors its version into
+      # platform-pins.yaml (docs/conversion-notes.md, Gap 2).
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # The go-lib conformance tests run the pinned linter (platform-pins.yaml golangci_lint_version).
+      - name: install golangci-lint for the preset tests
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
       - name: go test -race
+        env:
+          FOLIO_REQUIRE_TOOLS: "1"
+          FOLIO_SUBSTRATE_VERSION: v0.1.1-0.20261112220059-4f82c47f3f4d
         run: go test -race ./...
 
   lint:
@@ -78,34 +95,3 @@ jobs:
 
       - name: drift check positive control
         run: sh scripts/check-platform-pins-drift.sh . --self-test
-
-  chimera-consumers:
-    name: generated Chimera consumers
-    runs-on: ubuntu-latest
-    env:
-      TMPDIR: ${{ github.workspace }}/.scratch/tmp
-      GOCACHE: ${{ github.workspace }}/.scratch/gocache
-      GOMODCACHE: ${{ github.workspace }}/.scratch/gomodcache
-      npm_config_cache: ${{ github.workspace }}/.scratch/npmcache
-    steps:
-      - uses: actions/checkout@v5
-      - name: Prepare owned proof directories
-        run: mkdir -p .scratch/tmp .scratch/gocache .scratch/gomodcache .scratch/npmcache .scratch/browsers
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22.12.0'
-      - name: Install exact isolated native-proof tool
-        run: |
-          mkdir -p .scratch/tmp .scratch/gocache .scratch/gomodcache .scratch/npmcache .scratch/browsers
-          npm install --prefix .scratch/native-tools --no-audit --no-fund @playwright/test@1.63.0
-          PLAYWRIGHT_BROWSERS_PATH="$PWD/.scratch/browsers" .scratch/native-tools/node_modules/.bin/playwright install --with-deps chromium
-      - name: Prove shell and explicit licensed plugin consumers
-        env:
-          FOLIO_PLAYWRIGHT_MODULE: ${{ github.workspace }}/.scratch/native-tools/node_modules/@playwright/test
-          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.scratch/browsers
-        run: |
-          node scripts/check-chimera-consumers.cjs
-          FOLIO_PROOF_VARIANT=plugin node scripts/check-chimera-consumers.cjs

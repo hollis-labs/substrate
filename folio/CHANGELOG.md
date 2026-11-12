@@ -6,6 +6,21 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Removed (breaking)
+
+- **Chimera and go-webui.** Presets `chimera-plugin-fixture`, `app-dashboard-chimera-plugin` and
+  `chat-app-chimera-plugin`; the `gui_host`, `chimera_version`, `chimera_gui_recipe`, `design_kit_version`,
+  `go_webui_version` and `base_path` inputs; `scripts/check-chimera-consumers.cjs`,
+  `scripts/check-chat-consumer.cjs`, `docs/chat-app-consumer-verification.md` and its screenshots, the
+  `chimera-consumers` CI job and the `chimera` block of `platform-pins.yaml`. The vendored licensed Chimera
+  material (host-ui archive and adapters) leaves the tree; it stays in git history.
+- **`go-service-app`**, superseded by `substrate-app`.
+
+### Changed (breaking)
+
+- **`app-dashboard` 3.0.0** renders a Substrate app with an app-shell frontend (inputs `repo_name`,
+  `substrate_version` and the kit versions; see below). `sysop-ui` still resolves to it.
+
 ### Added
 
 - **`substrate-app` preset (and its `substrate-baseline` layer).** Renders a Substrate `app-host`
@@ -20,7 +35,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   directory. `internal/hostguard` is a per-app copy of a check the framework is to own (Substrate pull
   request 23): the preset drops it when that lands. The removal of the
   Chimera and go-webui presets follows in a later change.
-- **`substrate-webapp` preset (and its `substrate-frontend` layer).** `substrate-app` plus a minimal
+- **`app-dashboard` preset (and its `substrate-frontend` layer).** `substrate-app` plus a minimal
   app-shell frontend: React 19, Vite, Tailwind, `ManifestShell` over the manifest `substrate frontend`
   generates, an app-owned sign-in screen (identity has no UI kit yet), one list surface over
   `GET`/`POST /api/items`, and `cmd/<name>/ui/app.json`. The `@hollis-labs` kit versions are required
