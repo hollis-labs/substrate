@@ -173,8 +173,10 @@ type ServeOptions struct {
 
 // Serve listens, serves h and shuts down gracefully when ctx ends, so every app
 // serves the same way. The address comes from config httphost.addr; when the auth
-// module is started the bind is validated against its mode (off and permissive
-// refuse a wildcard or public address). There is no write timeout, so streams
+// module is started the bind is validated against its mode: off and permissive
+// accept loopback, a tailnet address (the Tailscale ranges or *.ts.net)
+// or a unix socket and refuse a wildcard or any other address, so "off refuses a
+// public address" does not mean loopback only (docs/identity.md). There is no write timeout, so streams
 // (SSE) are not cut off; header and idle timeouts are set. In off or permissive
 // mode Serve logs the "auth is not enforcing" warning (the auth module itself
 // stays quiet at Start, so short-lived commands print nothing). Serve returns nil

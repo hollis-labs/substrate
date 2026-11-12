@@ -28,6 +28,7 @@ minor releases may break APIs.
 
 ### Fixed
 
+- Docs: off and permissive mode accept tailnet addresses and `*.ts.net` names as well as loopback (libs `ValidateBind`, intended); written into `docs/identity.md` and the `httphost.Serve` comment. No behaviour change.
 - The `auth` module no longer logs "auth is not enforcing" at Start, which printed a warning on stderr for every command of a CLI-variant app in off mode. `httphost.Serve` logs it (once, with the mode and address) when a listener starts in off or permissive mode, so a server still warns. The guard's other log records are untouched.
 
 - The generated frontend manifest wrote each region as `{"Name","Docked","Anchor"}`; it is now `{"name","docked","anchor"}` as the shell reads it, and a test fixes the key names.

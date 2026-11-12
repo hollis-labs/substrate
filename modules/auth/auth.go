@@ -293,7 +293,8 @@ func Verify(ctx context.Context, app *module.App, token string) (libauth.Princip
 }
 
 // ValidateBind refuses a listener address the configured mode may not use
-// (off and permissive are loopback, tailnet or unix socket only).
+// (off and permissive are loopback, tailnet or unix socket only; tailnet is
+// the Tailscale address ranges and *.ts.net, by design in libs).
 func ValidateBind(app *module.App, addr string) error {
 	g := Guard(app)
 	if g == nil {
