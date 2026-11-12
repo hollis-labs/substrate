@@ -84,22 +84,85 @@ func Linked() []string {
 // Runtime starts the named modules in order and stops them in reverse.
 type Runtime struct{ started []Module }
 
+// Hook is app code run at a point in the start sequence. An error stops the
+// boot and stops the modules already started.
+type Hook func(ctx context.Context, app *App) error
+
+// ConfigModule is the name of the module whose Start applies the
+// SUBSTRATE_CONFIG override. Hooks.AfterConfig is keyed to it.
+const ConfigModule = "config"
+
+// Hooks are the app's boot hooks. The zero value has none.
+type Hooks struct {
+	// AfterConfig runs once per start, immediately after the config module's
+	// Start (the override is applied), before the next module. If the config
+	// module is not in the start list there is no override to wait for: it runs
+	// once, before the first module starts.
+	AfterConfig Hook
+	// Before maps a module name to a hook run immediately before that
+	// module's Start (after AfterConfig, when that module follows config). A
+	// name that is not in the start list is an error, checked before any
+	// module starts.
+	Before map[string]Hook
+}
+
 // Start starts names in order. A name that is not linked is an error.
 func (r *Runtime) Start(ctx context.Context, app *App, names []string) error {
+	return r.StartWith(ctx, app, names, Hooks{})
+}
+
+// StartWith is Start with boot hooks.
+func (r *Runtime) StartWith(ctx context.Context, app *App, names []string, h Hooks) error {
+	listed := map[string]bool{}
+	for _, n := range names {
+		listed[n] = true
+	}
+	var unknown []string
+	for n := range h.Before {
+		if !listed[n] {
+			unknown = append(unknown, n)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return fmt.Errorf("substrate: boot hook for module %q, which is not in the start list", strings.Join(unknown, ", "))
+	}
 	mu.RLock()
 	defer mu.RUnlock()
+	fail := func(err error) error { _ = r.stopLocked(ctx); return err }
+	afterDone := h.AfterConfig == nil
+	runAfter := func() error {
+		afterDone = true
+		if err := h.AfterConfig(ctx, app); err != nil {
+			return fail(fmt.Errorf("substrate: after-config hook: %w", err))
+		}
+		return nil
+	}
+	if !afterDone && !listed[ConfigModule] {
+		if err := runAfter(); err != nil {
+			return err
+		}
+	}
 	for _, n := range names {
 		m, ok := registry[n]
 		if !ok {
-			_ = r.stopLocked(ctx)
-			return fmt.Errorf("substrate: module %q is not linked into this binary", n)
+			return fail(fmt.Errorf("substrate: module %q is not linked into this binary", n))
+		}
+		if hk := h.Before[n]; hk != nil {
+			if err := hk(ctx, app); err != nil {
+				return fail(fmt.Errorf("substrate: before-%s hook: %w", n, err))
+			}
 		}
 		if err := m.Start(ctx, app); err != nil {
-			_ = r.stopLocked(ctx)
-			return fmt.Errorf("substrate: start %s: %w", n, err)
+			return fail(fmt.Errorf("substrate: start %s: %w", n, err))
 		}
 		r.started = append(r.started, m)
 		app.Started = append(app.Started, n)
+		if n == ConfigModule && !afterDone {
+			if err := runAfter(); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }

@@ -72,6 +72,14 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 
 - Install hooks before `boot.Start`: `database.UseMigrationFS`, `policy.UsePDP`, `mcp.UseToolFilter`, and so on.
   A module that needs a hook and does not get one fails to start; it never defaults to allow.
+- Work that needs the effective config, or must happen between two modules, uses the boot hooks:
+  `boot.StartWith(ctx, app, modules, configJSON, boot.Options{AfterConfig: ..., Before: map[string]boot.Hook{...}})`
+  (`boot.Start` is the same call without hooks). `AfterConfig` runs once, with the `*module.App`, right after the
+  `config` module has applied the `SUBSTRATE_CONFIG` override and before any later module starts: set run-time
+  values there. `Before["database"]` runs immediately before that module's `Start`. A hook that names a module
+  that is not in the start list is an error at start (a typo cannot silently never run); a hook error stops the boot
+  and stops the modules already started, in reverse order. If the `config` module is not selected there is no
+  override to wait for, so `AfterConfig` runs once before the first module starts. Hooks run once per start.
 - `serve` builds the handler with `httphost.Handler(app, httphost.Options{Assets, Routes, Mounts})` and runs it with
   `httphost.Serve(ctx, app, handler, ...)`, which also checks the bind address against the auth mode.
 - Shut down on `SIGINT` and `SIGTERM` (`signal.NotifyContext`), stop accepting work, drain, then stop modules. Test
@@ -90,9 +98,11 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 - Libraries that own their tables (for example `libs/security/pairing`) keep creating them; do not duplicate their DDL.
 - A clean break must not open an old database silently. Add a startup guard that refuses a data directory with the
   old layout and says what to do ("move the old data directory aside"). It has to run before the database module
-  migrates, so it lives in `main` (a known gap: there is no pre-migration hook).
-- Data directories: the framework has no run-time path hook. Resolve the data directory in `main` (XDG or an override
-  variable) and put absolute paths into the generated config JSON before `boot.Start`. Directories `0700`, secrets and
+  migrates: key it as `boot.Options.Before["database"]` and read the database path from `app.Config`, which already
+  carries the override, so the guard does not repeat the config merge rule.
+- Data directories: the framework has no data-directory concept yet (a decision after the first wave of ports).
+  Resolve the data directory (XDG or an override variable) in the `AfterConfig` hook and write absolute paths into
+  `app.Config`; leave a path the operator's override already made absolute alone. Directories `0700`, secrets and
   databases `0600`.
 
 ## 5. Auth, identity and routes

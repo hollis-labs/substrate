@@ -43,6 +43,10 @@ When the app must supply something (a PDP, plugin specs, a log, a topic authoriz
 `Use...` function called before `boot.Start`, as `policy.UsePDP` and `events.UseLog` do. Starting without a
 required hook is an error, not a silent default that allows.
 
+A module that needs the effective config (the `SUBSTRATE_CONFIG` override already applied) from the app, or a
+step between two modules, does not need its own hook type: the app passes `boot.Options` to `boot.StartWith`
+(`AfterConfig`, and `Before` keyed by module name). A module sees only the resulting `app.Config`.
+
 ## Routes and UI
 
 Declare every HTTP route in `ui.json` and bind handlers with `module.AddRoutes`; do not mount handlers by an
