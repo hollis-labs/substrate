@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
@@ -670,13 +671,16 @@ func TestAppDashboard_LegacySysopUIAlias(t *testing.T) {
 	if root.ID != "app-dashboard" || root.Version != "3.0.0" {
 		t.Fatalf("alias did not record the canonical preset: %+v", mf.Presets)
 	}
-	// An existing 2.x breadcrumb (preset id from before the rename) still inspects: breadcrumbs are records.
+	// An existing 2.x breadcrumb (preset id from before the rename) is NOT re-rendered onto the new
+	// preset: it fails with a sentence naming the removed preset and the release that last had it.
 	root.ID = "sysop-ui"
 	root.Version = "1.2.0"
 	if err := manifest.Write(target, mf); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Inspect(service.InspectOptions{TargetDir: target}); err != nil {
-		t.Fatalf("inspect of an old sysop-ui breadcrumb: %v", err)
+	_, err = svc.Inspect(service.InspectOptions{TargetDir: target})
+	var se *service.Error
+	if !errors.As(err, &se) || se.Code != service.ErrPresetRemoved || !strings.Contains(se.Message, "v0.0.1") {
+		t.Fatalf("inspect of an old sysop-ui breadcrumb must fail with preset_removed naming v0.0.1, got %v", err)
 	}
 }
