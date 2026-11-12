@@ -66,6 +66,10 @@ func tokenFile(t *testing.T, tok string) string {
 // connect runs ServeStdio on one end of a pipe pair and an MCP client on the
 // other, the way an agent launches the app as a subprocess.
 func connect(t *testing.T, app *module.App, tokenPath string) (*mcpsdk.ClientSession, <-chan error) {
+	return connectWith(t, app, mcp.StdioOptions{TokenFile: tokenPath})
+}
+
+func connectWith(t *testing.T, app *module.App, o mcp.StdioOptions) (*mcpsdk.ClientSession, <-chan error) {
 	t.Helper()
 	srvIn, cliOut := io.Pipe()
 	cliIn, srvOut := io.Pipe()
@@ -73,7 +77,8 @@ func connect(t *testing.T, app *module.App, tokenPath string) (*mcpsdk.ClientSes
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() {
-		err := mcp.ServeStdio(ctx, app, mcp.StdioOptions{In: srvIn, Out: srvOut, TokenFile: tokenPath})
+		o.In, o.Out = srvIn, srvOut
+		err := mcp.ServeStdio(ctx, app, o)
 		_ = srvOut.Close()
 		done <- err
 	}()

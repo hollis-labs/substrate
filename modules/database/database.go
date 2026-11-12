@@ -10,7 +10,11 @@
 //	             for SQLite and verify for Postgres: a shared server migrates deliberately.
 //
 //	sqlite:      path (file, ":memory:" for tests; default "<app>.db"),
-//	             synchronous (OFF|NORMAL|FULL|EXTRA), journal ("wal"|"delete").
+//	             synchronous (OFF|NORMAL|FULL|EXTRA), journal ("wal"|"delete"),
+//	             read_pool (size of the read-only pool behind Store.Reader(), an
+//	             integer 1 to 64; unset keeps the libs default, 4. The write side
+//	             is always one connection. Ignored for ":memory:", which has one
+//	             connection for everything).
 //	postgres:    dsn_file or dsn_env (the connection string is a secret, so it is
 //	             read from a file or an environment variable, never from config),
 //	             migrate_dsn_file or migrate_dsn_env (schema-owner role, used only
@@ -114,10 +118,15 @@ func configFrom(app *module.App) (store.Config, error) {
 		if s == nil {
 			s = map[string]any{}
 		}
+		readPool, err := readPoolFrom(s)
+		if err != nil {
+			return sc, err
+		}
 		sc.SQLite = store.SQLiteConfig{
 			Path:            orDefault(str(s, "path"), app.Name+".db"),
 			Synchronous:     str(s, "synchronous"),
 			Journal:         str(s, "journal"),
+			ReadConns:       readPool,
 			CreateParentDir: true,
 		}
 	case store.DriverPostgres:
@@ -140,6 +149,34 @@ func configFrom(app *module.App) (store.Config, error) {
 		return sc, fmt.Errorf("database: driver %q must be sqlite or postgres", driver)
 	}
 	return sc, nil
+}
+
+// MaxReadPool is the largest accepted database.sqlite.read_pool.
+const MaxReadPool = 64
+
+// readPoolFrom reads sqlite.read_pool: absent (or null) is 0, which keeps the
+// libs default; otherwise a whole number from 1 to MaxReadPool.
+func readPoolFrom(s map[string]any) (int, error) {
+	v, ok := s["read_pool"]
+	if !ok || v == nil {
+		return 0, nil
+	}
+	var n int
+	switch x := v.(type) {
+	case float64:
+		n = int(x)
+		if float64(n) != x {
+			return 0, fmt.Errorf("database: sqlite.read_pool %v must be a whole number from 1 to %d", v, MaxReadPool)
+		}
+	case int:
+		n = x
+	default:
+		return 0, fmt.Errorf("database: sqlite.read_pool must be a whole number from 1 to %d", MaxReadPool)
+	}
+	if n < 1 || n > MaxReadPool {
+		return 0, fmt.Errorf("database: sqlite.read_pool %d must be from 1 to %d", n, MaxReadPool)
+	}
+	return n, nil
 }
 
 var errUnset = errors.New("not set")
