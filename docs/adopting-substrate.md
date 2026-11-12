@@ -92,7 +92,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   <-r.Context().Done(): /* client left */ case ev := <-events: ... }`. It reaches the handler through the host check,
   identity, the guard and `apierr.Normalize` (it rides the request context). `r.Context()` is deliberately not
   cancelled when a graceful stop begins, so a request doing real work (a database call) finishes; only the grace
-  expiry cancels it. Outside `Serve` (httptest) `Stopping` is a nil channel and never fires.
+  expiry cancels it. Outside `Serve` (httptest) `Stopping` is a nil channel and never fires. An app's own background
+  goroutines started from a handler (a worker the request kicked off) should watch the app context, not
+  `Stopping(r)`, which belongs to the request's own connection.
 
 ## 4. Persistence
 
@@ -183,6 +185,16 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    every registered route has a scope (and break one on purpose to see it fail).
 4. Routes that authenticate their own callers (a native device protocol, a webhook, an A2A endpoint) are
    `httphost.Mount`s with `Open: true`. Their handlers must verify the credential themselves; say so in the code.
+   **Relaying a third-party protocol.** Every route and mount is wrapped in `apierr.Normalize`, which rewrites a
+   4xx/5xx body `{"error":{"code","message"}}` into the flat `{code, message}`. That is right for the app's own API
+   and wrong for a handler that relays an upstream whose error shape clients depend on (an OpenAI-dialect gateway:
+   `{"error":{"message","type","param","code"}}`, read as `error.message` by the OpenAI SDKs). Declare that path once:
+   `httphost.Options{RawPrefixes: []string{"/api/llm-gateway/v1/"}}` for routes under `/api/` (each prefix starts with
+   `/api/`, ends with `/`, is not `/api/` itself, appears once and must not overlap a module-declared route; a bad
+   one is an error from `Handler` naming it), or `Mount{Raw: true}` for a mount outside `/api/`. The handler's
+   response (status, headers, body, streams) then passes untouched. The guard's and the scope table's refusals,
+   `route_not_mapped` included, still answer flat, so a client sees the upstream dialect for upstream errors and the
+   framework shape for framework refusals. Do not use it for the app's own API: the frontend reads the flat shape.
 5. The data owner of a row is the verified principal subject from the request context, never a request field.
 6. Keep stored secrets behind the `secrets` module's resolver. Never return a secret, a secret reference, a hash or a
    session value from any API.
@@ -227,6 +239,10 @@ Map every old environment variable to a config key (or drop it on purpose) and w
   and allow), then `enforce` for release.
 
 ## 8. The frontend
+
+The frontend reads the flat `{code, message}` error body, which is why `httphost` flattens every error by default.
+A path that relays a third-party protocol opts out with `RawPrefixes` or `Mount.Raw` (section 5, step 4); the UI
+must not call such a path expecting the flat shape.
 
 - The UI is built on app-shell and the BOM-pinned kits (`bom/bom.yaml` `kits:`, exact versions, no `^`). Run
   `substrate frontend -f cmd/myapp/substrate.yaml` to generate the frontend manifest and use the pinned versions.

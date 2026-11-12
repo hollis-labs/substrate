@@ -9,7 +9,20 @@
 // every handler to return and then returns nil; a handler that ignores Stopping holds Serve for
 // GracePeriod (default 10s), after which r.Context() is cancelled, connections are closed and
 // Serve returns an error. r.Context() is not cancelled by a graceful stop, so a request doing
-// real work is allowed to finish.
+// real work is allowed to finish. An app's own background goroutines started from a handler
+// should watch the app context, not Stopping(r): Stopping is for the request's own connection.
+//
+// # Error bodies
+//
+// Every route and mount is wrapped in apierr.Normalize, so a 4xx or 5xx JSON body of the form
+// {"error":{"code","message"}} reaches the client as the flat {code, message}. That is right
+// for an app's own API and wrong for a handler that relays a third-party protocol whose error
+// shape clients depend on (an OpenAI-dialect gateway: {"error":{"message","type","param","code"}}).
+// For those, declare the path once: Options.RawPrefixes for routes under /api/, Mount.Raw for
+// a mount. The handler's response (status, headers, body, stream) is then served untouched.
+// The guard, the scope table and every other refusal by the framework for that path still
+// answer in the flat shape, so a client sees the upstream dialect for upstream errors and the
+// framework shape for framework refusals. Do not use it for an app's own API.
 package httphost
 
 import (
@@ -54,6 +67,13 @@ type Options struct {
 	// Mounts are app handlers served outside /api/, for paths a protocol fixes
 	// (an A2A endpoint, /.well-known/...). Everything else belongs under /api/.
 	Mounts []Mount
+	// RawPrefixes are path prefixes under /api/ whose handlers' responses skip
+	// apierr.Normalize, for relaying a third-party protocol whose error shape clients
+	// depend on (see the package comment). Each must start with /api/, end with "/", be more
+	// than "/api/" itself, appear once, and not overlap a path a module declared; a prefix
+	// equal to a mount's path makes that mount raw. Refused otherwise, naming the prefix.
+	// The guard and the framework's own refusals stay flat.
+	RawPrefixes []string
 }
 
 // Mount is an app handler at a net/http mux pattern ("/a2a/" or "GET /.well-known/agent.json").
@@ -65,11 +85,17 @@ type Mount struct {
 	Pattern string
 	Handler http.Handler
 	Open    bool
+	// Raw serves the handler's responses untouched (no apierr.Normalize), for a protocol whose
+	// error shape clients depend on. Under the guard (not Open) the guard's own refusals stay flat.
+	Raw bool
 }
 
 // Handler builds the app handler after all modules have started, so modules
 // that published handlers (health, capabilities) are mounted.
 func Handler(app *module.App, o Options) (http.Handler, error) {
+	if err := checkRawPrefixes(app, o); err != nil {
+		return nil, err
+	}
 	api := http.NewServeMux()
 	if o.Routes != nil {
 		api.Handle("/api/", o.Routes)
@@ -101,6 +127,16 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	apiHandler := apierr.Normalize(guard(api))
+	if len(o.RawPrefixes) > 0 {
+		apiHandler = rawSplit(apiHandler, guard, api, func(path string) bool {
+			for _, p := range o.RawPrefixes {
+				if strings.HasPrefix(path, p) {
+					return true
+				}
+			}
+			return false
+		})
+	}
 	h, err := apphost.New(apphost.Config{Name: app.Name, Assets: o.Assets, Routes: apiHandler})
 	if err != nil {
 		return nil, err
@@ -128,12 +164,100 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		if !m.Open {
 			hh = apierr.Normalize(guard(m.Handler))
 		}
+		if m.Raw || rawMount(o.RawPrefixes, m.Pattern) {
+			hh = m.Handler
+			if !m.Open {
+				hh = rawSplit(nil, guard, m.Handler, func(string) bool { return true })
+			}
+		}
 		if err := handle(outer, m.Pattern, hh); err != nil {
 			return nil, err
 		}
 	}
 	outer.Handle("/", h.Handler())
 	return outer, nil
+}
+
+// rawSplit serves a request whose path is raw through the guard with the guard's own refusals
+// normalised and the handler behind it writing to the real ResponseWriter, so its response is
+// untouched. A request that is not raw goes to normal.
+//
+// The guard runs under apierr.Normalize (its 401, 403 route_not_mapped and the like are flat);
+// the handler it admits ignores the writer the guard handed it and writes to the original one,
+// which Normalize never sees. The request (and its context: principal, Stopping) is the guard's.
+func rawSplit(normal http.Handler, guard func(http.Handler) http.Handler, inner http.Handler, isRaw func(string) bool) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isRaw(r.URL.Path) {
+			normal.ServeHTTP(w, r)
+			return
+		}
+		admitted := http.HandlerFunc(func(_ http.ResponseWriter, r2 *http.Request) { inner.ServeHTTP(w, r2) })
+		apierr.Normalize(guard(admitted)).ServeHTTP(w, r)
+	})
+}
+
+func mountPath(pattern string) string {
+	if i := strings.IndexByte(pattern, ' '); i >= 0 {
+		return strings.TrimSpace(pattern[i+1:])
+	}
+	return pattern
+}
+
+// rawMount reports whether a declared raw prefix names this mount's path.
+func rawMount(prefixes []string, pattern string) bool {
+	mp := mountPath(pattern)
+	for _, p := range prefixes {
+		if !strings.HasPrefix(p, "/api/") && strings.HasPrefix(mp, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// checkRawPrefixes validates Options.RawPrefixes before anything is built.
+func checkRawPrefixes(app *module.App, o Options) error {
+	seen := map[string]bool{}
+	for _, p := range o.RawPrefixes {
+		switch {
+		case p == "":
+			return fmt.Errorf("httphost: raw prefix is empty")
+		case seen[p]:
+			return fmt.Errorf("httphost: raw prefix %q is listed twice", p)
+		case !strings.HasPrefix(p, "/"):
+			return fmt.Errorf("httphost: raw prefix %q must start with /api/", p)
+		case p == "/api/":
+			return fmt.Errorf("httphost: raw prefix %q is all of /api/; name the relay's own subtree", p)
+		}
+		seen[p] = true
+		if !strings.HasSuffix(p, "/") {
+			return fmt.Errorf("httphost: raw prefix %q must end with / (it is a path prefix, so /api/x would also match /api/xy)", p)
+		}
+		if strings.Contains(p, "..") || strings.Contains(p, "//") || strings.ContainsAny(p, " {}") {
+			return fmt.Errorf("httphost: raw prefix %q is not a plain path prefix", p)
+		}
+		if !strings.HasPrefix(p, "/api/") {
+			ok := false
+			for _, m := range o.Mounts {
+				if strings.HasPrefix(mountPath(m.Pattern), p) {
+					ok = true
+				}
+			}
+			if !ok {
+				return fmt.Errorf("httphost: raw prefix %q is outside /api/ and names no mount; set Mount.Raw on a mount instead", p)
+			}
+			continue
+		}
+		for _, r := range module.Routes(app) {
+			rp := r.Path
+			if i := strings.IndexByte(rp, '{'); i >= 0 {
+				rp = rp[:i]
+			}
+			if strings.HasPrefix(rp, p) || (strings.HasSuffix(rp, "/") && strings.HasPrefix(p, rp)) {
+				return fmt.Errorf("httphost: raw prefix %q overlaps the route %s declared by a module", p, r.Path)
+			}
+		}
+	}
+	return nil
 }
 
 // checkMount refuses a mount that is malformed or aims at a path the host owns.

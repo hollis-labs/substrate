@@ -77,6 +77,9 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
 - Every declared route needs a handler and every handler a declared route; `AddRoutes` fails otherwise.
 - Errors use `apierr.Write(w, status, code, message, details)`, the flat `{code, message, details?}` body the
   frontend reads. Streaming handlers must not buffer; the wrapper in httphost passes `Flush` through.
+  A module that relays a third-party protocol cannot choose its own error shape from inside: the app declares the
+  path raw (`httphost.Options.RawPrefixes`, `Mount.Raw`; `docs/adopting-substrate.md` section 5), so say in your
+  docs which prefix the app must list.
 - The same file can carry UI `contributions`, `envelopes` and a companion `package`, validated against
   `ui.Default`. The kinds are the design team's vocabulary (SF-2 v0.4.1): `nav.item`, `nav.group`,
   `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`, `menu.item`, `command`; do not invent others. Each kind takes only
