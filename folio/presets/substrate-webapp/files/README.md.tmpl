@@ -31,7 +31,18 @@ environment variable the app reads is `{{ upper (replace "-" "_" .inputs.repo_na
 
 `frontend/` is a React app on app-shell and the BOM-pinned kits. **First step: `cd frontend && npm install`,
 then commit `package-lock.json`** (CI runs `npm ci` and fails without the lock). Then `make ui-build` builds into `internal/webui/dist`, which the binary
-embeds; `make ui-dev` runs the dev server against a running backend.
+embeds; `make ui-dev` runs the dev server (port 5173) against a running backend.
+
+**Signing in through the dev server.** The dev server proxies `/api` without changing the `Origin`, and
+identity refuses a cookie write from an origin that is not the backend's own (`403 bad_origin`). In your
+**development** override file (the one `SUBSTRATE_CONFIG` names on your machine), and only there, add:
+
+```yaml
+identity:
+  allowed_origins: ["http://127.0.0.1:5173"]
+```
+
+Never put `allowed_origins` in `substrate.yaml` or in a deployed config.
 
 ## Checks
 

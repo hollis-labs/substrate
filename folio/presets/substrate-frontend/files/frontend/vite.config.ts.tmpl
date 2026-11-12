@@ -23,5 +23,6 @@ export default defineConfig({
   // app-shell ships TypeScript source; the dependency optimizer needs the same JSX runtime.
   optimizeDeps: { esbuildOptions: { jsx: "automatic" } },
   build: { outDir, emptyOutDir: true },
-  server: { proxy: { "/api": backend } },
+  // A fixed port: the dev origin must be listed in identity.allowed_origins of the DEVELOPMENT config (README.md).
+  server: { port: 5173, strictPort: true, proxy: { "/api": backend } },
 })

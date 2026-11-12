@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "predev": "npm run manifest",
     "prebuild": "npm run manifest",
     "build": "vite build",
     "preview": "vite preview",
@@ -23,6 +24,7 @@
     "@hollis-labs/design-components": "{{ .inputs.kit_design_components }}",
     "@hollis-labs/design-tokens": "{{ .inputs.kit_design_tokens }}",
     "@hollis-labs/kit-dashboard": "{{ .inputs.kit_dashboard }}",
+    "@hollis-labs/plugin-host-ui": "{{ .inputs.kit_plugin_host_ui }}",
     "lucide-react": "1.52.0",
     "react": "19.3.0",
     "react-dom": "19.3.0"

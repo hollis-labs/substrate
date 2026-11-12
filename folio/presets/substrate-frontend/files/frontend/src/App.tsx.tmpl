@@ -42,10 +42,14 @@ export function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [path, navigate] = usePath()
-  const signedOut = useCallback(() => {
-    setName(null)
-    navigate("/")
-  }, [navigate])
+  // A session that ends keeps the current path, so the sign-in returns to it; an explicit sign-out goes home.
+  const signedOut = useCallback(
+    (home = false) => {
+      setName(null)
+      if (home) navigate("/")
+    },
+    [navigate],
+  )
   useEffect(() => {
     async function load() {
       try {
@@ -70,8 +74,9 @@ export function App() {
     void load()
   }, [])
   useEffect(() => {
-    window.addEventListener(UNAUTHORIZED_EVENT, signedOut)
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, signedOut)
+    const onUnauthorized = () => signedOut()
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
   }, [signedOut])
   const session = useMemo<Session | null>(
     () => (name === null ? null : { name, signedOut }),
@@ -80,8 +85,8 @@ export function App() {
 
   if (loading)
     return (
-      <main className="entry-loading" role="status">
-        Opening {APP_NAME}…
+      <main className="entry-loading">
+        <p role="status">Opening {APP_NAME}…</p>
       </main>
     )
   if (error && !session)

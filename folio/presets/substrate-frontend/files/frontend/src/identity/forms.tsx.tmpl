@@ -1,4 +1,4 @@
-import { type ReactNode, useId } from "react"
+import { type ReactNode, type Ref, useId } from "react"
 
 export function Field({ label, children }: { label: string; children: (id: string) => ReactNode }) {
   const id = useId()
@@ -10,9 +10,9 @@ export function Field({ label, children }: { label: string; children: (id: strin
   )
 }
 
-export function Notice({ error }: { error?: string }) {
+export function Notice({ error, ref }: { error?: string; ref?: Ref<HTMLParagraphElement> }) {
   return error ? (
-    <p className="text-danger" role="alert">
+    <p className="text-danger" role="alert" tabIndex={-1} ref={ref}>
       {error}
     </p>
   ) : null

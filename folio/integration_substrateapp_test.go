@@ -396,7 +396,7 @@ func bomKits(t *testing.T, version string) map[string]string {
 	for _, m := range re.FindAllStringSubmatch(bom, -1) {
 		kits[m[1]] = m[2]
 	}
-	for _, k := range []string{"app-shell", "design-app-runtime", "design-bindings", "design-components", "design-tokens", "kit-dashboard"} {
+	for _, k := range []string{"app-shell", "design-app-runtime", "design-bindings", "design-components", "design-tokens", "kit-dashboard", "plugin-host-ui"} {
 		if kits[k] == "" {
 			t.Fatalf("bom.yaml pins no @hollis-labs/%s", k)
 		}
@@ -416,6 +416,7 @@ func renderSubstrateWebapp(t *testing.T, name, version string, kits map[string]s
 		"kit_design_components":  kits["design-components"],
 		"kit_design_tokens":      kits["design-tokens"],
 		"kit_dashboard":          kits["kit-dashboard"],
+		"kit_plugin_host_ui":     kits["plugin-host-ui"],
 	}
 	for k, v := range extra {
 		inputs[k] = v
@@ -425,7 +426,7 @@ func renderSubstrateWebapp(t *testing.T, name, version string, kits map[string]s
 }
 
 func TestSubstrateWebapp_RendersTree(t *testing.T) {
-	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0"}
+	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0", "plugin-host-ui": "0.3.0"}
 	target, err := renderSubstrateWebapp(t, "webby", "v0.1.1-0.20261112164520-da9f59bb59b7", kits, nil)
 	if err != nil {
 		t.Fatalf("service.New substrate-webapp: %v", err)
@@ -456,6 +457,15 @@ func TestSubstrateWebapp_RendersTree(t *testing.T) {
 	manifest := readText(t, filepath.Join(target, "cmd", "webby", "substrate.yaml"))
 	if !strings.Contains(manifest, "frontend: { contributions: ui/app.json }") {
 		t.Errorf("manifest does not name the contributions file:\n%s", manifest)
+	}
+	// The shipped config never lists an allowed origin; the dev sign-in note is README-only (dev override file).
+	for _, p := range []string{"cmd/webby/substrate.yaml", "cmd/webby/substrate_wiring.go", "deploy.yaml"} {
+		if strings.Contains(readText(t, filepath.Join(target, filepath.FromSlash(p))), "allowed_origins") {
+			t.Errorf("%s must not set identity.allowed_origins", p)
+		}
+	}
+	if readme := readText(t, filepath.Join(target, "README.md")); !strings.Contains(readme, "allowed_origins") || !strings.Contains(readme, "development") {
+		t.Error("README must document the dev-only allowed_origins for the Vite origin")
 	}
 	check := readText(t, filepath.Join(target, ".github", "workflows", "check.yml"))
 	if !strings.Contains(check, "npm run typecheck") || !strings.Contains(check, "npm run build") {
@@ -492,13 +502,13 @@ func TestSubstrateWebapp_RendersTree(t *testing.T) {
 }
 
 func TestSubstrateWebapp_KitInputsAreRequired(t *testing.T) {
-	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0"}
+	kits := map[string]string{"app-shell": "0.1.0", "design-app-runtime": "0.5.0", "design-bindings": "0.2.0", "design-components": "0.5.1", "design-tokens": "0.5.0", "kit-dashboard": "0.6.0", "plugin-host-ui": "0.3.0"}
 	for _, drop := range []string{"kit_app_shell", "kit_dashboard"} {
 		target := filepath.Join(t.TempDir(), "webby")
 		inputs := map[string]any{
 			"repo_name": "webby", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7",
 			"kit_app_shell": kits["app-shell"], "kit_design_app_runtime": kits["design-app-runtime"], "kit_design_bindings": kits["design-bindings"],
-			"kit_design_components": kits["design-components"], "kit_design_tokens": kits["design-tokens"], "kit_dashboard": kits["kit-dashboard"],
+			"kit_design_components": kits["design-components"], "kit_design_tokens": kits["design-tokens"], "kit_dashboard": kits["kit-dashboard"], "kit_plugin_host_ui": kits["plugin-host-ui"],
 		}
 		delete(inputs, drop)
 		_, err := newGoLibService(t).New(service.NewOptions{PresetID: "substrate-webapp", TargetDir: target, Inputs: inputs})

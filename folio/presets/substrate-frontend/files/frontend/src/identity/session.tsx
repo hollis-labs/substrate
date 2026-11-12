@@ -4,8 +4,8 @@ import { createContext, useContext } from "react"
 export interface Session {
   /** Display name. */
   name: string
-  /** Drop back to the sign-in screen. */
-  signedOut: () => void
+  /** Drop back to the sign-in screen; `home` also returns to "/" (an explicit sign-out), otherwise the path is kept for after sign-in. */
+  signedOut: (home?: boolean) => void
 }
 
 export const SessionContext = createContext<Session | null>(null)

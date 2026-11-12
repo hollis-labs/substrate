@@ -77,17 +77,6 @@ fieldset {
 .form-width {
   max-width: 36rem;
 }
-.split {
-  display: grid;
-  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
-  gap: 1.5rem;
-  align-items: start;
-}
-@media (max-width: 64rem) {
-  .split {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
 .mono {
   font-family: var(--font-mono, ui-monospace, monospace);
 }

@@ -68,6 +68,11 @@ inputs:
     required: true
     pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
     description: "@hollis-labs/kit-dashboard, exact, from the Substrate bom.yaml kits block. No default."
+  - name: kit_plugin_host_ui
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/plugin-host-ui, exact (app-shell depends on it with a range, so it is pinned directly), from the Substrate bom.yaml kits block. No default."
 
 files:
   source: ./files

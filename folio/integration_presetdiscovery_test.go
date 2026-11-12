@@ -42,7 +42,7 @@ func frontendInputs(name string) map[string]any {
 	return map[string]any{
 		"repo_name": name, "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7",
 		"kit_app_shell": "0.1.0", "kit_design_app_runtime": "0.5.0", "kit_design_bindings": "0.2.0",
-		"kit_design_components": "0.5.1", "kit_design_tokens": "0.5.0", "kit_dashboard": "0.6.0",
+		"kit_design_components": "0.5.1", "kit_design_tokens": "0.5.0", "kit_dashboard": "0.6.0", "kit_plugin_host_ui": "0.3.0",
 	}
 }
 
