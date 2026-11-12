@@ -90,3 +90,24 @@ func (s *Service) CreateKey(ctx context.Context, in KeyInput) (string, Credentia
 	}
 	return keyPrefix + secret, c, nil
 }
+
+// RevokeKey revokes the API key with the given id (the Credential.ID CreateKey
+// returned, or the id in GET /api/identity/keys). It is the one path: the
+// DELETE /api/identity/keys/{id} handler calls it.
+//
+// The effect is immediate for the key itself: credentials are read from the
+// database on every verification, so the next request or the next stdio start
+// that presents the key is refused with no cache to wait out. Revoking an
+// already revoked key is not an error (nil), so a caller that revokes when a
+// child stops and again when its key is renewed need not track which came first.
+// An id that never existed is ErrNotFound. Ending the key does not end what it
+// already produced: an EdDSA token minted from it by POST /api/token keeps
+// verifying until its own expiry (15 minutes by default, at most an hour), and a
+// running mcp.ServeStdio process verified its token file once at start and keeps
+// serving under that principal until it exits.
+func (s *Service) RevokeKey(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return ErrNotFound
+	}
+	return s.db.revokeCredential(ctx, id, time.Now())
+}
