@@ -166,6 +166,14 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    `identity:` block. It provides `/api/setup`, `/api/login`, `/api/logout`, `/api/password`, `/api/identity/*`,
    `/api/token`, `/api/pair` and `/api/identity/jwks`. Do not rebuild setup, login, sessions, passwords, API keys or
    pairing in the app.
+   **First-run rule: never open setup over HTTP on a host where agents run; loopback is not a boundary.** The module
+   closes it by default (`identity.setup: offline`: `POST /api/setup` is always refused). Create the owner and the first
+   keys offline with the commands the cli module adds (select `cli` next to `identity`; see `docs/identity.md`, Offline
+   bootstrap). The sequence is: migrate-data (the app's migration, which creates the database), then bootstrap
+   (`<app> identity setup --username ...` with the password on stdin, then `<app> identity key create --name ... --scope ...
+   --out FILE` for each machine caller), then start the service, and check `GET /api/setup` answers
+   `setup_required: false`. Script all of it; the commands never prompt when stdin is not a terminal. To keep the old
+   HTTP first-run for local development only, set `identity: {setup: http}`.
 2. Wrap the final handler: `identity.From(app).Middleware(handler)`. Browser writes then need an `X-Requested-With`
    header and a same-origin `Origin`.
 3. Declare each route's scope. Either list routes in a module-style `ui.json` and bind handlers with
@@ -242,7 +250,17 @@ Map every old environment variable to a config key (or drop it on purpose) and w
   check --app .` must pass in the app; `pins sync` rewrites `go.mod` and the CI workflow. A lib the BOM does not
   list is a one-line Substrate PR, not a local `go.mod` exception.
 - CI: `go vet`, the pins check, `go test -race`, `golangci-lint`, the frontend typecheck/lint/build (built before
-  `go test` so the embed has assets) and `python3 scripts/scan-public --ref HEAD`. Copy the workflow from a ported app.
+  `go test` so the embed has assets) and `go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD`.
+  Copy the workflow from a ported app.
+- Do not copy `scripts/scan-public` into the app: `substrate scan-public` carries it (one source, pinned with the
+  Substrate version in `go.mod`). It runs the embedded script with `python3 -I` (Python 3 must be on `PATH`; GitHub
+  runners have it) and takes the script's flags: `--ref REV` (repeatable), `--repo DIR` (default the current
+  directory), `--tree`, `--history`, `--no-gitleaks`, `--allowlist FILE`, `--no-allowlist`, `--source`. Exit 0 clean,
+  1 findings, 2 the scanner could not run. The app keeps only its own allowlists at its repository root:
+  `scan-public.allow` and `scan-public.allow.d/*.allow`, lines `RULE-ID PATH-GLOB REASON`; allowlisted findings are
+  still printed and counted. gitleaks runs too when it is on `PATH`. To move an app over: change the CI line, delete
+  `scripts/scan-public`, keep the allow files, run both once on the same ref and compare. (`pins sync` does not
+  template this line: it rewrites version pins inside the workflow, not steps, so the line is edited by hand.)
 - The repository is probably public. No secrets, internal hosts or addresses, or personal paths in files, commits or
   CI. Scan history as well as the tree; fixing history later is expensive.
 
@@ -268,12 +286,12 @@ app's Torque task:
 4. **Deploy**: build once in CI, install from GitHub (`fleet-install deploy <app> --commit <sha>` with
    `--dry-run` first), keep the previous version for rollback, health-check `/healthz`.
 5. **Rollback**: the previous release is relinked and the moved-aside data is restored. State it before you start.
-6. **Verify live**: setup or sign-in, one write, one read through the real proxy URL, and an unknown `Host` refused.
+6. **Verify live**: sign-in (the owner already exists from the offline bootstrap; `GET /api/setup` says `setup_required: false`), one write, one read through the real proxy URL, and an unknown `Host` refused.
 
 ## 12. Evidence before you open the PR
 
 Run and report the actual output of: `go vet ./...`, `go test -race ./...`, `golangci-lint run`, `pins check --app .`,
-frontend typecheck/lint/build, `scan-public --ref HEAD`. Then run the real binary on a throwaway data directory and
+frontend typecheck/lint/build, `substrate scan-public --ref HEAD`. Then run the real binary on a throwaway data directory and
 exercise setup, sign-in, a write, a read, a refused request and `SIGTERM`. For an app with a UI, drive it in a real
 browser against the real backend; a stub backend proves the UI only. Say plainly what you did not verify.
 
