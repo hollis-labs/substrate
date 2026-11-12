@@ -59,7 +59,7 @@ func TestSubstrateApp_RendersTree(t *testing.T) {
 		"AGENTS.md", "CHANGELOG.md", "LICENSE", "README.md", "deploy.yaml", "go.mod", "scan-public.allow",
 		"cmd/myapp/main.go", "cmd/myapp/config.go", "cmd/myapp/serve.go", "cmd/myapp/substrate.yaml", "cmd/myapp/substrate_wiring.go", "cmd/myapp/plan_test.go",
 		"docs/identity-bootstrap.md",
-		"internal/api/api.go", "internal/api/api_test.go", "internal/hostguard/hostguard.go", "internal/hostguard/hostguard_test.go",
+		"internal/api/api.go", "internal/api/api_test.go", "internal/service/service.go", ".golangci.transport.yml", "docs/transport-boundary.md", "internal/hostguard/hostguard.go", "internal/hostguard/hostguard_test.go",
 		"internal/settings/settings.go", "internal/settings/settings_test.go", "internal/webui/webui.go", "internal/webui/dist/.gitkeep",
 		"internal/storage/migrations.go", "internal/storage/migrations/sqlite/00001_init.sql",
 	}
@@ -194,6 +194,7 @@ func TestSubstrateApp_BuildsAndRuns(t *testing.T) {
 			mustRun(t, dir, "go", "test", "-race", "./...")
 			bin := filepath.Join(dir, name)
 			mustRun(t, dir, "go", "build", "-o", bin, "./cmd/"+name)
+			checkTransportGate(t, dir)
 			checkPrintOnlyCommands(t, bin, name)
 			driveSubstrateBinary(t, bin, name, port)
 		})
@@ -550,6 +551,7 @@ func TestSubstrateWebapp_BuildsAndServesUI(t *testing.T) {
 	mustRun(t, dir, "go", "test", "-race", "./...")
 	bin := filepath.Join(dir, "webby")
 	mustRun(t, dir, "go", "build", "-o", bin, "./cmd/webby")
+	checkTransportGate(t, dir)
 	checkPrintOnlyCommands(t, bin, "webby")
 	serveAndFetchSPA(t, bin, "webby", port)
 }
@@ -601,5 +603,36 @@ func serveAndFetchSPA(t *testing.T, bin, name, port string) {
 	req.Host = "evil.example"
 	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != http.StatusForbidden {
 		t.Errorf("unknown Host not refused: %v %v", err, resp)
+	}
+}
+
+// checkTransportGate runs the rendered second lint config: clean on the render, and a positive control
+// per rule: a handler that imports database/sql, the database module or the storage package is reported.
+func checkTransportGate(t *testing.T, dir string) {
+	t.Helper()
+	lint := func() (string, error) {
+		return run(t, dir, "go", "run", "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4", "run", "--config", ".golangci.transport.yml", "./...")
+	}
+	if out, err := lint(); err != nil {
+		t.Fatalf("transport lint is not clean on the render: %v\n%s", err, out)
+	}
+	module := strings.Fields(strings.SplitN(readText(t, filepath.Join(dir, "go.mod")), "\n", 2)[0])[1]
+	bad := filepath.Join(dir, "internal", "api", "zz_violation.go")
+	for name, imp := range map[string]string{
+		"database/sql":    "database/sql",
+		"database module": "github.com/hollis-labs/substrate/modules/database",
+		"storage package": module + "/internal/storage",
+	} {
+		src := "package api\n\nimport _ \"" + imp + "\"\n"
+		if err := os.WriteFile(bad, []byte(src), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		out, err := lint()
+		if err == nil || !strings.Contains(out, "transport-boundary") {
+			t.Errorf("a handler importing the %s must be reported: err=%v\n%s", name, err, out)
+		}
+	}
+	if err := os.Remove(bad); err != nil {
+		t.Fatal(err)
 	}
 }

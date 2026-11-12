@@ -4,13 +4,14 @@ package api
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
 	"github.com/hollis-labs/substrate/apierr"
+
+	"{{ .computed.module_path }}/internal/service"
 )
 
 // Scopes the API requires. The owner holds "*".
@@ -38,24 +39,17 @@ func RegisterScopes(t *libauth.ScopeTable) {
 	}
 }
 
-// Reader is the read pool of the database module's store; Writer is its write handle.
-type (
-	Reader interface {
-		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	}
-	Writer interface {
-		ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	}
-)
-
-// Handler serves the routes over the database module's store.
-type Handler struct {
-	read  Reader
-	write Writer
+// Items is what the handlers need from the service layer (internal/service implements it).
+type Items interface {
+	ListItems(ctx context.Context, owner string) ([]service.Item, error)
+	CreateItem(ctx context.Context, owner, title string) (int64, error)
 }
 
-// New builds the handler over a read pool and a write handle.
-func New(read Reader, write Writer) *Handler { return &Handler{read: read, write: write} }
+// Handler serves the routes over the service layer. It holds no SQL and no store.
+type Handler struct{ items Items }
+
+// New builds the handler.
+func New(items Items) *Handler { return &Handler{items: items} }
 
 // Mux returns the routes for httphost.Options.Routes.
 func (h *Handler) Mux() *http.ServeMux {
@@ -63,12 +57,6 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux.HandleFunc("GET /api/items", h.list)
 	mux.HandleFunc("POST /api/items", h.create)
 	return mux
-}
-
-type item struct {
-	ID        int64  `json:"id"`
-	Title     string `json:"title"`
-	CreatedAt string `json:"created_at"`
 }
 
 // owner is the verified principal's subject: the data owner of a row is never a request field.
@@ -86,26 +74,12 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, http.StatusUnauthorized, "unauthorized", "Sign in required", nil)
 		return
 	}
-	rows, err := h.read.QueryContext(r.Context(), `SELECT id, title, created_at FROM items WHERE owner = ? ORDER BY id`, who)
+	items, err := h.items.ListItems(r.Context(), who)
 	if err != nil {
 		apierr.Write(w, http.StatusInternalServerError, "internal", "Could not list items", nil)
 		return
 	}
-	defer func() { _ = rows.Close() }()
-	out := []item{}
-	for rows.Next() {
-		var it item
-		if err := rows.Scan(&it.ID, &it.Title, &it.CreatedAt); err != nil {
-			apierr.Write(w, http.StatusInternalServerError, "internal", "Could not list items", nil)
-			return
-		}
-		out = append(out, it)
-	}
-	if err := rows.Err(); err != nil {
-		apierr.Write(w, http.StatusInternalServerError, "internal", "Could not list items", nil)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
@@ -121,12 +95,11 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, http.StatusBadRequest, "invalid_request", "title is required", nil)
 		return
 	}
-	res, err := h.write.ExecContext(r.Context(), `INSERT INTO items (owner, title) VALUES (?, ?)`, who, strings.TrimSpace(in.Title))
+	id, err := h.items.CreateItem(r.Context(), who, in.Title)
 	if err != nil {
 		apierr.Write(w, http.StatusInternalServerError, "internal", "Could not create the item", nil)
 		return
 	}
-	id, _ := res.LastInsertId()
 	writeJSON(w, http.StatusCreated, map[string]any{"id": id})
 }
 

@@ -48,5 +48,10 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4
+      # The second lint run: transports call the service layer, not the store (docs/transport-boundary.md).
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.4
+          args: --config .golangci.transport.yml
       - name: hygiene (secrets, hosts, private paths)
         run: go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD
