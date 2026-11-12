@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -187,5 +189,68 @@ func TestServeReadsTheAddressFromConfig(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Error(err)
+	}
+}
+
+// captureLogs routes the default logger into a buffer for the test.
+type logBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func captureLogs(t *testing.T) *logBuf {
+	t.Helper()
+	buf := &logBuf{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
+}
+
+// serveBriefly serves on a free loopback port until the bind is up, then stops.
+func serveBriefly(t *testing.T, cfg string) {
+	t.Helper()
+	app, stop := serveApp(t, cfg)
+	defer stop()
+	ctx, cancel := context.WithCancel(context.Background())
+	bound := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- httphost.Serve(ctx, app, http.NotFoundHandler(), httphost.ServeOptions{Addr: "127.0.0.1:0", Ready: func(a net.Addr) { bound <- a }})
+	}()
+	<-bound
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServeWarnsWhenAuthIsNotEnforcing(t *testing.T) {
+	for _, mode := range []string{"off", "permissive"} {
+		buf := captureLogs(t)
+		serveBriefly(t, `{"auth":{"mode":"`+mode+`"}}`)
+		if got := strings.Count(buf.String(), "auth is not enforcing"); got != 1 {
+			t.Errorf("%s: warning logged %d times, want once: %s", mode, got, buf)
+		}
+	}
+}
+
+func TestServeIsQuietWhenAuthEnforces(t *testing.T) {
+	buf := captureLogs(t)
+	serveBriefly(t, `{"auth":{"mode":"enforce","api_keys":[{"id":"svc/a","hash":"`+libauth.HashKey("k")+`","scopes":["t.a"]}]}}`)
+	if strings.Contains(buf.String(), "not enforcing") {
+		t.Errorf("warned while enforcing: %s", buf)
 	}
 }

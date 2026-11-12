@@ -57,10 +57,17 @@ const (
 
 func newLimiter() *limiter { return &limiter{fails: map[string][]time.Time{}} }
 
-func (l *limiter) blocked(key string, now time.Time) bool {
+// wait is how long until key may try again: zero when it is not blocked. The
+// failures are in time order, so the block lifts when the oldest one that keeps
+// the count at maxFails leaves the window.
+func (l *limiter) wait(key string, now time.Time) time.Duration {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return len(l.recent(key, now)) >= maxFails
+	r := l.recent(key, now)
+	if len(r) < maxFails {
+		return 0
+	}
+	return r[len(r)-maxFails].Add(window).Sub(now)
 }
 
 func (l *limiter) fail(key string, now time.Time) {
