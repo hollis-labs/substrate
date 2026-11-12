@@ -30,6 +30,7 @@ func (s *Service) handlers() map[string]http.Handler {
 		"POST /api/pair":                   h(s.pair),
 		"POST /api/logout":                 h(s.logout),
 		"PUT /api/password":                h(s.changePassword),
+		"GET /api/identity/profile":        h(s.getProfile),
 		"PUT /api/identity/profile":        h(s.updateProfile),
 		"POST /api/token":                  h(s.tokenHandler),
 		"GET /api/identity/sessions":       h(s.sessions),
@@ -294,6 +295,32 @@ func (s *Service) changePassword(w http.ResponseWriter, r *http.Request) {
 	// A new password ends every other sign-in.
 	_ = s.db.revokeSessionsExcept(r.Context(), u.ID, p.SessionID, now)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// assuranceLocal is the only assurance this module can vouch for: the host
+// holds the credentials. "verified" is reserved for an external verifier and is
+// never emitted here.
+const assuranceLocal = "local"
+
+// getProfile answers who the signed-in person is. A request with no credential
+// never reaches it (the guard answers 401). A caller that is not a person (an
+// API key, a minted token for a service, a disabled or removed account) gets
+// 403 user_required, as every other person-only route answers.
+func (s *Service) getProfile(w http.ResponseWriter, r *http.Request) {
+	p, ok := caller(r)
+	if !ok || !strings.HasPrefix(p.ID, "user:") {
+		apierr.Write(w, http.StatusForbidden, "user_required", "this needs a signed-in user", nil)
+		return
+	}
+	u, err := s.User(r.Context(), strings.TrimPrefix(p.ID, "user:"))
+	if err != nil || u.Disabled {
+		apierr.Write(w, http.StatusForbidden, "user_required", "this needs a signed-in user", nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id": u.ID, "username": u.Username, "display_name": u.DisplayName,
+		"email": u.Email, "scopes": u.Scopes, "assurance": assuranceLocal,
+	})
 }
 
 func (s *Service) updateProfile(w http.ResponseWriter, r *http.Request) {
