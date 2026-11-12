@@ -29,8 +29,8 @@ github.com/hollis-labs/libs/core/util v0.6.0 h1:uqVSuuRtKAzwDcMf5ekFlBUO9g6aZzAA
 github.com/hollis-labs/libs/core/util v0.6.0/go.mod h1:CpS3EUj+MHivKVnGWJj8Vtq1+J3TN1uPyPCbLzhQLh0=
 github.com/hollis-labs/libs/mcp/plugin-mcp v0.6.0 h1:wS9KsD0Jk4QD+SEepirMGZJwUtXpL5hMjPL/wYdEk20=
 github.com/hollis-labs/libs/mcp/plugin-mcp v0.6.0/go.mod h1:jf0jxxm5UOa5YBETO4u8WTD6JY87VAhxkBZgCnFd+UA=
-github.com/hollis-labs/libs/security/auth v0.3.0 h1:gy0PK2vPWBhr+tAQ5WDw+TZN6YgVHHWXN2oeaYNHxdA=
-github.com/hollis-labs/libs/security/auth v0.3.0/go.mod h1:GGJqJuSZwR57ygyml3kPt6Aw2rwPqAzTV2M9CXjTjo8=
+github.com/hollis-labs/libs/security/auth v0.3.1 h1:Oi9xrIucjr0mBcGCWGOiS8KC/+cI/HH8ZJ+ZIobFXKU=
+github.com/hollis-labs/libs/security/auth v0.3.1/go.mod h1:GGJqJuSZwR57ygyml3kPt6Aw2rwPqAzTV2M9CXjTjo8=
 github.com/hollis-labs/libs/security/policy v0.1.0 h1:XsksYYhpJ315wlr9QmWwxUKRfyDAJSSRiekBh7jpI70=
 github.com/hollis-labs/libs/security/policy v0.1.0/go.mod h1:vFJQekM6tI5OV+2rqK+mx/imNUSSJ26PkvAvgMmdQBo=
 github.com/hollis-labs/libs/security/redact v0.2.0 h1:yaKmfWRMwlaAH1uur2yyS+DJjdhoM1XEdOdsafOhzjI=
