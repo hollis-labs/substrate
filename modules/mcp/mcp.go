@@ -33,6 +33,12 @@
 // by this definition; a gateway that serves several callers through one child must
 // authorize per caller or give the child a token. Enforced identity stays on /mcp.
 //
+// App authors: an app with a scope that must never be held by an agent on the same
+// host (Tangent has one: approving a human-in-the-loop item) MUST pass LocalScopes
+// that leave it out. Under LocalTrust the default scopes are "*", and local trust is
+// the trust of anyone who can run the binary as that user, which on our hosts
+// includes agents.
+//
 // With auth started, /mcp is mapped to the configured scope in enforce mode and
 // the guard's principal reaches tool handlers; call Authorize(ctx, app, tool)
 // for per-tool scopes.

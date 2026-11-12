@@ -133,3 +133,18 @@ func TestHTTPMCPStaysEnforcedBesideLocalTrust(t *testing.T) {
 		t.Fatalf("HTTP /mcp without credentials: %d", rec.Code)
 	}
 }
+
+// An app with a scope no same-host agent may hold passes LocalScopes without it;
+// the tool mapped to that scope is then refused, and allowed once it is listed.
+func TestLocalScopesWithoutAScopeRefuseAToolMappedToIt(t *testing.T) {
+	app := stdioApp(t, authCfg("enforce"))
+	const guarded = "secret" // mapped to t.admin
+	without, _ := connectWith(t, app, mcp.StdioOptions{LocalTrust: true, LocalScopes: []string{"t.mcp"}, Notice: io.Discard})
+	if out, isErr := callTool(t, without, guarded); !isErr || strings.Contains(out, "classified") {
+		t.Fatalf("LocalScopes without t.admin reached the t.admin tool: %q err=%v", out, isErr)
+	}
+	with, _ := connectWith(t, app, mcp.StdioOptions{LocalTrust: true, LocalScopes: []string{"t.mcp", "t.admin"}, Notice: io.Discard})
+	if out, isErr := callTool(t, with, guarded); isErr || !strings.Contains(out, "classified") {
+		t.Fatalf("LocalScopes with t.admin was refused: %q err=%v", out, isErr)
+	}
+}

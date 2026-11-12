@@ -185,6 +185,8 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    because every caller of a local child is the operator. The process writes one line to stderr naming the local
    principal; audit events carry `principal_id` `local:operator`, which no identity-issued id can equal. Apps that
    key a cache on a verified principal see the local principal as verified.
+
+   **An app with a scope that must never be held by an agent on the same host (Tangent has one: approving a human-in-the-loop item) MUST pass `LocalScopes` that leave it out: under `LocalTrust` the default scopes are `*`, and local trust is the trust of anyone who can run the binary as that user, which on our hosts includes agents.**
 10. One issuer per database. The identity module creates its signing key at start only when the database holds no
     users or API keys; with identity rows and no key file at `identity.key_file` it refuses to start and names the
     path. A child process pointed at the service's database (an explicit `-db`) must point `key_file` at the
