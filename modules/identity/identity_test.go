@@ -521,3 +521,25 @@ func TestConfigErrorsAreRefused(t *testing.T) {
 		t.Error("selecting identity with no identity block was accepted")
 	}
 }
+
+func TestEmptyListsEncodeAsEmptyArraysNotNull(t *testing.T) {
+	a := start(t, "enforce", "")
+	owner := a.owner()
+	r := a.do("GET", "/api/identity/keys", nil, cookie(owner))
+	code(t, r, 200)
+	if got := strings.TrimSpace(r.Body.String()); got != `{"keys":[]}` {
+		t.Errorf("empty keys = %s", got)
+	}
+	// With a key present the list is still a populated array.
+	a.key(owner, map[string]any{"name": "ci", "scopes": []string{"demo.read"}})
+	r = a.do("GET", "/api/identity/keys", nil, cookie(owner))
+	if strings.Contains(r.Body.String(), `"keys":[]`) || strings.Contains(r.Body.String(), "null") {
+		t.Errorf("keys = %s", r.Body)
+	}
+	// Users and sessions are never empty for a signed-in owner, so check the
+	// helper every list route goes through.
+	b, _ := json.Marshal(map[string]any{"a": identity.OrEmptyForTest[int](nil), "b": identity.OrEmptyForTest([]string{"x"})})
+	if string(b) != `{"a":[],"b":["x"]}` {
+		t.Errorf("orEmpty = %s", b)
+	}
+}

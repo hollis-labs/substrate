@@ -62,6 +62,14 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// orEmpty turns a nil slice into an empty one so a list encodes as [] and not null.
+func orEmpty[T any](l []T) []T {
+	if l == nil {
+		return []T{}
+	}
+	return l
+}
+
 func bad(w http.ResponseWriter, msg string) {
 	apierr.Write(w, http.StatusBadRequest, "invalid_request", msg, nil)
 }
@@ -330,7 +338,7 @@ func (s *Service) sessions(w http.ResponseWriter, r *http.Request) {
 	for i := range list {
 		list[i].Current = list[i].ID == p.SessionID
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"sessions": list})
+	writeJSON(w, http.StatusOK, map[string]any{"sessions": orEmpty(list)})
 }
 
 func (s *Service) revokeSession(w http.ResponseWriter, r *http.Request) {
@@ -359,7 +367,7 @@ func (s *Service) listUsers(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"users": users})
+	writeJSON(w, http.StatusOK, map[string]any{"users": orEmpty(users)})
 }
 
 func (s *Service) createUser(w http.ResponseWriter, r *http.Request) {
@@ -459,7 +467,7 @@ func (s *Service) listKeys(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
+	writeJSON(w, http.StatusOK, map[string]any{"keys": orEmpty(keys)})
 }
 
 type keyRequest struct {
