@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hollis-labs/go-materialize/artifact"
+	"github.com/hollis-labs/go-materialize/materialize"
 	"github.com/hollis-labs/tools/folio/internal/compose"
 	"github.com/hollis-labs/tools/folio/internal/manifest"
 	"github.com/hollis-labs/tools/folio/internal/preset"
 	"github.com/hollis-labs/tools/folio/internal/render"
-	"github.com/hollis-labs/go-materialize/artifact"
-	"github.com/hollis-labs/go-materialize/materialize"
 )
 
 // Options configure a Service. Both BundledFS and UserDir are optional —
