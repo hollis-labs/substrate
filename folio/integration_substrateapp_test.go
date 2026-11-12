@@ -675,8 +675,8 @@ func TestAppDashboard_LegacySysopUIAlias(t *testing.T) {
 	// preset: it fails with a sentence naming the removed preset and the release that last had it.
 	root.ID = "sysop-ui"
 	root.Version = "1.2.0"
-	if err := manifest.Write(target, mf); err != nil {
-		t.Fatal(err)
+	if wErr := manifest.Write(target, mf); wErr != nil {
+		t.Fatal(wErr)
 	}
 	_, err = svc.Inspect(service.InspectOptions{TargetDir: target})
 	var se *service.Error
