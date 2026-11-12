@@ -3,9 +3,11 @@ package auth_test
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	libauth "github.com/hollis-labs/libs/security/auth"
@@ -207,6 +209,43 @@ func TestGuardDenialsUseTheFlatErrorBody(t *testing.T) {
 		var b struct{ Code, Message string }
 		if err := json.Unmarshal(w.Body.Bytes(), &b); err != nil || b.Code != c.code || b.Message == "" {
 			t.Errorf("%s: %d %s (want flat code %q with a message)", c.name, w.Code, w.Body, c.code)
+		}
+	}
+}
+
+// captureLogs routes the default logger into a buffer for the test.
+type logBuf struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *logBuf) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+func (l *logBuf) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+func captureLogs(t *testing.T) *logBuf {
+	t.Helper()
+	buf := &logBuf{}
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	return buf
+}
+
+func TestStartIsQuietInOffAndPermissiveMode(t *testing.T) {
+	for _, mode := range []string{"off", "permissive"} {
+		buf := captureLogs(t)
+		start(t, `{"auth":{"mode":"`+mode+`"}}`)
+		if strings.Contains(buf.String(), auth.NotEnforcingMsg) {
+			t.Errorf("%s: module start logged the warning: %s", mode, buf)
 		}
 	}
 }
