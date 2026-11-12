@@ -6,8 +6,8 @@
 # platform-pins.yaml (go_floor and ci) are written from it by
 # `substrate pins sync [--folio <dir>]` and verified by `substrate pins check`.
 toolchain:
-  go_floor: "1.26.6"      # portfolio floor, mirrored to Folio (go_floor_1_26_6_everywhere)
-  go_min: "1.26.10"       # Substrate's own minimum (core/store requires it); never below go_floor
+  go_floor: "1.26.11"     # portfolio floor, mirrored to Folio; raised 2026-11-12 for GO-2026-6859 (net/http), fixed in 1.26.11
+  go_min: "1.26.11"       # Substrate's own minimum; never below go_floor
 ci:                       # mirrored to Folio platform-pins.yaml
   actions_checkout: "v5"
   actions_setup_go: "v6"
