@@ -16,6 +16,7 @@ minor releases may break APIs.
 
 ### Added
 
+- `queue.retry_after_secs`: a fixed delay, in whole seconds, before a failed job is tried again (the worker's `RetryAfter`; default 0, as before). Both drivers; the sqlite driver keeps whole seconds, which is why the unit is seconds. A per-job delay still means re-pushing with `WithDelay`.
 - `database.sqlite.read_pool`: size of the SQLite read-only pool behind `Store.Reader()` (whole number 1 to 64; anything else refuses to start). Unset keeps the libs default of 4, so nothing changes unless set. The write connection stays one. Ignored for `:memory:`. Docs: the `database` package comment and the store contract in `docs/adopting-substrate.md` section 4.
 - `mcp.StdioOptions.LocalTrust`, `LocalScopes`, `Notice` and `mcp.LocalPrincipalID`: local filesystem trust for a locally launched stdio MCP process (owner decision 14). An explicit Go option at the call site, never a config key, default off; with it, and no token configured, tool calls run under `local:operator` (kind `operator`, `Verified` true by filesystem trust, scopes `*` or `LocalScopes`) and one line goes to stderr. A configured token is verified as before and a bad one is an error, never a fallback; `mcp.Authorize` and per-tool scopes still apply; HTTP `/mcp` is unchanged. Additive: not breaking, and without the option behaviour is identical.
 - `identity.allow_new_signing_key` (bool, default false): the deliberate override of the second-issuer guard (see Changed).

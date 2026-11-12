@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -72,6 +73,60 @@ func TestAFailingJobIsRetriedThenMovedToFailed(t *testing.T) {
 	if n := attempts.Load(); n != 2 {
 		t.Errorf("attempts = %d, want exactly max_tries (2)", n)
 	}
+}
+
+// secondAttemptGap runs a job that always fails and returns the time between its
+// first and second attempt.
+func secondAttemptGap(t *testing.T, startCfg string) time.Duration {
+	t.Helper()
+	queue.Reset()
+	t.Cleanup(queue.Reset)
+	var mu sync.Mutex
+	var at []time.Time
+	queue.Handle("flaky", func(context.Context, *libqueue.QueuedJob) error {
+		mu.Lock()
+		at = append(at, time.Now())
+		mu.Unlock()
+		return errors.New("nope")
+	})
+	run := start(t, startCfg)
+	if err := queue.Push(context.Background(), run.App, "flaky", []byte(`1`)); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "two attempts: "+startCfg, func() bool { mu.Lock(); defer mu.Unlock(); return len(at) >= 2 })
+	// Stop now: the module value is shared, so a worker left running would
+	// keep the next boot in this test from launching its own.
+	if err := run.Stop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	return at[1].Sub(at[0])
+}
+
+func TestRetryAfterSecsDelaysTheNextAttempt(t *testing.T) {
+	// memory driver: exact delay.
+	if gap := secondAttemptGap(t, `{"queue":{"driver":"memory","poll_ms":10,"max_tries":2,"retry_after_secs":1}}`); gap < 900*time.Millisecond {
+		t.Errorf("memory: retried after %v, want about 1s", gap)
+	}
+	// sqlite driver: whole seconds, so at least one second must pass between the two.
+	if gap := secondAttemptGap(t, sqliteCfg(t, `{"poll_ms":10,"max_tries":2,"retry_after_secs":2}`)); gap < time.Second {
+		t.Errorf("sqlite: retried after %v, want at least 1s", gap)
+	}
+	// default: immediate.
+	if gap := secondAttemptGap(t, `{"database":{"sqlite":{"path":":memory:"}},"queue":{"driver":"memory","poll_ms":10,"max_tries":2}}`); gap > 500*time.Millisecond {
+		t.Errorf("default: retried after %v, want at once", gap)
+	}
+}
+
+func TestBadRetryAfterSecsFailStart(t *testing.T) {
+	for _, qc := range []string{`{"retry_after_secs":-1}`, `{"retry_after_secs":0.5}`, `{"retry_after_secs":"5"}`} {
+		queue.Reset()
+		if _, err := boot.Start(context.Background(), "t", []string{"health", "database", "queue"}, `{"database":{"sqlite":{"path":":memory:"}},"queue":`+qc+`}`); err == nil {
+			t.Errorf("%s was accepted", qc)
+		}
+	}
+	queue.Reset()
 }
 
 func TestMemoryDriverAndCustomDriver(t *testing.T) {
