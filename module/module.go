@@ -130,7 +130,9 @@ const RoutesKey = "http.routes"
 // Scope "" means authentication only.
 type Route struct {
 	Method, Path, Scope string
-	Handler             http.Handler
+	// Public routes skip authentication entirely (scope "public" in ui.json).
+	Public  bool
+	Handler http.Handler
 }
 
 // Pattern is the net/http mux pattern for the route; method "*" matches any.
@@ -153,7 +155,8 @@ func (r Route) ScopePattern() string {
 // AddRoutes publishes the routes c declares, binding each to its handler by
 // "METHOD /path". Every declared route needs a handler and every handler a
 // declared route, so a route cannot exist without a scope. "{app}" in a scope
-// expands to the app name, "authenticated" means authentication only, and a
+// expands to the app name, "authenticated" means authentication only, "public"
+// means no authentication, and a
 // string config value "scope" under the module's name overrides every scope.
 func AddRoutes(app *App, c ui.Contribution, handlers map[string]http.Handler) error {
 	override := ""
@@ -180,10 +183,11 @@ func AddRoutes(app *App, c ui.Contribution, handlers map[string]http.Handler) er
 			scope = override
 		}
 		scope = strings.ReplaceAll(scope, "{app}", app.Name)
-		if scope == ui.Authenticated {
+		public := scope == ui.Public
+		if scope == ui.Authenticated || public {
 			scope = ""
 		}
-		app.Values[RoutesKey] = append(Routes(app), Route{Method: d.Method, Path: d.Path, Scope: scope, Handler: h})
+		app.Values[RoutesKey] = append(Routes(app), Route{Method: d.Method, Path: d.Path, Scope: scope, Public: public, Handler: h})
 	}
 	for k := range handlers {
 		if !used[k] {
@@ -197,4 +201,17 @@ func AddRoutes(app *App, c ui.Contribution, handlers map[string]http.Handler) er
 func Routes(app *App) []Route {
 	rs, _ := app.Values[RoutesKey].([]Route)
 	return rs
+}
+
+// IsPublic reports whether path is served by a route declared public.
+func IsPublic(app *App, path string) bool {
+	for _, r := range Routes(app) {
+		if !r.Public {
+			continue
+		}
+		if r.Path == path || (strings.HasSuffix(r.Path, "/") && strings.HasPrefix(path, r.Path)) {
+			return true
+		}
+	}
+	return false
 }

@@ -1,0 +1,24 @@
+{
+  "schema_version": 0,
+  "module": "identity",
+  "routes": [
+    { "method": "GET",    "path": "/api/setup",                    "scope": "public" },
+    { "method": "POST",   "path": "/api/setup",                    "scope": "public" },
+    { "method": "POST",   "path": "/api/login",                    "scope": "public" },
+    { "method": "GET",    "path": "/api/identity/jwks",            "scope": "public" },
+    { "method": "POST",   "path": "/api/pair",                     "scope": "public" },
+    { "method": "POST",   "path": "/api/logout",                   "scope": "authenticated" },
+    { "method": "PUT",    "path": "/api/password",                 "scope": "authenticated" },
+    { "method": "PUT",    "path": "/api/identity/profile",         "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/token",                    "scope": "authenticated" },
+    { "method": "GET",    "path": "/api/identity/sessions",        "scope": "authenticated" },
+    { "method": "DELETE", "path": "/api/identity/sessions/",       "scope": "authenticated" },
+    { "method": "GET",    "path": "/api/identity/users",           "scope": "{app}.admin" },
+    { "method": "POST",   "path": "/api/identity/users",           "scope": "{app}.admin" },
+    { "method": "PUT",    "path": "/api/identity/users/",          "scope": "{app}.admin" },
+    { "method": "GET",    "path": "/api/identity/keys",            "scope": "{app}.admin" },
+    { "method": "POST",   "path": "/api/identity/keys",            "scope": "{app}.admin" },
+    { "method": "DELETE", "path": "/api/identity/keys/",           "scope": "{app}.admin" },
+    { "method": "POST",   "path": "/api/identity/pairing-codes",   "scope": "{app}.admin" }
+  ]
+}

@@ -25,6 +25,7 @@ import (
 	_ "github.com/hollis-labs/substrate/modules/events"
 	_ "github.com/hollis-labs/substrate/modules/health"
 	_ "github.com/hollis-labs/substrate/modules/httphost"
+	_ "github.com/hollis-labs/substrate/modules/identity"
 	_ "github.com/hollis-labs/substrate/modules/logging"
 	_ "github.com/hollis-labs/substrate/modules/mcp"
 	_ "github.com/hollis-labs/substrate/modules/pluginhost"
@@ -42,6 +43,7 @@ func newApp(t *testing.T) *module.App {
 		Config: map[string]any{
 			// Modules that touch disk get a private location.
 			"database": map[string]any{"sqlite": map[string]any{"path": filepath.Join(t.TempDir(), "c.db")}},
+			"identity": map[string]any{"key_file": filepath.Join(t.TempDir(), "id.key"), "bcrypt_cost": float64(4)},
 		},
 	}
 }

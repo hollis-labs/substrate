@@ -20,6 +20,7 @@ var Modules = []Module{
 	{Name: "mcp", Import: "github.com/hollis-labs/substrate/modules/mcp", Requires: []string{"httphost"}, Status: "ready"},
 	{Name: "policy", Import: "github.com/hollis-labs/substrate/modules/policy", Status: "ready"},
 	{Name: "auth", Import: "github.com/hollis-labs/substrate/modules/auth", Status: "ready"},
+	{Name: "identity", Import: "github.com/hollis-labs/substrate/modules/identity", Requires: []string{"auth", "database", "httphost"}, Status: "ready"},
 	{Name: "secrets", Import: "github.com/hollis-labs/substrate/modules/secrets", Requires: []string{"logging"}, Status: "ready"},
 	{Name: "database", Import: "github.com/hollis-labs/substrate/modules/database", Requires: []string{"health"}, Status: "ready"},
 	{Name: "pluginhost", Import: "github.com/hollis-labs/substrate/modules/pluginhost", Requires: []string{"health"}, Status: "ready"},
