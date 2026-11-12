@@ -172,6 +172,23 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 7. DNS rebinding and proxies: serve on loopback, check the `Host` header against loopback plus a configured list, and
    set identity's `trusted_proxy` only for a local TLS proxy that overwrites `X-Forwarded-Proto`.
 8. Strict-mode proofs (passkeys, signed approvals) are not part of this path. Do not port them; record the follow-up.
+9. Local trust for a stdio MCP process (owner decision 14): enforced identity stays on HTTP; a stdio process the
+   user launched locally against the app's own data file may run without a token. The app opts in in Go, at the
+   call site: `mcp.ServeStdio(ctx, app, mcp.StdioOptions{LocalTrust: true})`. There is no config key and the
+   default is off, so a manifest or override file cannot enable it. With no token configured the tools run under
+   `local:operator` (kind `operator`, verified by filesystem trust, scopes `*`; narrow with `LocalScopes`, and
+   per-tool `mcp.Authorize` then refuses what the list lacks). A token that is given is verified as always and a
+   bad one is an error, never a fallback. The trust statement, verbatim: the process runs as a user who can open
+   the data file; the module cannot tell who launched it and checks nothing about the file or the parent. A
+   child launched by a gateway (Tether) on the same host as the same user counts as local. A gateway that serves
+   several callers through one child must authorize per caller, or give the child a token (`mcp.stdio_token_file`),
+   because every caller of a local child is the operator. The process writes one line to stderr naming the local
+   principal; audit events carry `principal_id` `local:operator`, which no identity-issued id can equal. Apps that
+   key a cache on a verified principal see the local principal as verified.
+10. One issuer per database. The identity module creates its signing key at start only when the database holds no
+    users or API keys; with identity rows and no key file at `identity.key_file` it refuses to start and names the
+    path. A child process pointed at the service's database (an explicit `-db`) must point `key_file` at the
+    service's key. `identity.allow_new_signing_key: true` is the deliberate override for a lost key.
 
 ## 6. Configuration
 

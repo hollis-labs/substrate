@@ -20,6 +20,19 @@
 // verified by the auth module, then stamped on every tool call, so Authorize
 // and per-tool scopes behave exactly as over HTTP.
 //
+// Local trust. A stdio process started on the same host by a user who can open
+// the app's data file may run under a fixed local principal instead of a token:
+// the app sets StdioOptions.LocalTrust in Go at the call site (there is no config
+// key, and the default is off). It applies only when no token is configured; a
+// token that is given is verified as always and a bad one is an error, never a
+// fallback. The principal is "local:operator" (kind operator, verified by
+// filesystem trust, not by a credential) with scopes "*" or StdioOptions.LocalScopes.
+// The trust statement: the process runs as a user who can open the data file; the
+// module cannot tell who launched it, and checks nothing about the file or the
+// parent. A child launched by a gateway on the same host as the same user is local
+// by this definition; a gateway that serves several callers through one child must
+// authorize per caller or give the child a token. Enforced identity stays on /mcp.
+//
 // With auth started, /mcp is mapped to the configured scope in enforce mode and
 // the guard's principal reaches tool handlers; call Authorize(ctx, app, tool)
 // for per-tool scopes.
@@ -184,23 +197,43 @@ func scopes(app *module.App) *libauth.ScopeTable {
 	return t
 }
 
+// LocalPrincipalID is the id of the principal stamped under StdioOptions.LocalTrust.
+// Its "local:" prefix cannot collide with "user:<id>" or "key:<id>", the ids the
+// identity module mints, so an audit line (the guard Event carries principal_id)
+// tells a local run from an authenticated caller.
+const LocalPrincipalID = "local:operator"
+
 // StdioOptions configure ServeStdio.
 type StdioOptions struct {
 	In        io.ReadCloser  // default os.Stdin
 	Out       io.WriteCloser // default os.Stdout; nothing else may write to it
 	TokenFile string         // the caller's token; default config mcp.stdio_token_file
+
+	// LocalTrust runs tool calls under the fixed local principal (LocalPrincipalID)
+	// when no token is configured. Chosen by the app's code, never read from config,
+	// off by default. Without it nothing changes. A token that is given is still
+	// verified, and a bad one is an error. With auth nil or off it changes nothing.
+	LocalTrust bool
+	// LocalScopes are the scopes of the local principal. Default ["*"] (every scope,
+	// what the owner of the data file holds); list scopes to narrow it, and the
+	// per-tool Authorize then refuses a tool outside them.
+	LocalScopes []string
+	// Notice receives the one-line notice that the process runs under local trust.
+	// Default os.Stderr (stdout is the protocol).
+	Notice io.Writer
 }
 
 // ServeStdio serves the app's MCP server over stdio until ctx ends or the
 // client disconnects. With auth in off mode no token is needed. In permissive
 // and enforce mode a token that is given must verify; in enforce mode one is
-// required, and it must hold the same scope the /mcp route needs.
+// required unless o.LocalTrust is set, and it must hold the same scope the /mcp
+// route needs.
 func ServeStdio(ctx context.Context, app *module.App, o StdioOptions) error {
 	srv := Server(app)
 	if srv == nil {
 		return errors.New("mcp: the module is not started")
 	}
-	ctx, err := identify(ctx, app, o.TokenFile)
+	ctx, err := identify(ctx, app, o)
 	if err != nil {
 		return err
 	}
@@ -215,7 +248,8 @@ func ServeStdio(ctx context.Context, app *module.App, o StdioOptions) error {
 }
 
 // identify verifies the stdio caller's token and stamps the principal on ctx.
-func identify(ctx context.Context, app *module.App, tokenFile string) (context.Context, error) {
+func identify(ctx context.Context, app *module.App, o StdioOptions) (context.Context, error) {
+	tokenFile := o.TokenFile
 	g := guard(app)
 	if g == nil || g.Mode() == libauth.ModeOff {
 		return ctx, nil
@@ -226,8 +260,23 @@ func identify(ctx context.Context, app *module.App, tokenFile string) (context.C
 	}
 	enforce := g.Mode() == libauth.ModeEnforce
 	if tokenFile == "" {
+		if o.LocalTrust {
+			scopes := o.LocalScopes
+			if len(scopes) == 0 {
+				scopes = []string{"*"}
+			}
+			notice := o.Notice
+			if notice == nil {
+				notice = os.Stderr
+			}
+			_, _ = fmt.Fprintf(notice, "mcp: stdio under local filesystem trust (no token): principal %s, scopes %s\n", LocalPrincipalID, strings.Join(scopes, " "))
+			return libauth.WithPrincipal(ctx, libauth.Principal{
+				Verified: true, ID: LocalPrincipalID, Kind: libauth.KindOperator,
+				Display: "local operator (filesystem trust)", Scopes: scopes, Audience: app.Name,
+			}), nil
+		}
 		if enforce {
-			return ctx, errors.New("mcp: stdio in enforce mode needs a token (mcp.stdio_token_file or StdioOptions.TokenFile)")
+			return ctx, errors.New("mcp: stdio in enforce mode needs a token (mcp.stdio_token_file or StdioOptions.TokenFile; an app that trusts a locally launched process sets StdioOptions.LocalTrust)")
 		}
 		return ctx, nil
 	}
