@@ -78,7 +78,7 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
 - Errors use `apierr.Write(w, status, code, message, details)`, the flat `{code, message, details?}` body the
   frontend reads. Streaming handlers must not buffer; the wrapper in httphost passes `Flush` through.
 - The same file can carry UI `contributions`, `envelopes` and a companion `package`, validated against
-  `ui.Default`. The kinds are the design team's vocabulary (SF-2 v0.4): `nav.item`, `nav.group`,
+  `ui.Default`. The kinds are the design team's vocabulary (SF-2 v0.4.1): `nav.item`, `nav.group`,
   `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`, `menu.item`, `command`; do not invent others. Each kind takes only
   its own fields (the validator refuses a stray one), and goes in its default region unless it names one
   (`nav.primary`, `nav.group:<key>`, `nav.footer`, `settings.sections`, `surface.page`, `aside.panels`,
@@ -99,6 +99,20 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
     in `command.palette` (its default) and takes `label`, `icon`, `keywords`, `group`. The builder checks that a
     `navigate` names a `surface` route that is not a backend path, an `openRegion` names a declared docked
     region, and its `tab` is a `dock.tab` in that region. A `menu.item` key is unique per region and module.
+  - `user.menu` (v0.4.1) is the signed-in user's menu, opened from the shell's identity chip. It is a core,
+    non-docked region: implicit in every host, never declared (declaring it under `frontend.regions` is a build
+    error) and never listed in the generated manifest's `regions`. Only a `menu.item` may target it (a `command`,
+    `nav.item`, `slot` and the rest are refused), and `when` is an error there. Who the user is never appears in
+    the manifest: the shell supplies the identity at run time. A `menu.item` in any menu region may also set
+    `group` (items sharing a group stay together, a divider separates groups; convention in `user.menu`:
+    `account`, then `session` with `order` 900 or more for sign out) and `requires`. A `requires` is a scope
+    string, and a capability is a scope: it may contain `{app}`, which the builder expands to the app name (as a
+    route's scope is), and the shell hides the item unless the caller holds that scope or `*`. It is a display
+    hint; the backend still authorizes. A `call` in `user.menu` is named `<module>.<verb>` with a camelCase verb
+    (`identity.signOut`); the builder checks that shape only. Whether anything registered that function is the
+    shell's business at run time (an unregistered one is skipped and listed in its diagnostics).
+  - A module that names a companion `package` the BOM does not pin in `kits:` fails the build with
+    `module <name>: package <pkg> is not pinned in the BOM kits section`.
   - `envelopes.emits` lists `kind@version` strings; the frontend manifest turns them into `bindings`
     (`{kind, version}`, sorted, unique) for the shell's binding table.
   - Docked regions in `frontend.regions` may set dock attributes: `open_state` (`hidden`, `open`), `exclusive`,

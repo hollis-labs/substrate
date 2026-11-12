@@ -9,6 +9,7 @@
     { "method": "POST",   "path": "/api/pair",                     "scope": "public" },
     { "method": "POST",   "path": "/api/logout",                   "scope": "authenticated" },
     { "method": "PUT",    "path": "/api/password",                 "scope": "authenticated" },
+    { "method": "GET",    "path": "/api/identity/profile",         "scope": "authenticated" },
     { "method": "PUT",    "path": "/api/identity/profile",         "scope": "authenticated" },
     { "method": "POST",   "path": "/api/token",                    "scope": "authenticated" },
     { "method": "GET",    "path": "/api/identity/sessions",        "scope": "authenticated" },

@@ -111,7 +111,15 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load, opts ..
 	want := map[string]bool{}
 	bindings := map[Binding]bool{}
 	var items []Item
+	pkgFrom := map[string]string{} // package name -> the first contribution that names it
 	add := func(name string, c ui.Contribution) {
+		// A requires is a scope: {app} is expanded here, as a route's scope is
+		// when it is mounted, so the shell reads a plain scope string. Copy the
+		// slice; the parsed file is not ours to change.
+		c.Contributions = append([]ui.Item(nil), c.Contributions...)
+		for i := range c.Contributions {
+			c.Contributions[i].Requires = strings.ReplaceAll(c.Contributions[i].Requires, "{app}", m.App)
+		}
 		out.Contributions = append(out.Contributions, c)
 		if c.Envelopes != nil {
 			for _, e := range c.Envelopes.Emits {
@@ -127,6 +135,9 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load, opts ..
 		}
 		if c.Package != nil {
 			want[c.Package.Name] = true
+			if _, ok := pkgFrom[c.Package.Name]; !ok {
+				pkgFrom[c.Package.Name] = name
+			}
 		}
 		if len(c.Contributions) > 0 || c.Package != nil {
 			for _, k := range BaseKits {
@@ -200,6 +211,9 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load, opts ..
 	for _, n := range names {
 		ver, ok := b.Kits[n]
 		if !ok {
+			if from := pkgFrom[n]; from != "" {
+				return nil, fmt.Errorf("module %s: package %s is not pinned in the BOM kits section", from, n)
+			}
 			return nil, fmt.Errorf("package %s is not pinned in the BOM kits section", n)
 		}
 		out.Kits = append(out.Kits, Kit{n, ver})
@@ -346,7 +360,7 @@ func order(it Item) int {
 // coreMenuRegion reports whether region is one of the core regions a menu.item
 // may name without the host declaring it.
 func coreMenuRegion(region string) bool {
-	return region == ui.RegionRowActions || region == ui.RegionToolbarPrimary || strings.HasPrefix(region, ui.RegionMenuPrefix)
+	return region == ui.RegionRowActions || region == ui.RegionToolbarPrimary || region == ui.RegionUserMenu || strings.HasPrefix(region, ui.RegionMenuPrefix)
 }
 
 // checkAction holds a menu.item or command's action to what the merged
