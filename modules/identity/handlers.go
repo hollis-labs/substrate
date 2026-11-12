@@ -560,11 +560,14 @@ func cleanList(in []string) []string {
 }
 
 func (s *Service) revokeKey(w http.ResponseWriter, r *http.Request) {
-	if err := s.db.revokeCredential(r.Context(), strings.TrimPrefix(r.URL.Path, "/api/identity/keys/"), time.Now()); err != nil {
+	switch err := s.RevokeKey(r.Context(), strings.TrimPrefix(r.URL.Path, "/api/identity/keys/")); {
+	case errors.Is(err, ErrNotFound):
 		notFound(w)
-		return
+	case err != nil:
+		failed(w)
+	default:
+		w.WriteHeader(http.StatusNoContent)
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 // createPairingCode makes a one-time code another app redeems for an API key.
