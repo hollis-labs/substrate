@@ -15,6 +15,7 @@ minor releases may break APIs.
 
 ### Added
 
+- `identity.Service.User(ctx, id)`: a public view of an account (`identity.PublicUser`: id, username, display name, email, scopes, disabled; no hashes) so apps stop reading `identity_users` directly. Unknown id gives `identity.ErrNotFound`; a disabled account is returned with `Disabled` set.
 - `identity` module: an app that selects it is its own identity provider. First-run owner setup, users, password sign-in and sign-out, password change, profile, session list and revoke (session cookie with a same-origin and header check on writes); API keys with scopes and audiences; pairing codes another app redeems for a key; `POST /api/token` (any credential for a short-lived EdDSA JWT, Tether-mint-shaped, so a client sets `auth.mint_url` at it); a published key set at `/api/identity/jwks` so another app can trust this one. Accepted by the app's guard in any mode through `auth.AddVerifier`; `enforce` needs no other verifier. Docs: `docs/identity.md`. Strict-mode proofs (passkeys, signed approvals) are not included. Needs `golang.org/x/crypto` (BOM third_party).
 - `ui.Public` / scope `"public"`: a route that skips authentication (setup, sign-in, the key set, pairing). The auth module opens exactly the declared public paths.
 

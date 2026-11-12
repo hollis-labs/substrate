@@ -36,6 +36,17 @@ A browser keeps a `HttpOnly`, `SameSite=Strict` cookie. Wrap the app's final han
 
 Passwords are bcrypt, 12 to 72 bytes. Passkeys, signed approvals and other strict-mode proofs are not part of this module; they would be a later opt-in layer on the same users and sessions.
 
+## Reading users from the app
+
+An app that needs to show who a user is (an owner column, an assignee list) asks the module, not the table:
+
+```go
+svc := identity.From(app)
+u, err := svc.User(ctx, id) // identity.PublicUser: ID, Username, DisplayName, Email, Scopes, Disabled
+```
+
+An unknown id returns `identity.ErrNotFound`. A disabled account is returned with `Disabled` set; the app decides what that means for it. The view never carries the password hash, sessions or keys, and `Scopes` is a copy. The `identity_*` tables are the module's storage, not an interface: do not read them directly.
+
 ## Machines
 
 A tool or another app holds an **API key** or a **short-lived token**.
