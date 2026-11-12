@@ -12,9 +12,11 @@ const lastReleaseWithRemoved = "v0.0.1"
 
 // removedPresets are bundled presets this folio no longer ships at all: a project whose .folio.yaml
 // names one cannot be inspected here, and `folio new` of one fails with the same sentence. They were
-// removed when presets began rendering Substrate apps (go-webui, Chimera and go-service-app are gone).
+// removed when presets began rendering Substrate apps (go-webui, Chimera and go-service-app are gone;
+// chat-app waits for a pinned kit-chat).
 var removedPresets = map[string]bool{
 	"go-service-app":               true,
+	"chat-app":                     true,
 	"app-dashboard-chimera-plugin": true,
 	"chat-app-chimera-plugin":      true,
 	"chimera-plugin-fixture":       true,

@@ -15,11 +15,12 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `chimera-consumers` CI job and the `chimera` block of `platform-pins.yaml`. The vendored licensed Chimera
   material (host-ui archive and adapters) leaves the tree; it stays in git history.
 - **`go-service-app`**, superseded by `substrate-app`.
+- **`chat-app`**, with no replacement until a `kit-chat` release is pinned in the Substrate BOM.
 
 ### Changed (breaking)
 
 - **A removed preset is never re-rendered onto another.** `folio inspect` of a project whose `.folio.yaml`
-  names a removed preset (`go-service-app`, the Chimera plugin wrappers and fixture, `app-dashboard` or
+  names a removed preset (`go-service-app`, `chat-app`, the Chimera plugin wrappers and fixture, `app-dashboard` or
   `sysop-ui` below 3.0.0) fails with `preset_removed` and a sentence naming the preset and `folio/v0.0.1`,
   the last release that has it; `folio new` and `folio plan` of a removed id say the same. Nothing is
   rendered or written. Existing breadcrumbs are not rewritten.

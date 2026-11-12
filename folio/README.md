@@ -228,7 +228,7 @@ Chimera dashboard of 2.x (clean break: `project_name`, `gui_host`, `chimera_*`, 
 `app-dashboard`, and new breadcrumbs record `app-dashboard`. Existing breadcrumbs, whatever preset
 generated them, stay readable by `inspect`, which reports drift against the current templates without
 updating the app or its breadcrumb. `folio sync` remains reserved; nothing migrates an already generated
-app.
+app. There is no `chat-app` preset for now: it waits for a pinned `kit-chat` in the Substrate BOM.
 
 ## License
 

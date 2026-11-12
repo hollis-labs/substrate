@@ -34,6 +34,7 @@ func writeBreadcrumb(t *testing.T, id, version string) string {
 func TestFolioInspect_RemovedPresetBreadcrumb(t *testing.T) {
 	for _, c := range []struct{ id, version string }{
 		{"go-service-app", "0.2.0"},
+		{"chat-app", "1.1.0"},
 		{"app-dashboard-chimera-plugin", "1.0.0"},
 		{"chat-app-chimera-plugin", "1.0.0"},
 		{"chimera-plugin-fixture", "1.0.0"},
@@ -80,7 +81,7 @@ func TestFolioInspect_CurrentAppDashboardIsNotRemoved(t *testing.T) {
 
 // `folio new` and `folio plan` of a removed preset say so instead of "not found".
 func TestFolioNew_RemovedPreset(t *testing.T) {
-	for _, id := range []string{"go-service-app", "app-dashboard-chimera-plugin", "chat-app-chimera-plugin", "chimera-plugin-fixture"} {
+	for _, id := range []string{"go-service-app", "chat-app", "app-dashboard-chimera-plugin", "chat-app-chimera-plugin", "chimera-plugin-fixture"} {
 		isolateHome(t)
 		target := filepath.Join(t.TempDir(), "proj")
 		for _, cmd := range []string{"new", "plan"} {
