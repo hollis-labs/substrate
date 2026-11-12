@@ -11,6 +11,8 @@ minor releases may break APIs.
 
 ### Added
 
+- `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list` (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
+
 - BOM `app_libs`: `libs/mesh/core v0.6.0` (the Tether client, for apps that launch agent sessions).
 
 - `auth` plumbing from libs `go-auth`: `denylist_url` polls the issuer's revocation list so a revoked jti, principal or session stops working within the poll interval; `token_file` (a non-expiring service token, re-read on use) or `mint_url` (a refreshed short-lived token) give an app, or its CLI, an outbound credential via `auth.Token`, `auth.Transport` and `auth.HTTPClient`, with an optional host allowlist so the token cannot leak to other hosts. Nothing is attached when neither is set (the dev default).

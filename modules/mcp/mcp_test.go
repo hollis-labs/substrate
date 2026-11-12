@@ -76,3 +76,37 @@ func TestAuthorizeAllowsWithoutAuthModule(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func list(h http.Handler) string {
+	r := httptest.NewRequest("POST", "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Accept", "application/json, text/event-stream")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w.Body.String()
+}
+
+func TestToolFilterTrimsTheListButNotTheCall(t *testing.T) {
+	t.Cleanup(func() { mcp.UseToolFilter(nil) })
+	mcp.UseToolFilter(func(_ context.Context, name string) bool { return name != "secret" })
+	h, app := setup(t, []string{"health", "httphost", "mcp"}, "")
+	mcp.Server(app).RegisterChecked(gmcp.Tool{
+		Name: "secret", Description: "hidden from the list", InputSchema: gmcp.EmptyObjectSchema(),
+		Handler: func(context.Context, map[string]any) (any, error) { return map[string]any{"msg": "shh"}, nil },
+	}, gmcp.Reads("returns a constant"))
+	got := list(h)
+	if !strings.Contains(got, `"ping"`) || strings.Contains(got, `"secret"`) {
+		t.Fatalf("tools/list: %s", got)
+	}
+	// Visibility is not authorization: a hidden tool is still callable by name.
+	if _, err := mcp.Server(app).CallTool(context.Background(), "secret", nil); err != nil {
+		t.Fatalf("hidden tool not callable: %v", err)
+	}
+}
+
+func TestNoFilterListsEverything(t *testing.T) {
+	h, _ := setup(t, []string{"health", "httphost", "mcp"}, "")
+	if got := list(h); !strings.Contains(got, `"ping"`) {
+		t.Fatalf("tools/list: %s", got)
+	}
+}

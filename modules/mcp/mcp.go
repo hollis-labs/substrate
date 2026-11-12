@@ -33,6 +33,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	gmcp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/server"
 	mcphttp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/transport/http"
@@ -48,6 +49,45 @@ const (
 	ServerKey = "mcp.server"
 	MountKey  = "mcp.mount"
 )
+
+var (
+	filterMu   sync.Mutex
+	toolFilter func(ctx context.Context, name string) bool
+)
+
+// UseToolFilter registers a per-caller visibility filter for tools/list: a tool
+// is listed to a caller only if f(ctx, name) is true. ctx carries the caller's
+// principal (HTTP and stdio alike), so an app can show each caller the tools it
+// may use. It is visibility, not authorization: a hidden tool can still be
+// called by name, so the tool's handler must authorize (see Authorize). Call it
+// before boot.Start; the filter may consult state that changes while serving.
+func UseToolFilter(f func(ctx context.Context, name string) bool) {
+	filterMu.Lock()
+	toolFilter = f
+	filterMu.Unlock()
+}
+
+// filterTools is receiving middleware that trims the tools/list result.
+func filterTools(f func(context.Context, string) bool) mcpsdk.Middleware {
+	return func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+		return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
+			res, err := next(ctx, method, req)
+			if err != nil || method != "tools/list" {
+				return res, err
+			}
+			if lr, ok := res.(*mcpsdk.ListToolsResult); ok {
+				kept := lr.Tools[:0:0]
+				for _, t := range lr.Tools {
+					if f(ctx, t.Name) {
+						kept = append(kept, t)
+					}
+				}
+				lr.Tools = kept
+			}
+			return res, nil
+		}
+	}
+}
 
 func init() { module.Register(mod{}) }
 
@@ -71,7 +111,14 @@ func (mod) Start(_ context.Context, app *module.App) error {
 			}
 		}
 	}
-	srv := gmcp.NewServer(app.Name, str("version", "0.0.0-dev"))
+	filterMu.Lock()
+	f := toolFilter
+	filterMu.Unlock()
+	var opts []gmcp.Option
+	if f != nil {
+		opts = append(opts, gmcp.WithReceivingMiddleware(filterTools(f)))
+	}
+	srv := gmcp.NewServer(app.Name, str("version", "0.0.0-dev"), opts...)
 	app.Set(ServerKey, srv)
 	app.Set(MountKey, &mount{app: app, srv: srv, scope: str("scope", app.Name+".mcp"), origins: origins})
 	return nil
