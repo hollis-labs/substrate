@@ -1,5 +1,15 @@
 // Package httphost wraps libs app-host: SPA assets, /api/ routes, declared module routes, app mounts, and
 // the health registry served on /healthz. The app owns listeners and policy.
+//
+// # Shutdown and long-lived handlers
+//
+// Serve ends on its context. http.Server.Shutdown waits for ordinary requests but cannot end an
+// SSE stream and does not track a hijacked connection (a WebSocket), so a handler that keeps a
+// connection open must watch Stopping(r), which closes when shutdown begins. Serve waits for
+// every handler to return and then returns nil; a handler that ignores Stopping holds Serve for
+// GracePeriod (default 10s), after which r.Context() is cancelled, connections are closed and
+// Serve returns an error. r.Context() is not cancelled by a graceful stop, so a request doing
+// real work is allowed to finish.
 package httphost
 
 import (
@@ -11,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	apphost "github.com/hollis-labs/libs/app/app-host/host"
@@ -180,7 +191,11 @@ type ServeOptions struct {
 // (SSE) are not cut off; header and idle timeouts are set. In off or permissive
 // mode Serve logs the "auth is not enforcing" warning (the auth module itself
 // stays quiet at Start, so short-lived commands print nothing). Serve returns nil
-// after a clean shutdown.
+// after a clean shutdown: the listener is closed, in-flight requests have finished and
+// every handler, hijacked ones included, has returned within GracePeriod. Long-lived
+// handlers learn of the stop through Stopping. Past the grace period Serve cancels the
+// request contexts, closes the connections and returns an error naming how many handlers
+// were still running.
 func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions) error {
 	addr := o.Addr
 	if addr == "" {
@@ -209,7 +224,28 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 	if o.Ready != nil {
 		o.Ready(ln.Addr())
 	}
-	srv := &http.Server{Handler: h, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	// stopping closes when shutdown begins; every request context carries it (Stopping).
+	// base is the parent of every request context. It is cancelled only when the grace
+	// period has run out, just before the server closes connections, so an ordinary
+	// request that uses r.Context() for its own work is not aborted by a graceful stop.
+	stopping := make(chan struct{})
+	base, baseCancel := context.WithCancel(context.WithValue(context.WithoutCancel(ctx), stoppingKey{}, (<-chan struct{})(stopping)))
+	defer baseCancel()
+	// active counts handlers still running. http.Server.Shutdown does not wait for a
+	// hijacked connection's handler (a WebSocket) and cannot end a stream; Serve waits
+	// for the handlers themselves so a clean stop means they returned.
+	var active atomic.Int64
+	tracked := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		active.Add(1)
+		defer active.Add(-1)
+		h.ServeHTTP(w, r)
+	})
+	srv := &http.Server{
+		Handler:           tracked,
+		BaseContext:       func(net.Listener) context.Context { return base },
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+	}
 	errc := make(chan error, 1)
 	go func() { errc <- srv.Serve(ln) }()
 	select {
@@ -217,18 +253,57 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 		return err
 	case <-ctx.Done():
 	}
+	close(stopping)
 	grace := o.GracePeriod
 	if grace <= 0 {
 		grace = 10 * time.Second
 	}
 	sctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
-	if err := srv.Shutdown(sctx); err != nil {
+	err = srv.Shutdown(sctx)
+	for err == nil && active.Load() > 0 {
+		select {
+		case <-sctx.Done():
+			err = sctx.Err()
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	if err != nil {
+		n := active.Load()
+		baseCancel() // tell the handlers that ignored Stopping, then cut the connections
 		_ = srv.Close()
-		return fmt.Errorf("httphost: shutdown: %w", err)
+		return fmt.Errorf("httphost: shutdown: %w (%d handler(s) still running)", err, n)
 	}
 	if err := <-errc; err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil
+}
+
+type stoppingKey struct{}
+
+// Stopping returns a channel that is closed when the server begins to shut down (when
+// the context given to Serve ends), for a handler that outlives a normal request: an SSE
+// stream, a WebSocket, a long poll. http.Server.Shutdown cannot end those, so a handler
+// that does not watch this channel holds Serve until the grace period runs out, after
+// which Serve cancels r.Context(), closes the connections and returns an error:
+//
+//	select {
+//	case <-httphost.Stopping(r): // send a close frame, flush, return
+//	case <-r.Context().Done():   // the client went away
+//	case ev := <-events: ...
+//	}
+//
+// It is read from the request context (Serve is the only thing that sets it), so it
+// reaches a handler through every wrapper (host check, identity, guard, apierr) without a
+// parameter. Outside Serve (a handler called from httptest) it returns nil, a channel that
+// never closes, so the same select works in a test. Serve returns nil only once every
+// handler has returned; a hijacked handler must return too (close its connection) because
+// Serve counts it.
+//
+// r.Context() itself stays live through a graceful stop, so a request that is still
+// working (a database call) finishes; it is cancelled only when the grace period ends.
+func Stopping(r *http.Request) <-chan struct{} {
+	c, _ := r.Context().Value(stoppingKey{}).(<-chan struct{})
+	return c
 }
