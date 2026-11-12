@@ -5,12 +5,15 @@ package identity_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/spf13/cobra"
 
 	"github.com/hollis-labs/substrate/boot"
 	"github.com/hollis-labs/substrate/modules/identity"
@@ -19,6 +22,7 @@ import (
 const (
 	envChildDir     = "SUBSTRATE_IDTEST_CHILD_DIR"
 	envChildBarrier = "SUBSTRATE_IDTEST_CHILD_BARRIER"
+	envChildMode    = "SUBSTRATE_IDTEST_CHILD_MODE" // "setup": run `identity setup` instead of serving
 )
 
 func identityCfg(dir string) string {
@@ -33,18 +37,54 @@ var identityModules = []string{"health", "logging", "auth", "database", "httphos
 // data directory, mints a token and prints "<kid> <token>".
 func TestMain(m *testing.M) {
 	if dir := os.Getenv(envChildDir); dir != "" {
+		if os.Getenv(envChildMode) == "setup" {
+			os.Exit(runSetupChild(dir, os.Getenv(envChildBarrier)))
+		}
 		os.Exit(runIdentityChild(dir, os.Getenv(envChildBarrier)))
 	}
 	os.Exit(m.Run())
 }
 
-func runIdentityChild(dir, barrier string) int {
+func waitBarrier(barrier string) {
 	for {
 		if _, err := os.Stat(barrier); err == nil {
-			break
+			return
 		}
 		time.Sleep(200 * time.Microsecond)
 	}
+}
+
+// runSetupChild is the offline bootstrap as the app binary runs it: boot with the
+// cli module, then `identity setup` with the password on stdin. It prints
+// "<kid> ok".
+func runSetupChild(dir, barrier string) int {
+	waitBarrier(barrier)
+	run, err := boot.Start(context.Background(), "demo", cliModules(false), cliConfig(dir, ""))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	v, ok := run.App.Value("cli.root")
+	if !ok {
+		fmt.Fprintln(os.Stderr, "no cli root")
+		return 1
+	}
+	root := v.(*cobra.Command)
+	root.SetIn(os.Stdin)
+	root.SetOut(io.Discard)
+	root.SetErr(os.Stderr)
+	root.SetArgs(setupArgs())
+	if err := root.ExecuteContext(context.Background()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Printf("%s ok\n", identity.From(run.App).SigningKey().Active.KID)
+	_ = run.Stop(context.Background())
+	return 0
+}
+
+func runIdentityChild(dir, barrier string) int {
+	waitBarrier(barrier)
 	run, err := boot.Start(context.Background(), "demo", identityModules, identityCfg(dir))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -119,6 +159,68 @@ func TestConcurrentFirstStartSharesOneSigningKey(t *testing.T) {
 		}
 		if len(kids) > 0 && !kids[a.svc.SigningKey().Active.KID] {
 			t.Errorf("round %d: key on disk has kid %s, processes used %v", r, a.svc.SigningKey().Active.KID, kids)
+		}
+	}
+}
+
+// `identity setup` on a fresh data directory racing a starting service must also
+// end with ONE signing key and a working owner: each process creates the key on
+// its own start, before the owner exists, so both reach the exclusive create.
+func TestConcurrentSetupAndServiceShareOneSigningKeyAndTheOwnerWorks(t *testing.T) {
+	rounds := 8
+	if testing.Short() {
+		rounds = 2
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for r := 0; r < rounds; r++ {
+		dir := t.TempDir()
+		barrier := filepath.Join(dir, "go")
+		spawn := func(mode string, stdin io.Reader) (*exec.Cmd, *strings.Builder, *strings.Builder) {
+			c := exec.Command(exe, "-test.run=^$")
+			c.Env = append(os.Environ(), envChildDir+"="+dir, envChildBarrier+"="+barrier, envChildMode+"="+mode)
+			c.Stdin = stdin
+			out, errb := &strings.Builder{}, &strings.Builder{}
+			c.Stdout, c.Stderr = out, errb
+			if err := c.Start(); err != nil {
+				t.Fatal(err)
+			}
+			return c, out, errb
+		}
+		svcCmd, svcOut, svcErr := spawn("serve", nil)
+		setCmd, setOut, setErr := spawn("setup", pw(secretPassword))
+		time.Sleep(300 * time.Millisecond) // let both reach the barrier loop
+		if err := os.WriteFile(barrier, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := svcCmd.Wait(); err != nil {
+			t.Errorf("round %d service: %v: %s", r, err, svcErr)
+		}
+		if err := setCmd.Wait(); err != nil {
+			t.Errorf("round %d setup: %v: %s", r, err, setErr)
+		}
+		sf, pf := strings.Fields(svcOut.String()), strings.Fields(setOut.String())
+		if len(sf) != 2 || len(pf) != 2 {
+			t.Errorf("round %d: unexpected output service %q setup %q", r, svcOut, setOut)
+			continue
+		}
+		if sf[0] != pf[0] {
+			t.Errorf("round %d: service and setup ended with different signing keys: %s vs %s", r, sf[0], pf[0])
+		}
+		// One key on disk, the one both used; the token the service minted verifies
+		// against it; and the owner setup created can sign in.
+		a := startIn(t, dir, "enforce", "")
+		if kid := a.svc.SigningKey().Active.KID; kid != sf[0] {
+			t.Errorf("round %d: key on disk has kid %s, the processes used %s", r, kid, sf[0])
+		}
+		if _, err := a.svc.Verify(context.Background(), sf[1]); err != nil {
+			t.Errorf("round %d: the service's token does not verify against the key on disk: %v", r, err)
+		}
+		code(t, a.login("owner", secretPassword), 200)
+		if m, _ := filepath.Glob(filepath.Join(dir, "id.key*")); len(m) != 2 {
+			t.Errorf("round %d: expected the key, its jwks and no scratch files, found %v", r, m)
 		}
 	}
 }
