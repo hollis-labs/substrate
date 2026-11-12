@@ -19,7 +19,7 @@ Answer these first; most of the surprises in a port were one of them.
 | Who issues identity? | Own accounts (the `identity` module), trust another issuer (`auth.jwks_url`), fixed service keys, or nothing for local use. Per app; see `docs/identity.md`. |
 | Which routes are public, which need a scope, which authenticate themselves? | Every `/api/` route needs a scope. A route that authenticates its own callers (a device protocol, a webhook) is an open mount. |
 | Is there background work that must drain on shutdown? | Workers, schedulers, pollers. Decide who owns them (a module or your code) and the stop order. |
-| What does the UI need from the framework? | Nav items and surfaces come from module `ui.json` files and the frontend manifest; section 8 lists what an app cannot yet contribute. |
+| What does the UI need from the framework? | Nav items and surfaces come from module `ui.json` files and the frontend manifest; the app's own nav items and surfaces go in a file named by `frontend.contributions` (section 8). |
 | Does the app depend on a module or a lib that is not in the BOM? | Add the pin to `bom/bom.yaml` in Substrate first (a small PR); the app's `pins check` fails until you do. |
 
 Write the answers into the app's `docs/architecture.md` as you go. Reviewers read that file first.
@@ -54,10 +54,11 @@ go run github.com/hollis-labs/substrate/cmd/substrate validate -f cmd/myapp/subs
 go run github.com/hollis-labs/substrate/cmd/substrate generate -f cmd/myapp/substrate.yaml   # writes substrate_wiring.go
 ```
 
-Commit the generated `substrate_wiring.go`; `go build` must work without the substrate CLI. `config:` only accepts
-blocks for catalogue modules. An app's own config block (`myapp:`) cannot have defaults in the manifest yet; read it
-from `app.Config["myapp"]`, which the `config` module fills from the file named by `SUBSTRATE_CONFIG`. Keep the
-defaults in a small `internal/settings` package and refuse a bad value at start with a message that names the key.
+Commit the generated `substrate_wiring.go`; `go build` must work without the substrate CLI. `config:` accepts blocks for
+catalogue modules and one block for the app itself, the key equal to the manifest's `app` (`myapp:`). Put the app's
+defaults there; they reach the generated config like any module's, and the app reads them from `app.Config["myapp"]`
+(the `config` module overlays the file named by `SUBSTRATE_CONFIG`). Keep a small `internal/settings` package that
+decodes the block and refuses a bad value at start with a message that names the key. Any other key is an error.
 
 ## 3. The entry point
 
@@ -129,7 +130,7 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 ## 6. Configuration
 
 Defaults live in the manifest and in `internal/settings`; operators override any key in the YAML file named by
-`SUBSTRATE_CONFIG`. The merge is one level deep: a nested block such as `database.sqlite` replaces the whole block.
+`SUBSTRATE_CONFIG`. The merge is deep: maps merge key by key, so an override of only `database: {sqlite: {path: /data/app.db}}` changes the path and keeps the manifest's other `sqlite` keys; scalars and lists replace the manifest value whole; a key only in the override is added; an explicit `null` removes the key so the module's own default applies; a map over a scalar (or the reverse) replaces it. The rules are in the `config` package comment.
 Map every old environment variable to a config key (or drop it on purpose) and write the table in
 `docs/conversion-notes.md`. Do not read `os.Getenv` for settings in new code, except the data-directory override.
 
@@ -149,8 +150,15 @@ Map every old environment variable to a config key (or drop it on purpose) and w
   `substrate frontend -f cmd/myapp/substrate.yaml` to generate the frontend manifest and use the pinned versions.
 - Serve the built SPA with `httphost.Options{Assets: fsys}` from an `internal/webui` package that embeds
   `all:dist` (keep `dist/.gitkeep` so an unbuilt tree still compiles).
-- Known limits today, each a framework task: an app cannot contribute its own nav items and surfaces except through a
-  hand-written fragment merged in the SPA; the identity module has no UI, so setup, sign-in and password screens are
+- The app's own UI goes in a contribution file named in the manifest (`frontend: {contributions: ui/app.json}`, a
+  path relative to the manifest). It has the shape of a module `ui.json` (`schema_version`, `module`, `contributions`,
+  `package`, `envelopes`) with `module` equal to the manifest's `app`, and `substrate frontend` validates it against
+  the same vocabulary and merges it with the modules' items under the same rules (nav groups exist, surface routes
+  are unique and not backend paths, regions are declared, actions resolve); its items carry the app name as their
+  `module`, and its `package` and the base kits are pinned like a module's. `routes` are refused: an app mounts its
+  routes through httphost, so there is nothing for the builder to wire, and only modules declare backend paths. The
+  app name must not be a catalogue module name. Do not hand-merge a fragment in the SPA.
+- Known limits today, each a framework task: the identity module has no UI, so setup, sign-in and password screens are
   app-owned until a shared kit exists; app-shell has no user-menu region (sign-out is a page); kit-settings still
   depends on the previous design-system version. Check the open Substrate tasks before building around one.
 - Frontend work is a separate track from the backend port. Agree the API contract first (paths, the flat

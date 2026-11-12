@@ -35,7 +35,7 @@ func (*mod) Stop(ctx context.Context) error { ... }
 
 Config arrives as `app.Config["<name>"]`, a `map[string]any` from the manifest's `config` block (JSON types:
 numbers are `float64`). Document every key in the package comment, give each a default, and refuse a bad value
-at Start with an error that names the key. The `config` module can override a key from `SUBSTRATE_CONFIG`.
+at Start with an error that names the key. The `config` module deep-merges the YAML file named by `SUBSTRATE_CONFIG` over it (maps merge recursively; scalars and lists replace; `null` removes a key, so your default applies). Override numbers arrive as `int` (YAML), manifest numbers as `float64`: accept both.
 
 ## Hooks for the app
 
@@ -109,7 +109,9 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
   - A companion npm package is named in `package.name` and must be pinned in the BOM's `kits:` section; the
     version lives only there.
 - `substrate frontend` merges the contributions of exactly the modules a manifest selects, so removing your
-  module removes its UI.
+  module removes its UI. An app (which is not a module) contributes through the same file shape, named by
+  `frontend.contributions` in its manifest with `module` set to the app name; it is merged last under the same
+  rules, and may not declare `routes`.
 
 ## Health
 

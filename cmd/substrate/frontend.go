@@ -42,7 +42,8 @@ func writeFrontend(m *manifest.Manifest, appDir, outDir string) error {
 		}
 		return data, err == nil, err
 	}
-	fm, err := frontend.Build(m, b, ui.Default, load)
+	readApp := func(path string) ([]byte, error) { return os.ReadFile(filepath.Join(appDir, filepath.FromSlash(path))) }
+	fm, err := frontend.Build(m, b, ui.Default, load, frontend.WithAppFile(readApp))
 	if err != nil {
 		return err
 	}

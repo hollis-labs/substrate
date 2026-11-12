@@ -79,8 +79,26 @@ type Kit struct {
 // Load returns a module's ui.json, and false when the module has none.
 type Load func(module string) (data []byte, ok bool, err error)
 
-// Build merges the contributions of m's resolved modules.
-func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manifest, error) {
+// ReadApp returns the bytes of the app's contribution file, the path being the
+// manifest's frontend.contributions value (relative to the manifest file).
+type ReadApp func(path string) ([]byte, error)
+
+// Option adjusts Build.
+type Option func(*options)
+
+type options struct{ readApp ReadApp }
+
+// WithAppFile lets Build read the app's own contribution file, named by
+// frontend.contributions. Without it a manifest that names one is an error.
+func WithAppFile(read ReadApp) Option { return func(o *options) { o.readApp = read } }
+
+// Build merges the contributions of m's resolved modules, then of the app's own
+// file when the manifest names one (see WithAppFile).
+func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load, opts ...Option) (*Manifest, error) {
+	var o options
+	for _, f := range opts {
+		f(&o)
+	}
 	mods, err := m.Resolve()
 	if err != nil {
 		return nil, err
@@ -93,24 +111,7 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 	want := map[string]bool{}
 	bindings := map[Binding]bool{}
 	var items []Item
-	for _, name := range mods {
-		data, ok, err := load(name)
-		if err != nil {
-			return nil, fmt.Errorf("module %s: %w", name, err)
-		}
-		if !ok {
-			continue
-		}
-		c, err := ui.Parse(data)
-		if err != nil {
-			return nil, fmt.Errorf("module %s: %w", name, err)
-		}
-		if c.Module != name {
-			return nil, fmt.Errorf("module %s: ui.json says module %q", name, c.Module)
-		}
-		if errs := ui.Validate(c, v); len(errs) > 0 {
-			return nil, errs[0]
-		}
+	add := func(name string, c ui.Contribution) {
 		out.Contributions = append(out.Contributions, c)
 		if c.Envelopes != nil {
 			for _, e := range c.Envelopes.Emits {
@@ -132,6 +133,49 @@ func Build(m *manifest.Manifest, b *bom.BOM, v ui.Vocabulary, load Load) (*Manif
 				want[k] = true
 			}
 		}
+	}
+	for _, name := range mods {
+		data, ok, err := load(name)
+		if err != nil {
+			return nil, fmt.Errorf("module %s: %w", name, err)
+		}
+		if !ok {
+			continue
+		}
+		c, err := ui.Parse(data)
+		if err != nil {
+			return nil, fmt.Errorf("module %s: %w", name, err)
+		}
+		if c.Module != name {
+			return nil, fmt.Errorf("module %s: ui.json says module %q", name, c.Module)
+		}
+		if errs := ui.Validate(c, v); len(errs) > 0 {
+			return nil, errs[0]
+		}
+		add(name, c)
+	}
+	if path := m.Frontend.Contributions; path != "" {
+		if o.readApp == nil {
+			return nil, fmt.Errorf("frontend.contributions %q: no reader for the app file", path)
+		}
+		data, err := o.readApp(path)
+		if err != nil {
+			return nil, fmt.Errorf("app contributions %s: %w", path, err)
+		}
+		c, err := ui.Parse(data)
+		if err != nil {
+			return nil, fmt.Errorf("app contributions %s: %w", path, err)
+		}
+		if c.Module != m.App {
+			return nil, fmt.Errorf("app contributions %s: module is %q, want the app name %q", path, c.Module, m.App)
+		}
+		if len(c.Routes) > 0 {
+			return nil, fmt.Errorf("app contributions %s: routes are not accepted; an app mounts its routes through httphost, and only modules declare routes", path)
+		}
+		if errs := ui.Validate(c, v); len(errs) > 0 {
+			return nil, fmt.Errorf("app contributions %s: %w", path, errs[0])
+		}
+		add(m.App, c)
 	}
 	if out.Items, err = merge(items, out.Routes, m.Frontend.Regions); err != nil {
 		return nil, err
