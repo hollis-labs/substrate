@@ -11,6 +11,9 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 - Examples: hello-service, hello-app-host, hello-cli, hello-agentic. Acceptance: flag test (`e2e/`) compares the
   linked modules and size of minimal vs agentic from one source (about 9.4 MB vs 13.7 MB on arm64 macOS).
 
+- App UI contributions (`frontend.contributions`: the app's own file, validated and merged like a module's) and an app
+  config block (`config.<app>`) in the manifest.
+
 ## Next
 
 - `gui-shell` profile (frontend; repo location to be settled) and Hadron as the first real app.

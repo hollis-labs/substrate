@@ -4,6 +4,7 @@ package manifest
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -24,6 +25,12 @@ type Manifest struct {
 
 // Frontend is what the app's host declares for the generated frontend manifest.
 type Frontend struct {
+	// Contributions is the app's own UI contribution file, a path relative to
+	// the manifest file. It has the shape of a module's ui.json with `module`
+	// equal to the app name, and is merged with the selected modules' items
+	// under the same rules. It may carry contributions, package and envelopes,
+	// not routes (an app mounts its routes through httphost).
+	Contributions string `yaml:"contributions"`
 	// Regions is the host region catalog: the places a dock.tab or slot may
 	// contribute to. The core regions (nav.primary, nav.group:<key>, nav.footer,
 	// settings.sections, surface.page, aside.panels, widgets.grid) exist in every
@@ -180,8 +187,16 @@ func (m *Manifest) Validate() []error {
 		}
 	}
 	for k := range m.Config {
-		if _, ok := catalog.Find(k); !ok {
-			bad("config for unknown module %q", k)
+		if _, ok := catalog.Find(k); !ok && k != m.App {
+			bad("config for unknown module %q (the app's own block is config.%s)", k, m.App)
+		}
+	}
+	if c := m.Frontend.Contributions; c != "" {
+		if _, ok := catalog.Find(m.App); ok {
+			bad("frontend.contributions: app name %q is a catalogue module; an app contributes under its own name", m.App)
+		}
+		if filepath.IsAbs(c) || !filepath.IsLocal(filepath.FromSlash(c)) {
+			bad("frontend.contributions %q must be a path inside the manifest's directory", c)
 		}
 	}
 	errs = append(errs, m.checkRegions()...)
