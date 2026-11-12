@@ -18,8 +18,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   without it fails. A command that only prints (help, version, a bare command, an unknown word) starts no
   module and creates no file; only `serve` and the offline `identity` commands boot and create the data
   directory. `internal/hostguard` is a per-app copy of a check the framework is to own (Substrate pull
-  request 23): the preset drops it when that lands. Frontend layer, the `app-dashboard` and `chat-app` variants and the removal of the
-  Chimera and go-webui presets follow in later changes.
+  request 23): the preset drops it when that lands. The removal of the
+  Chimera and go-webui presets follows in a later change.
+- **`substrate-webapp` preset (and its `substrate-frontend` layer).** `substrate-app` plus a minimal
+  app-shell frontend: React 19, Vite, Tailwind, `ManifestShell` over the manifest `substrate frontend`
+  generates, an app-owned sign-in screen (identity has no UI kit yet), one list surface over
+  `GET`/`POST /api/items`, and `cmd/<name>/ui/app.json`. The `@hollis-labs` kit versions are required
+  inputs with no default (they come from the Substrate `bom.yaml`; the framework does not mirror them into
+  `platform-pins.yaml` yet). A `chat-app`-style variant waits for a pinned `kit-chat`.
 
 ### Changed
 

@@ -16,6 +16,7 @@ import (
 
 	"{{ .computed.module_path }}/internal/api"
 	"{{ .computed.module_path }}/internal/hostguard"
+	"{{ .computed.module_path }}/internal/service"
 	"{{ .computed.module_path }}/internal/settings"
 	"{{ .computed.module_path }}/internal/webui"
 )
@@ -50,7 +51,7 @@ func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
 	}
 	handler, err := httphost.Handler(app, httphost.Options{
 		Assets: assets,
-		Routes: api.New(st.Reader(), st.DB()).Mux(),
+		Routes: api.New(service.New(st.Reader(), st.DB())).Mux(),
 	})
 	if err != nil {
 		return err

@@ -1,0 +1,112 @@
+import { ManifestShell, type PageComponent } from "@hollis-labs/app-shell"
+import { Button } from "@hollis-labs/design-components"
+import { List, LogOut } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { ApiError, request, UNAUTHORIZED_EVENT } from "./api/request"
+import { Entry, SetupOffline } from "./identity/entry"
+import { APP_NAME, Notice } from "./identity/forms"
+import { type Session, SessionContext } from "./identity/session"
+import { SignOutPage } from "./identity/signout"
+import { manifest } from "./manifest"
+import { ItemsPage } from "./pages/items"
+
+// Kit icon names used by the contributions, resolved by the shell.
+const icons = {
+  list: List,
+  "log-out": LogOut,
+}
+
+const pages: Record<string, PageComponent> = {
+  items: () => <ItemsPage />,
+  "sign-out": () => <SignOutPage />,
+}
+
+function usePath() {
+  const [path, setPath] = useState(window.location.pathname)
+  useEffect(() => {
+    const onPop = () => setPath(window.location.pathname)
+    window.addEventListener("popstate", onPop)
+    return () => window.removeEventListener("popstate", onPop)
+  }, [])
+  const navigate = useCallback((to: string) => {
+    if (to !== window.location.pathname) window.history.pushState(null, "", to)
+    setPath(to)
+  }, [])
+  return [path, navigate] as const
+}
+
+export function App() {
+  // null: not signed in; otherwise the signed-in person's display name.
+  const [name, setName] = useState<string | null>(null)
+  const [setup, setSetup] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [path, navigate] = usePath()
+  // A session that ends keeps the current path, so the sign-in returns to it; an explicit sign-out goes home.
+  const signedOut = useCallback(
+    (home = false) => {
+      setName(null)
+      if (home) navigate("/")
+    },
+    [navigate],
+  )
+  useEffect(() => {
+    async function load() {
+      try {
+        const state = await request<{ setup_required: boolean }>("setup")
+        setSetup(state.setup_required)
+        if (!state.setup_required) {
+          try {
+            const me = await request<{ username: string; display_name?: string }>(
+              "identity/profile",
+            )
+            setName(me.display_name || me.username)
+          } catch (e) {
+            if (!(e instanceof ApiError && e.status === 401)) throw e
+          }
+        }
+      } catch (e) {
+        setError(e instanceof Error ? e.message : `Could not reach ${APP_NAME}.`)
+      } finally {
+        setLoading(false)
+      }
+    }
+    void load()
+  }, [])
+  useEffect(() => {
+    const onUnauthorized = () => signedOut()
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [signedOut])
+  const session = useMemo<Session | null>(
+    () => (name === null ? null : { name, signedOut }),
+    [name, signedOut],
+  )
+
+  if (loading)
+    return (
+      <main className="entry-loading">
+        <p role="status">Opening {APP_NAME}…</p>
+      </main>
+    )
+  if (error && !session)
+    return (
+      <main className="entry-loading">
+        <Notice error={error} />
+        <Button onClick={() => window.location.reload()}>Try again</Button>
+      </main>
+    )
+  if (!session) return setup ? <SetupOffline /> : <Entry onReady={setName} />
+  return (
+    <SessionContext.Provider value={session}>
+      <ManifestShell
+        manifest={manifest}
+        apiBase="/api"
+        path={path}
+        onNavigate={navigate}
+        pages={pages}
+        icons={icons}
+      />
+    </SessionContext.Provider>
+  )
+}

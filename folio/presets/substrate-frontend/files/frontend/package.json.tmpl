@@ -1,0 +1,45 @@
+{
+  "name": "{{ .inputs.repo_name }}-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "predev": "npm run manifest",
+    "prebuild": "npm run manifest",
+    "build": "vite build",
+    "preview": "vite preview",
+    "manifest": "go run github.com/hollis-labs/substrate/cmd/substrate frontend -f ../cmd/{{ .inputs.repo_name }}/substrate.yaml -o src/generated",
+    "pretypecheck": "npm run manifest",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check . && npm run lint:design",
+    "lint:design": "eslint src",
+    "lint:fix": "biome check --write ."
+  },
+  "dependencies": {
+    "@base-ui/react": "1.8.0",
+    "@hollis-labs/app-shell": "{{ .inputs.kit_app_shell }}",
+    "@hollis-labs/design-app-runtime": "{{ .inputs.kit_design_app_runtime }}",
+    "@hollis-labs/design-bindings": "{{ .inputs.kit_design_bindings }}",
+    "@hollis-labs/design-components": "{{ .inputs.kit_design_components }}",
+    "@hollis-labs/design-tokens": "{{ .inputs.kit_design_tokens }}",
+    "@hollis-labs/kit-dashboard": "{{ .inputs.kit_dashboard }}",
+    "@hollis-labs/plugin-host-ui": "{{ .inputs.kit_plugin_host_ui }}",
+    "lucide-react": "1.52.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.14",
+    "@hollis-labs/eslint-config-design": "0.5.0",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.4",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "eslint": "9.39.4",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.58.0",
+    "vite": "7.3.6"
+  }
+}

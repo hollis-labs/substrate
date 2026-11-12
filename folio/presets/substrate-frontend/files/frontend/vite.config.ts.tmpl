@@ -1,0 +1,28 @@
+import { writeFileSync } from "node:fs"
+import { resolve } from "node:path"
+import tailwindcss from "@tailwindcss/vite"
+import { defineConfig } from "vite"
+
+const outDir = resolve(import.meta.dirname, "../internal/webui/dist")
+// The dev proxy target: the backend started for development (see README.md).
+const backend = process.env.{{ .computed.env_prefix }}_DEV_BACKEND ?? "http://127.0.0.1:{{ .inputs.http_port }}"
+
+export default defineConfig({
+  base: "/",
+  plugins: [
+    tailwindcss(),
+    {
+      // emptyOutDir removes dist/.gitkeep, which the Go embed needs to compile when unbuilt.
+      name: "keep-gitkeep",
+      closeBundle() {
+        writeFileSync(resolve(outDir, ".gitkeep"), "")
+      },
+    },
+  ],
+  esbuild: { jsx: "automatic" },
+  // app-shell ships TypeScript source; the dependency optimizer needs the same JSX runtime.
+  optimizeDeps: { esbuildOptions: { jsx: "automatic" } },
+  build: { outDir, emptyOutDir: true },
+  // A fixed port: the dev origin must be listed in identity.allowed_origins of the DEVELOPMENT config (README.md).
+  server: { port: 5173, strictPort: true, proxy: { "/api": backend } },
+})

@@ -1,6 +1,9 @@
 # {{ .inputs.repo_name }} on Substrate. The manifest is the shell: modules and config.
 app: {{ .inputs.repo_name }}
 variant: app-host
+{{- if .inputs.with_frontend }}
+frontend: { contributions: ui/app.json }
+{{- end }}
 profiles: [minimal]
 modules:
   add: [secrets, auth, database, identity, cli]

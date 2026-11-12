@@ -34,6 +34,16 @@ var allPresetInputs = map[string]map[string]any{
 	"app-dashboard":                {"project_name": "acme_sysop", "github_owner": "hollis-labs", "description": "d"},
 	"substrate-baseline":           {"repo_name": "sub-smoke", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
 	"substrate-app":                {"repo_name": "sub-app", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
+	"substrate-frontend":           frontendInputs("sub-fe"),
+	"substrate-webapp":             frontendInputs("sub-web"),
+}
+
+func frontendInputs(name string) map[string]any {
+	return map[string]any{
+		"repo_name": name, "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7",
+		"kit_app_shell": "0.1.0", "kit_design_app_runtime": "0.5.0", "kit_design_bindings": "0.2.0",
+		"kit_design_components": "0.5.1", "kit_design_tokens": "0.5.0", "kit_dashboard": "0.6.0", "kit_plugin_host_ui": "0.3.0",
+	}
 }
 
 func bundledIDs(t *testing.T) []string {
@@ -71,7 +81,7 @@ func TestPresetDiscovery_ListMatchesEmbeddedPresets(t *testing.T) {
 		if p.Source != "bundled" || p.Version == "" || p.Description == "" || p.Author == "" {
 			t.Errorf("incomplete summary: %+v", p)
 		}
-		if p.LayerOnly != (p.ID == "go-baseline" || p.ID == "chimera-plugin-fixture" || p.ID == "substrate-baseline") {
+		if p.LayerOnly != (p.ID == "go-baseline" || p.ID == "chimera-plugin-fixture" || p.ID == "substrate-baseline" || p.ID == "substrate-frontend") {
 			t.Errorf("%s LayerOnly = %v", p.ID, p.LayerOnly)
 		}
 	}

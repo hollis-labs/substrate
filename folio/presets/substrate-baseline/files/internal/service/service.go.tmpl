@@ -1,0 +1,65 @@
+// Package service is the app's service layer: the only place that talks SQL. Transports (internal/api
+// and any MCP or CLI adapter) call it and never the store or the database module (the second lint run,
+// .golangci.transport.yml, enforces that).
+package service
+
+import (
+	"context"
+	"database/sql"
+	"strings"
+)
+
+// Reader is the read pool of the database module's store; Writer is its write handle.
+type (
+	Reader interface {
+		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	}
+	Writer interface {
+		ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	}
+)
+
+// Service holds the app's operations over a read pool and a write handle.
+type Service struct {
+	read  Reader
+	write Writer
+}
+
+// New builds the service. The composition root (cmd/{{ .inputs.repo_name }}) is the only caller that opens the store.
+func New(read Reader, write Writer) *Service { return &Service{read: read, write: write} }
+
+// Item is one row of the items table.
+type Item struct {
+	ID        int64  `json:"id"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"created_at"`
+}
+
+// ListItems returns the owner's items, oldest first. Reads go through the read pool and the cursor is
+// closed before anything else touches the database.
+func (s *Service) ListItems(ctx context.Context, owner string) ([]Item, error) {
+	rows, err := s.read.QueryContext(ctx, `SELECT id, title, created_at FROM items WHERE owner = ? ORDER BY id`, owner)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := []Item{}
+	for rows.Next() {
+		var it Item
+		if err := rows.Scan(&it.ID, &it.Title, &it.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
+}
+
+// CreateItem stores an item for the owner and returns its id. The owner is the verified principal's
+// subject, chosen by the caller from the request context, never a request field.
+func (s *Service) CreateItem(ctx context.Context, owner, title string) (int64, error) {
+	res, err := s.write.ExecContext(ctx, `INSERT INTO items (owner, title) VALUES (?, ?)`, owner, strings.TrimSpace(title))
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}

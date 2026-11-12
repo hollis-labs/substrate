@@ -12,7 +12,7 @@ import (
 // Every route the mux serves is listed in Routes() with a scope, and the other way round: a route
 // without a scope is refused in enforce mode, so it would be unreachable.
 func TestEveryRouteHasAScope(t *testing.T) {
-	mux := api.New(nil, nil).Mux()
+	mux := api.New(nil).Mux()
 	for _, rt := range api.Routes() {
 		if strings.TrimSpace(rt.Scope) == "" {
 			t.Errorf("%s %s has no scope", rt.Method, rt.Pattern)
@@ -26,7 +26,7 @@ func TestEveryRouteHasAScope(t *testing.T) {
 
 // A caller the guard did not verify never reaches the data.
 func TestUnverifiedCallerIsRefused(t *testing.T) {
-	mux := api.New(nil, nil).Mux()
+	mux := api.New(nil).Mux()
 	for _, rt := range api.Routes() {
 		rec := httptest.NewRecorder()
 		mux.ServeHTTP(rec, httptest.NewRequest(rt.Method, rt.Pattern, strings.NewReader(`{"title":"x"}`)))
