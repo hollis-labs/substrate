@@ -56,7 +56,7 @@ func TestSubstrateApp_RendersTree(t *testing.T) {
 	want := []string{
 		".folio.yaml", ".gitignore", ".golangci.yml", ".github/workflows/check.yml", ".github/workflows/build.yml",
 		"AGENTS.md", "CHANGELOG.md", "LICENSE", "README.md", "deploy.yaml", "go.mod", "scan-public.allow",
-		"cmd/myapp/main.go", "cmd/myapp/config.go", "cmd/myapp/serve.go", "cmd/myapp/substrate.yaml", "cmd/myapp/substrate_wiring.go",
+		"cmd/myapp/main.go", "cmd/myapp/config.go", "cmd/myapp/serve.go", "cmd/myapp/substrate.yaml", "cmd/myapp/substrate_wiring.go", "cmd/myapp/plan_test.go",
 		"docs/identity-bootstrap.md",
 		"internal/api/api.go", "internal/api/api_test.go", "internal/hostguard/hostguard.go", "internal/hostguard/hostguard_test.go",
 		"internal/settings/settings.go", "internal/settings/settings_test.go", "internal/webui/webui.go", "internal/webui/dist/.gitkeep",
@@ -193,6 +193,7 @@ func TestSubstrateApp_BuildsAndRuns(t *testing.T) {
 			mustRun(t, dir, "go", "test", "-race", "./...")
 			bin := filepath.Join(dir, name)
 			mustRun(t, dir, "go", "build", "-o", bin, "./cmd/"+name)
+			checkPrintOnlyCommands(t, bin, name)
 			driveSubstrateBinary(t, bin, name, port)
 		})
 	}
@@ -219,7 +220,7 @@ func driveSubstrateBinary(t *testing.T, bin, name, port string) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	srv := exec.CommandContext(ctx, bin)
+	srv := exec.CommandContext(ctx, bin, "serve")
 	srv.Env = env
 	stderr, _ := srv.StderrPipe()
 	var logBuf bytes.Buffer
@@ -325,4 +326,50 @@ func randomHex(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return hex.EncodeToString(b)
+}
+
+// A command that only prints starts no module and creates no file or directory: run with an empty
+// HOME and no data directory, the binary leaves HOME empty and exits as a CLI should.
+func checkPrintOnlyCommands(t *testing.T, bin, name string) {
+	t.Helper()
+	home := t.TempDir()
+	prefix := strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
+	var env []string
+	for _, kv := range os.Environ() {
+		if strings.HasPrefix(kv, "HOME=") || strings.HasPrefix(kv, "XDG_") || strings.HasPrefix(kv, prefix+"_DATA_DIR=") || strings.HasPrefix(kv, "SUBSTRATE_CONFIG=") {
+			continue
+		}
+		env = append(env, kv)
+	}
+	env = append(env, "HOME="+home)
+	for _, c := range []struct {
+		args []string
+		ok   bool
+	}{
+		{[]string{"--help"}, true},
+		{[]string{"help"}, true},
+		{[]string{"version"}, true},
+		{[]string{"identity", "--help"}, true},
+		{nil, true}, // bare: prints help, never serves
+		{[]string{"nope"}, false},
+		{[]string{"--no-such-flag"}, false},
+	} {
+		cmd := exec.Command(bin, c.args...)
+		cmd.Env = env
+		out, err := cmd.CombinedOutput()
+		if (err == nil) != c.ok {
+			t.Errorf("%s %v: err=%v, want ok=%v\n%s", name, c.args, err, c.ok, out)
+		}
+	}
+	entries, err := os.ReadDir(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		var names []string
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("print-only commands created files in HOME: %v", names)
+	}
 }

@@ -1,4 +1,7 @@
-// Package hostguard keeps the app answering only to the names it is meant to have. The
+// Package hostguard is a per-app copy of a check the framework is to own (Substrate pull request 23,
+// held): when it lands this package is deleted, so do not grow it.
+//
+// It keeps the app answering only to the names it is meant to have. The
 // backend binds loopback; a browser pointed at it from another site (DNS rebinding) arrives
 // with a Host the app does not serve, and is refused before any handler sees it.
 //

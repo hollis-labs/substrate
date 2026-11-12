@@ -12,6 +12,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/cli"
 )
 
@@ -26,16 +27,25 @@ func main() {
 }
 
 func run(ctx context.Context) error {
-	started, err := start(ctx)
+	args := os.Args[1:]
+	started, err := start(ctx, plan(args))
 	if err != nil {
 		return err
 	}
 	defer func() { _ = started.Stop(context.Background()) }()
-	root := cli.Root(started.App)
-	serve := serveCmd(ctx, started.App)
-	// `{{ .inputs.repo_name }}` with no command serves, like `{{ .inputs.repo_name }} serve`.
-	root.RunE = func(c *cobra.Command, args []string) error { return serve.RunE(c, args) }
-	root.AddCommand(serve)
-	root.SetArgs(os.Args[1:])
+	root := newRoot(ctx, started.App)
+	// A bare command prints help; a typo never starts a server.
+	root.SetArgs(args)
 	return root.ExecuteContext(ctx)
+}
+
+// newRoot is the command tree over the started app.
+func newRoot(ctx context.Context, app *module.App) *cobra.Command {
+	root := cli.Root(app)
+	root.AddCommand(serveCmd(ctx, app))
+	if c, _, _ := root.Find([]string{"identity"}); c == nil || c == root {
+		// The identity module did not start (nothing that writes starts for a print-only command): help text only.
+		root.AddCommand(&cobra.Command{Use: "identity", Short: "Create the owner and API keys offline: identity setup, identity key create"})
+	}
+	return root
 }

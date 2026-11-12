@@ -15,7 +15,10 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   every route has a scope, `internal/settings`, the embedded-UI package, `check.yml` (vet, pins, wiring
   current, race tests, golangci-lint v2.11.4, scan-public), `build.yml` calling the tools reusable
   workflow, `deploy.yaml`, and `docs/identity-bootstrap.md`. `substrate_version` has no default: a render
-  without it fails. Frontend layer, the `app-dashboard` and `chat-app` variants and the removal of the
+  without it fails. A command that only prints (help, version, a bare command, an unknown word) starts no
+  module and creates no file; only `serve` and the offline `identity` commands boot and create the data
+  directory. `internal/hostguard` is a per-app copy of a check the framework is to own (Substrate pull
+  request 23): the preset drops it when that lands. Frontend layer, the `app-dashboard` and `chat-app` variants and the removal of the
   Chimera and go-webui presets follow in later changes.
 
 ### Changed

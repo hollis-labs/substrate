@@ -4,6 +4,8 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/hollis-labs/substrate/boot"
 	"github.com/hollis-labs/substrate/module"
@@ -32,26 +34,74 @@ func dataDir() (string, error) {
 	return filepath.Join(home, ".local", "share", "{{ .inputs.repo_name }}"), nil
 }
 
-// start starts the modules the manifest selects. The data directory is only known at run time,
-// so AfterConfig makes the file paths absolute (a path the operator's override already made
+// runPlan is what a command line needs: which modules to start, and whether the data directory may
+// be created. A command that only prints starts no module that opens or creates a file.
+type runPlan struct {
+	modules []string
+	prepare bool // create the data directory, resolve paths into it
+}
+
+// printModules are what help, version, config and health need: none of them opens or creates a file.
+var printModules = []string{"config", "logging", "health", "cli"}
+
+// plan decides, from the command line, which modules to start. Only `serve`, `identity setup` and
+// `identity key create` start the full set and may create the data directory, the database and the
+// signing key. A bare command, help at any level, version, config, health, a bad flag and an unknown
+// word start nothing that writes. Every argument that does not start with "-" counts as a command
+// word. That is right only while the root command has no global flag that takes a value:
+// TestRootHasNoValueFlags fails when one is added, and then plan must learn it.
+func plan(args []string) runPlan {
+	var words []string
+	for _, a := range args {
+		if a == "-h" || a == "--help" || a == "--version" || a == "help" && len(words) == 0 {
+			return runPlan{modules: pick(printModules)}
+		}
+		if !strings.HasPrefix(a, "-") {
+			words = append(words, a)
+		}
+	}
+	switch {
+	case len(words) > 0 && words[0] == "serve":
+		return runPlan{modules: substrateModules, prepare: true}
+	case len(words) > 1 && words[0] == "identity" && (words[1] == "setup" || (words[1] == "key" && len(words) > 2 && words[2] == "create")):
+		return runPlan{modules: substrateModules, prepare: true}
+	}
+	return runPlan{modules: pick(printModules)}
+}
+
+// pick keeps the start order of substrateModules.
+func pick(want []string) []string {
+	var out []string
+	for _, m := range substrateModules {
+		if slices.Contains(want, m) {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// start starts the modules of the plan. The data directory is only known at run time, so with
+// prepare AfterConfig makes the file paths absolute (a path the operator's override already made
 // absolute is left alone) after the SUBSTRATE_CONFIG override is applied.
-func start(ctx context.Context) (*boot.Running, error) {
-	dir, err := dataDir()
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, err
-	}
-	database.UseMigrationFS(storage.Migrations())
-	return boot.StartWith(ctx, substrateApp, substrateModules, substrateConfigJSON, boot.Options{
-		AfterConfig: func(_ context.Context, app *module.App) error {
+func start(ctx context.Context, pl runPlan) (*boot.Running, error) {
+	opts := boot.Options{}
+	if pl.prepare {
+		dir, err := dataDir()
+		if err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return nil, err
+		}
+		database.UseMigrationFS(storage.Migrations())
+		opts.AfterConfig = func(_ context.Context, app *module.App) error {
 			place(app, dir, "database", "sqlite", "path")
 			place(app, dir, "identity", "key_file")
 			place(app, dir, "secrets", "state_dir")
 			return nil
-		},
-	})
+		}
+	}
+	return boot.StartWith(ctx, substrateApp, pl.modules, substrateConfigJSON, opts)
 }
 
 // place makes the config value at path absolute under dir, unless it already is.
