@@ -195,6 +195,7 @@ func TestKitPinsMustBeExactScopedVersions(t *testing.T) {
 func TestCheckNPMReportsUnpublishedVersions(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/@s/a/1.0.0" {
+			_, _ = w.Write([]byte("{}"))
 			return
 		}
 		http.NotFound(w, r)
@@ -334,28 +335,28 @@ func registry(t *testing.T, pkgs map[string]string) *httptest.Server {
 
 func TestCheckNPMVerifiesKitRangesAgainstTheOtherPins(t *testing.T) {
 	srv := registry(t, map[string]string{
-		"@s/a/1.0.0": `{"dependencies":{"@s/b":"^2.0.0","@s/c":"^1.0.0","lodash":"^4"}}`,
-		"@s/b/2.1.0": `{}`,
-		"@s/c/1.0.0": `{"peerDependencies":{"@s/b":"^1.0.0 || ^2.0.0"}}`,
+		"@hollis-labs/a/1.0.0": `{"dependencies":{"@hollis-labs/b":"^2.0.0","@hollis-labs/c":"^1.0.0","lodash":"^4"}}`,
+		"@hollis-labs/b/2.1.0": `{}`,
+		"@hollis-labs/c/1.0.0": `{"peerDependencies":{"@hollis-labs/b":"^1.0.0 || ^2.0.0"}}`,
 	})
-	b := &BOM{Kits: map[string]string{"@s/a": "1.0.0", "@s/b": "2.1.0", "@s/c": "1.0.0"}}
+	b := &BOM{Kits: map[string]string{"@hollis-labs/a": "1.0.0", "@hollis-labs/b": "2.1.0", "@hollis-labs/c": "1.0.0"}}
 	ds, acc, err := CheckNPM(b, srv.URL)
 	if err != nil || len(ds) != 0 || len(acc) != 0 {
 		t.Fatalf("a coherent set: diffs=%v accepted=%v err=%v", ds, acc, err)
 	}
 
-	b.Kits["@s/b"] = "3.0.0"
+	b.Kits["@hollis-labs/b"] = "3.0.0"
 	srv2 := registry(t, map[string]string{
-		"@s/a/1.0.0": `{"dependencies":{"@s/b":"^2.0.0"}}`,
-		"@s/b/3.0.0": `{}`,
+		"@hollis-labs/a/1.0.0": `{"dependencies":{"@hollis-labs/b":"^2.0.0"}}`,
+		"@hollis-labs/b/3.0.0": `{}`,
 	})
-	b.Kits = map[string]string{"@s/a": "1.0.0", "@s/b": "3.0.0"}
+	b.Kits = map[string]string{"@hollis-labs/a": "1.0.0", "@hollis-labs/b": "3.0.0"}
 	ds, _, err = CheckNPM(b, srv2.URL)
-	if err != nil || len(ds) != 1 || !strings.Contains(ds[0].Msg, "@s/a@1.0.0 needs @s/b ^2.0.0, but the BOM pins 3.0.0") {
+	if err != nil || len(ds) != 1 || !strings.Contains(ds[0].Msg, "@hollis-labs/a@1.0.0 needs @hollis-labs/b ^2.0.0, but the BOM pins 3.0.0") {
 		t.Fatalf("a range the pin does not satisfy: %v %v", ds, err)
 	}
 
-	b.Kits = map[string]string{"@s/a": "1.0.0"}
+	b.Kits = map[string]string{"@hollis-labs/a": "1.0.0"}
 	ds, _, _ = CheckNPM(b, srv2.URL)
 	if len(ds) != 1 || !strings.Contains(ds[0].Msg, "which the BOM does not pin") {
 		t.Fatalf("a dependency the BOM does not pin: %v", ds)
@@ -364,10 +365,10 @@ func TestCheckNPMVerifiesKitRangesAgainstTheOtherPins(t *testing.T) {
 
 func TestKitExceptionsAreAcceptedAndReportedNotHidden(t *testing.T) {
 	srv := registry(t, map[string]string{
-		"@s/a/1.0.0": `{"dependencies":{"@s/b":"^1.0.0"}}`,
-		"@s/b/2.0.0": `{}`,
+		"@hollis-labs/a/1.0.0": `{"dependencies":{"@hollis-labs/b":"^1.0.0"}}`,
+		"@hollis-labs/b/2.0.0": `{}`,
 	})
-	b := &BOM{Kits: map[string]string{"@s/a": "1.0.0", "@s/b": "2.0.0"}, KitExceptions: map[string]string{"@s/a>@s/b": "a lags b"}}
+	b := &BOM{Kits: map[string]string{"@hollis-labs/a": "1.0.0", "@hollis-labs/b": "2.0.0"}, KitExceptions: map[string]string{"@hollis-labs/a>@hollis-labs/b": "a lags b"}}
 	ds, acc, err := CheckNPM(b, srv.URL)
 	if err != nil || len(ds) != 0 || len(acc) != 1 || !strings.Contains(acc[0], "accepted: a lags b") {
 		t.Fatalf("diffs=%v accepted=%v err=%v", ds, acc, err)
