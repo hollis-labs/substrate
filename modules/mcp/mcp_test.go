@@ -88,7 +88,15 @@ func list(h http.Handler) string {
 
 func TestToolFilterTrimsTheListButNotTheCall(t *testing.T) {
 	t.Cleanup(func() { mcp.UseToolFilter(nil) })
-	mcp.UseToolFilter(func(_ context.Context, name string) bool { return name != "secret" })
+	mcp.UseToolFilter(func(_ context.Context, names []string) []string {
+		var out []string
+		for _, n := range names {
+			if n != "secret" {
+				out = append(out, n)
+			}
+		}
+		return out
+	})
 	h, app := setup(t, []string{"health", "httphost", "mcp"}, "")
 	mcp.Server(app).RegisterChecked(gmcp.Tool{
 		Name: "secret", Description: "hidden from the list", InputSchema: gmcp.EmptyObjectSchema(),

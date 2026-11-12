@@ -11,7 +11,7 @@ minor releases may break APIs.
 
 ### Added
 
-- `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list` (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
+- `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list`: one call per request with every tool name, returning the names to list (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
 
 - BOM `app_libs`: `libs/mesh/core v0.6.0` (the Tether client, for apps that launch agent sessions).
 

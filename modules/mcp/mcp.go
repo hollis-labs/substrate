@@ -52,23 +52,25 @@ const (
 
 var (
 	filterMu   sync.Mutex
-	toolFilter func(ctx context.Context, name string) bool
+	toolFilter func(ctx context.Context, names []string) []string
 )
 
-// UseToolFilter registers a per-caller visibility filter for tools/list: a tool
-// is listed to a caller only if f(ctx, name) is true. ctx carries the caller's
-// principal (HTTP and stdio alike), so an app can show each caller the tools it
-// may use. It is visibility, not authorization: a hidden tool can still be
-// called by name, so the tool's handler must authorize (see Authorize). Call it
-// before boot.Start; the filter may consult state that changes while serving.
-func UseToolFilter(f func(ctx context.Context, name string) bool) {
+// UseToolFilter registers a per-caller visibility filter for tools/list. f gets
+// the names of every registered tool and returns the ones to list to this
+// caller, in the order to list them; one call per request, so it can do a
+// lookup per caller rather than per tool. ctx carries the caller's principal
+// (HTTP and stdio alike). It is visibility, not authorization: a hidden tool can
+// still be called by name, so the tool's handler must authorize (see
+// Authorize). Call it before boot.Start; f may consult state that changes while
+// serving.
+func UseToolFilter(f func(ctx context.Context, names []string) []string) {
 	filterMu.Lock()
 	toolFilter = f
 	filterMu.Unlock()
 }
 
 // filterTools is receiving middleware that trims the tools/list result.
-func filterTools(f func(context.Context, string) bool) mcpsdk.Middleware {
+func filterTools(f func(context.Context, []string) []string) mcpsdk.Middleware {
 	return func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
 		return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
 			res, err := next(ctx, method, req)
@@ -76,9 +78,14 @@ func filterTools(f func(context.Context, string) bool) mcpsdk.Middleware {
 				return res, err
 			}
 			if lr, ok := res.(*mcpsdk.ListToolsResult); ok {
-				kept := lr.Tools[:0:0]
-				for _, t := range lr.Tools {
-					if f(ctx, t.Name) {
+				names := make([]string, len(lr.Tools))
+				byName := make(map[string]*mcpsdk.Tool, len(lr.Tools))
+				for i, t := range lr.Tools {
+					names[i], byName[t.Name] = t.Name, t
+				}
+				kept := make([]*mcpsdk.Tool, 0, len(lr.Tools))
+				for _, n := range f(ctx, names) {
+					if t, ok := byName[n]; ok {
 						kept = append(kept, t)
 					}
 				}
