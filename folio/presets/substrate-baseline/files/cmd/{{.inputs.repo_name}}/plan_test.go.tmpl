@@ -22,7 +22,7 @@ func TestPlan(t *testing.T) {
 			t.Errorf("plan(%v) = %+v, want the full set with prepare", c.args, p)
 		}
 	}
-	for _, args := range [][]string{nil, {"--help"}, {"-h"}, {"help"}, {"--version"}, {"version"}, {"config"}, {"health"}, {"nope"}, {"--bad-flag"}, {"identity"}, {"identity", "key"}, {"serve", "--help"}} {
+	for _, args := range [][]string{nil, {"--help"}, {"-h"}, {"help"}, {"--version"}, {"version"}, {"config"}, {"health"}, {"nope"}, {"--bad-flag"}, {"identity"}, {"identity", "key"}, {"serve", "--help"}, {"serve", "--no-such-flag"}, {"serve", "extra"}} {
 		p := plan(args)
 		if p.prepare {
 			t.Errorf("plan(%v) prepares the data directory", args)

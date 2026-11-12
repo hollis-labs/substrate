@@ -48,7 +48,10 @@ var printModules = []string{"config", "logging", "health", "cli"}
 // `identity key create` start the full set and may create the data directory, the database and the
 // signing key. A bare command, help at any level, version, config, health, a bad flag and an unknown
 // word start nothing that writes. Every argument that does not start with "-" counts as a command
-// word. That is right only while the root command has no global flag that takes a value:
+// word. `serve` and the identity commands may create files, but a bad flag to `serve` creates none.
+// (`identity setup --typo` still prepares the data directory before cobra rejects the flag: those
+// commands take flags, so validating them here would duplicate the command definitions.)
+// That is right only while the root command has no global flag that takes a value:
 // TestRootHasNoValueFlags fails when one is added, and then plan must learn it.
 func plan(args []string) runPlan {
 	var words []string
@@ -62,7 +65,10 @@ func plan(args []string) runPlan {
 	}
 	switch {
 	case len(words) > 0 && words[0] == "serve":
-		return runPlan{modules: substrateModules, prepare: true}
+		// serve takes no flag and no argument, so `serve --typo` and `serve extra` are not a serve: cobra rejects them and nothing is created.
+		if len(args) == 1 {
+			return runPlan{modules: substrateModules, prepare: true}
+		}
 	case len(words) > 1 && words[0] == "identity" && (words[1] == "setup" || (words[1] == "key" && len(words) > 2 && words[2] == "create")):
 		return runPlan{modules: substrateModules, prepare: true}
 	}

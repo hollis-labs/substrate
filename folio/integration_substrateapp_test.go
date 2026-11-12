@@ -353,6 +353,8 @@ func checkPrintOnlyCommands(t *testing.T, bin, name string) {
 		{nil, true}, // bare: prints help, never serves
 		{[]string{"nope"}, false},
 		{[]string{"--no-such-flag"}, false},
+		{[]string{"serve", "--no-such-flag"}, false},
+		{[]string{"serve", "extra"}, false},
 	} {
 		cmd := exec.Command(bin, c.args...)
 		cmd.Env = env
