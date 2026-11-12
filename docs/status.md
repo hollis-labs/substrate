@@ -4,7 +4,7 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 
 ## Built
 
-- Manifest schema + validator, builder (`validate`, `modules`, `generate`, `build`), module registry.
+- Manifest schema + validator, builder (`validate`, `modules`, `generate`, `build`), module registry. `substrate scan-public`: the public-hygiene scan as a subcommand (embedded `scripts/scan-public`, run with `python3 -I`), so apps carry no copy of the script; a Go port is optional and not started.
 - Modules: config, logging, health, httphost (over libs app-host), capabilities, database (SQLite or Postgres), auth, policy,
   secrets, cli, mcp, pluginhost. Every catalogue module is `ready`.
 - Profiles: `minimal` (config, logging, health) and `agentic` (adds capabilities, secrets, auth, mcp, with httphost).
