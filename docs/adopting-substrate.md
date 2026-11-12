@@ -178,8 +178,20 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    header and a same-origin `Origin`.
 3. Declare each route's scope. Either list routes in a module-style `ui.json` and bind handlers with
    `module.AddRoutes`, or register them on the auth module's `ScopeTable` (`auth.ScopeTable(app).Route(method,
-   pattern, scope)`). A route without a scope is refused in `enforce`. Name scopes `<app>.<verb>`; use `authenticated`
-   for any verified caller and `public` for the few routes that must be reachable without credentials. Add a test that
+   pattern, scope)`). A route without a scope is refused in `enforce`. Name scopes `<app>.<verb>`. "Any verified caller"
+   and "no authentication" are spelled differently depending on how the route is declared:
+
+   | Declared | Any verified caller | No authentication |
+   |---|---|---|
+   | `ui.json` + `module.AddRoutes` | `"scope": "authenticated"` | `"scope": "public"` |
+   | directly: `auth.ScopeTable(app).Route(method, pattern, scope)` | the **empty string** `""` | not available here; use an `httphost.Mount` with `Open: true` (item 4) |
+
+   `authenticated` and `public` are `ui.json` words that `module.AddRoutes` translates (to `""` and to an open route).
+   On a direct `ScopeTable.Route` call libs `security/auth` treats every non-empty string as a real scope name, so
+   `Route("GET", "/api/x", "authenticated")` requires a scope literally called `authenticated`: only a principal
+   holding `*` passes, and an API key with `app.read,app.write` gets 403 `required scope: authenticated` (Caster hit
+   this in a real binary). Pass `""` for authentication only. `TestAuthenticatedIsALiteralScopeOnADirectRoute`
+   (`modules/auth`) pins both spellings. Add a test that
    every registered route has a scope (and break one on purpose to see it fail).
 4. Routes that authenticate their own callers (a native device protocol, a webhook, an A2A endpoint) are
    `httphost.Mount`s with `Open: true`. Their handlers must verify the credential themselves; say so in the code.

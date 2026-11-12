@@ -71,7 +71,9 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
 ```
 
 - `scope` is required. Use `"{app}.<verb>"`, or `"authenticated"` for any verified caller. `"{app}"` expands to
-  the app name. An app can replace every scope of your module with the string config `<name>.scope`.
+  the app name. `"authenticated"` (and `"public"`) are words of this file: `AddRoutes` translates them. A route
+  registered directly with `auth.ScopeTable(app).Route(method, pattern, scope)` does not get the translation: there
+  `authenticated` is a literal scope that only `*` holds, and "any verified caller" is the empty string `""`. An app can replace every scope of your module with the string config `<name>.scope`.
 - `method` may be `*`; a path ending in `/` is a subtree (`/api/plugins/`). Paths must be under `/api/` or
   `/admin/`.
 - Every declared route needs a handler and every handler a declared route; `AddRoutes` fails otherwise.
