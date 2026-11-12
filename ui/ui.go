@@ -1,7 +1,7 @@
 // Package ui is the UI contribution manifest a capability module declares, so
 // the builder can generate the frontend manifest from the modules a binary
 // links. The kinds and regions are the design team's published vocabulary
-// (SF-2, v0.4: v0.3 plus menu.item and command); this package validates against
+// (SF-2, v0.4.1: v0.3 plus menu.item and command, and the user.menu region); this package validates against
 // them and invents no names.
 package ui
 
@@ -76,13 +76,15 @@ type Item struct {
 	Action *Action `json:"action,omitempty"`
 	Risk   string  `json:"risk,omitempty"` // low (default) | medium | high
 
-	// menu.item
+	// menu.item. v0.4.1 also lets it take Group (below: items sharing a group
+	// stay together, a divider separates groups) and Requires (above: a scope
+	// string, may contain {app}, the shell hides the item from a caller lacking it).
 	Order int    `json:"order,omitempty"` // lower first; default 100
 	When  string `json:"when,omitempty"`  // a subject kind; only in a menu:<subject-kind> region
 
 	// command
 	Keywords []string `json:"keywords,omitempty"`
-	Group    string   `json:"group,omitempty"` // the palette section label
+	Group    string   `json:"group,omitempty"` // command: the palette section label; menu.item: its group
 }
 
 // Action is what a menu.item or command does. Exactly one of Navigate,
@@ -147,7 +149,16 @@ const (
 	RegionMenuPrefix     = "menu:" // menu:<subject-kind>, e.g. menu:plugin
 	RegionRowActions     = "row.actions"
 	RegionToolbarPrimary = "toolbar.primary"
+
+	// v0.4.1: the signed-in user's menu, opened from the identity chip. Core,
+	// non-docked, global to the shell, implicit in every host (never declared,
+	// never emitted in the manifest's region catalog). Only a menu.item may
+	// target it.
+	RegionUserMenu = "user.menu"
 )
+
+// VocabularyVersion is the SF-2 vocabulary version this package validates against.
+const VocabularyVersion = "0.4.1"
 
 // DefaultMenuOrder is the order of a menu.item that names none.
 const DefaultMenuOrder = 100
@@ -176,6 +187,10 @@ var (
 	risks    = map[string]bool{"low": true, "medium": true, "high": true}
 	// callRe is a catalog function name; they are camelCase (openOverlay) or dotted.
 	callRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_.-]*$`)
+	// userCallRe is the name shape of a call in user.menu: <module>.<verb>, the verb camelCase (identity.signOut).
+	userCallRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*\.[a-z][A-Za-z0-9]*$`)
+	// requiresRe is a scope string: names, dots, colons, slashes, "*" and {app}; never an expression.
+	requiresRe = regexp.MustCompile(`^[A-Za-z0-9*{][A-Za-z0-9_.:/{}*-]*$`)
 	// emitRe is an envelope kind with its version: kind@version.
 	emitRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*@[A-Za-z0-9][A-Za-z0-9_.+-]*$`)
 )
@@ -291,6 +306,10 @@ func Validate(c Contribution, v Vocabulary) []error {
 		}
 
 		region := it.EffectiveRegion()
+		if region == RegionUserMenu && it.Kind != "menu.item" {
+			bad("region %q takes only menu.item", region)
+			continue
+		}
 		if region == "" {
 			bad("region is required: the host names it")
 		} else if !regionOK(it, region, v) {
@@ -347,10 +366,18 @@ func Validate(c Contribution, v Vocabulary) []error {
 			if it.Order < 0 {
 				bad("order %d must not be negative", it.Order)
 			}
-			if it.When != "" && (!strings.HasPrefix(region, RegionMenuPrefix) || !keyRe.MatchString(it.When)) {
+			if it.When != "" && region == RegionUserMenu {
+				bad("when is not allowed in %s: it is the signed-in user's menu, with no subject kind to filter on", RegionUserMenu)
+			} else if it.When != "" && (!strings.HasPrefix(region, RegionMenuPrefix) || !keyRe.MatchString(it.When)) {
 				bad("when %q applies only to a menu:<subject-kind> region and must be a subject kind", it.When)
 			}
+			if it.Kind == "menu.item" && it.Requires != "" && !validRequires(it.Requires) {
+				bad("requires %q must be a scope name (it may contain {app}), not an expression", it.Requires)
+			}
 			checkAction(it.Action, bad)
+			if region == RegionUserMenu && it.Action != nil && it.Action.Call != "" && !userCallRe.MatchString(it.Action.Call) {
+				bad("action call %q in %s must be <module>.<verb> with a camelCase verb, such as identity.signOut", it.Action.Call, RegionUserMenu)
+			}
 		}
 	}
 
@@ -390,7 +417,7 @@ var kindFields = map[string][]string{
 	"dock.tab":        {"view", "shortcut", "placements"},
 	"widget":          {"view"},
 	"slot":            {"opens"},
-	"menu.item":       {"action", "risk", "order", "when", "shortcut"},
+	"menu.item":       {"action", "risk", "order", "when", "shortcut", "group", "requires"},
 	"command":         {"action", "risk", "keywords", "group"},
 }
 
@@ -409,6 +436,9 @@ func (it Item) setFields() map[string]bool {
 
 // regionOK says whether region may hold this kind.
 func regionOK(it Item, region string, v Vocabulary) bool {
+	if region == RegionUserMenu {
+		return it.Kind == "menu.item" // a core region: only a menu.item, whatever regions the host lists
+	}
 	switch it.Kind {
 	case "nav.item":
 		return region == RegionNavPrimary || region == RegionNavFooter ||
@@ -458,6 +488,12 @@ func regionOK(it Item, region string, v Vocabulary) bool {
 		}
 	}
 	return false
+}
+
+// validRequires reports whether s is a scope string: a plain name, "*", or a
+// name containing the {app} placeholder. No other braces, no expression syntax.
+func validRequires(s string) bool {
+	return requiresRe.MatchString(s) && !strings.ContainsAny(strings.ReplaceAll(s, "{app}", ""), "{}")
 }
 
 // frontendRoute checks a frontend route: a path in the SPA, never a backend path.

@@ -13,6 +13,9 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
   linked modules and size of minimal vs agentic from one source (about 9.4 MB vs 13.7 MB on arm64 macOS).
 - Identity: `Service.User` lookup accessor (public view, no secrets); `GET /api/identity/profile` (signed-in person plus `assurance: local`). Signing-key rotation is not built yet.
 
+- UI vocabulary v0.4.1: the `user.menu` core region, `group` and `requires` on `menu.item` (builder side). The identity
+  module's own `user.menu` items and the profile read route are pending (they wait on the identity UI kit's names).
+
 - App UI contributions (`frontend.contributions`: the app's own file, validated and merged like a module's) and an app
   config block (`config.<app>`) in the manifest.
 

@@ -68,6 +68,7 @@ func TestHostRegionCatalogIsValidated(t *testing.T) {
 		"anchor on inline":    {"    - {name: chat.composer, anchor: chat.drawer}\n", "not docked"},
 		"anchor is docked":    {"    - {name: a, docked: true, anchor: b}\n    - {name: b, docked: true, anchor: a}\n", "inline region"},
 		"core region":         {"    - {name: nav.primary}\n", "core region"},
+		"user.menu":           {"    - {name: user.menu}\n", `"user.menu" is a core region`},
 		"duplicate":           {"    - {name: chat.composer}\n    - {name: chat.composer}\n", "declared twice"},
 		"bad name":            {"    - {name: Chat Composer}\n", "valid region name"},
 	} {
