@@ -1,0 +1,137 @@
+// Package api is the app's HTTP API. The guard (httphost and the auth module) and the CSRF check
+// (the identity middleware) sit outside it; /healthz is the framework's.
+package api
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	libauth "github.com/hollis-labs/libs/security/auth"
+	"github.com/hollis-labs/substrate/apierr"
+)
+
+// Scopes the API requires. The owner holds "*".
+const (
+	ScopeRead  = "{{ .inputs.repo_name }}.read"
+	ScopeWrite = "{{ .inputs.repo_name }}.write"
+)
+
+// Route is one API route and the scope it needs. Every route is listed here, so the scope table
+// and the mux cannot disagree (TestEveryRouteHasAScope).
+type Route struct{ Method, Pattern, Scope string }
+
+// Routes lists every route with its scope. A route missing here is refused in enforce mode.
+func Routes() []Route {
+	return []Route{
+		{http.MethodGet, "/api/items", ScopeRead},
+		{http.MethodPost, "/api/items", ScopeWrite},
+	}
+}
+
+// RegisterScopes declares the scope of every route on the guard's table.
+func RegisterScopes(t *libauth.ScopeTable) {
+	for _, rt := range Routes() {
+		t.Route(rt.Method, rt.Pattern, rt.Scope)
+	}
+}
+
+// Reader is the read pool of the database module's store; Writer is its write handle.
+type (
+	Reader interface {
+		QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	}
+	Writer interface {
+		ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+	}
+)
+
+// Handler serves the routes over the database module's store.
+type Handler struct {
+	read  Reader
+	write Writer
+}
+
+// New builds the handler over a read pool and a write handle.
+func New(read Reader, write Writer) *Handler { return &Handler{read: read, write: write} }
+
+// Mux returns the routes for httphost.Options.Routes.
+func (h *Handler) Mux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/items", h.list)
+	mux.HandleFunc("POST /api/items", h.create)
+	return mux
+}
+
+type item struct {
+	ID        int64  `json:"id"`
+	Title     string `json:"title"`
+	CreatedAt string `json:"created_at"`
+}
+
+// owner is the verified principal's subject: the data owner of a row is never a request field.
+func owner(r *http.Request) (string, bool) {
+	p, ok := libauth.FromContext(r.Context())
+	if !ok || !p.Verified || strings.TrimSpace(p.ID) == "" {
+		return "", false
+	}
+	return p.ID, true
+}
+
+func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
+	who, ok := owner(r)
+	if !ok {
+		apierr.Write(w, http.StatusUnauthorized, "unauthorized", "Sign in required", nil)
+		return
+	}
+	rows, err := h.read.QueryContext(r.Context(), `SELECT id, title, created_at FROM items WHERE owner = ? ORDER BY id`, who)
+	if err != nil {
+		apierr.Write(w, http.StatusInternalServerError, "internal", "Could not list items", nil)
+		return
+	}
+	defer func() { _ = rows.Close() }()
+	out := []item{}
+	for rows.Next() {
+		var it item
+		if err := rows.Scan(&it.ID, &it.Title, &it.CreatedAt); err != nil {
+			apierr.Write(w, http.StatusInternalServerError, "internal", "Could not list items", nil)
+			return
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		apierr.Write(w, http.StatusInternalServerError, "internal", "Could not list items", nil)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": out})
+}
+
+func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
+	who, ok := owner(r)
+	if !ok {
+		apierr.Write(w, http.StatusUnauthorized, "unauthorized", "Sign in required", nil)
+		return
+	}
+	var in struct {
+		Title string `json:"title"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || strings.TrimSpace(in.Title) == "" {
+		apierr.Write(w, http.StatusBadRequest, "invalid_request", "title is required", nil)
+		return
+	}
+	res, err := h.write.ExecContext(r.Context(), `INSERT INTO items (owner, title) VALUES (?, ?)`, who, strings.TrimSpace(in.Title))
+	if err != nil {
+		apierr.Write(w, http.StatusInternalServerError, "internal", "Could not create the item", nil)
+		return
+	}
+	id, _ := res.LastInsertId()
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id})
+}
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(v)
+}

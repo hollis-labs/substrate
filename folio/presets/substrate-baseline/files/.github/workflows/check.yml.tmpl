@@ -1,0 +1,48 @@
+name: check
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: check-{{ "${{" }} github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the hygiene scan reads history
+      # go.mod is the single Go pin: the `go` line is the floor; an optional `toolchain` line, if
+      # present, wins (setup-go v6+ only).
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+{{- if .computed.frontend }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # The UI is built first: internal/webui embeds the frontend output and the Go tests need it.
+      - name: Frontend (install, typecheck, lint, build)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm run lint
+          npm run build
+{{- end }}
+      - run: go vet ./...
+      - name: pins match the Substrate BOM
+        run: go run github.com/hollis-labs/substrate/cmd/substrate pins check --app .
+      - name: generated wiring is current
+        run: |
+          go run github.com/hollis-labs/substrate/cmd/substrate generate -f cmd/{{ .inputs.repo_name }}/substrate.yaml
+          git diff --exit-code -- cmd/{{ .inputs.repo_name }}/substrate_wiring.go
+      - run: go test -race ./...
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.11.4
+      - name: hygiene (secrets, hosts, private paths)
+        run: go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD

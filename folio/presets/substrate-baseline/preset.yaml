@@ -1,0 +1,83 @@
+folio_version: "0.1"
+id: substrate-baseline
+version: 0.1.0
+description: Backend shell of a Substrate app (manifest, generated wiring, boot, serve, identity, migrations, CI, deploy descriptor) — compose, do not render directly
+author: hollis-labs
+license: MIT
+layer_only: true
+
+# A LAYER. It renders the Go shell of an `app-host` Substrate app that serves HTTP, issues its own
+# identity (owner created offline, never over HTTP) and stores data in SQLite through the database
+# module. The composing preset owns README.md and redeclares the inputs it requires.
+#
+# Versions: the Go floor and CI tool versions come from platform-pins.yaml, as in go-baseline. The
+# Substrate module version has NO default (a stale default is worse than a failed render); the
+# framework does not mirror it into platform-pins.yaml yet (docs/conversion-notes.md, Gap 2).
+#
+# Not rendered: go.sum (run `go mod tidy` once) and any frontend (layer `substrate-frontend`).
+
+composes:
+  - id: go-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../go-baseline
+    vars:
+      agents_start_here: |-
+        - `cmd/{{ .inputs.repo_name }}/substrate.yaml` — the manifest: modules and config defaults. `substrate_wiring.go` is generated from it (`substrate generate`); never edit it.
+        - `cmd/{{ .inputs.repo_name }}/serve.go` — the HTTP handler stack: Host check, identity middleware, the host (guard, routes, SPA).
+        - `internal/api/api.go` — every route and the scope it needs. The owner of a row is the verified principal, never a request field.
+        - `internal/storage/migrations/sqlite/00001_init.sql` — the schema. Until the first release this is the only migration.
+        - `docs/identity-bootstrap.md` — the owner is created offline; there is no open setup over HTTP.
+        - `.github/workflows/check.yml` — the full CI gate (vet, pins, wiring current, race tests, lint, scan-public).
+      agents_boundaries: |-
+        - Pins are edited only in the Substrate `bom/bom.yaml`: run `substrate pins sync --app .`, never hand-edit a version in `go.mod`.
+        - A route without a scope is refused in `enforce`: add it to `Routes()` in `internal/api/api.go` (`TestEveryRouteHasAScope` guards this).
+        - Reads go through `Reader()`, writes through `WriteTx` or one `ExecContext`; never write while a cursor is open on the write handle (SQLite has one write connection).
+        - No secret, host name, address or personal path in a file, a commit or CI: `substrate scan-public --ref HEAD` must stay clean.
+
+inputs:
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary and Substrate app name (lowercase, hyphens allowed)
+  - name: substrate_version
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: >-
+      The github.com/hollis-labs/substrate version for the go.mod require line (a tag or a
+      pseudo-version). No default: take it from the framework you are building on.
+  - name: http_port
+    type: string
+    default: "8080"
+    pattern: "^[0-9]{2,5}$"
+    description: Loopback port written into the manifest's httphost.addr (an operator overrides it in the SUBSTRATE_CONFIG file)
+  - name: build_workflow_ref
+    type: string
+    default: 145fb50d827a1af7e38236eda5751cee22970ba5
+    pattern: "^[0-9a-f]{40}$"
+    description: Commit of hollis-labs/tools whose reusable go-app-build.yml the build workflow calls (pinned by commit, as the ported apps do)
+
+computed:
+  module_path: "github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}"
+  env_prefix: '{{ upper (replace "-" "_" .inputs.repo_name) }}'
+  frontend: ""
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: ".github/workflows/**"
+      policy: overwrite
+    - glob: "cmd/*/substrate_wiring.go"
+      policy: overwrite
+    - glob: "go.mod"
+      policy: skip
+    - glob: "internal/**"
+      policy: skip
+    - glob: "cmd/**"
+      policy: skip

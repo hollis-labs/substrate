@@ -1,0 +1,33 @@
+# {{ .inputs.repo_name }}
+
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A Substrate app.{{ end }}
+
+Built on [Substrate](https://github.com/hollis-labs/substrate): the manifest (`cmd/{{ .inputs.repo_name }}/substrate.yaml`)
+selects the modules, `substrate generate` writes `substrate_wiring.go`, and `internal/` is the app.
+
+## First build
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate validate -f cmd/{{ .inputs.repo_name }}/substrate.yaml
+go build ./cmd/{{ .inputs.repo_name }}
+```
+
+## Run
+
+The owner is created offline, never over HTTP (see `docs/identity-bootstrap.md`):
+
+```sh
+printf '%s\n' "$OWNER_PASSWORD" | ./{{ .inputs.repo_name }} identity setup --username owner
+./{{ .inputs.repo_name }} serve
+```
+
+Settings are keys in the YAML file named by `SUBSTRATE_CONFIG` (for example `httphost.addr`); the only
+environment variable the app reads is `{{ upper (replace "-" "_" .inputs.repo_name) }}_DATA_DIR`.
+
+## Checks
+
+`go vet ./...`, `go test -race ./...`, `golangci-lint run`, `substrate pins check --app .` and
+`substrate scan-public --ref HEAD` (CI runs all of them).

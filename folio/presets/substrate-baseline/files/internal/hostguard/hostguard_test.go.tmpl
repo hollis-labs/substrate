@@ -1,0 +1,34 @@
+package hostguard_test
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"{{ .computed.module_path }}/internal/hostguard"
+)
+
+func TestHostIsChecked(t *testing.T) {
+	h := hostguard.Handler([]string{"app.example.test"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	cases := []struct {
+		host string
+		want int
+	}{
+		{"127.0.0.1:8080", http.StatusNoContent},
+		{"localhost", http.StatusNoContent},
+		{"evil.example", http.StatusForbidden},
+		// A listed name is believed only from a loopback peer carrying X-Forwarded-Proto: https.
+		{"app.example.test", http.StatusForbidden},
+	}
+	for _, c := range cases {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Host = c.host
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != c.want {
+			t.Errorf("Host %q: status %d, want %d", c.host, rec.Code, c.want)
+		}
+	}
+}

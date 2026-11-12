@@ -1,0 +1,38 @@
+folio_version: "0.1"
+id: substrate-app
+version: 0.1.0
+description: New Substrate app (app-host, backend only) — own identity with an offline-created owner, SQLite through the database module, scoped routes, CI and a fleet deploy descriptor; composed on go-baseline and substrate-baseline
+author: hollis-labs
+license: MIT
+
+# Composes `substrate-baseline`, which composes `go-baseline` (LICENSE, CHANGELOG, AGENTS.md, lint,
+# hooks) and renders the Substrate shell over it: its `.github/workflows/check.yml` and `.gitignore`
+# replace go-baseline's (the later layer wins).
+
+composes:
+  - id: substrate-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../substrate-baseline
+
+inputs:
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary and Substrate app name (lowercase, hyphens allowed)
+  - name: substrate_version
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: The github.com/hollis-labs/substrate version for the go.mod require line. No default.
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: "README.md"
+      policy: three-way

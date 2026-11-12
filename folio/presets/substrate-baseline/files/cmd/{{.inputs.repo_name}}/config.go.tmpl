@@ -1,0 +1,72 @@
+package main
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+
+	"github.com/hollis-labs/substrate/boot"
+	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/database"
+
+	"{{ .computed.module_path }}/internal/storage"
+)
+
+// dataDirEnv overrides the data directory. It is the one environment variable the app reads;
+// every other setting is a key in the file named by SUBSTRATE_CONFIG.
+const dataDirEnv = "{{ .computed.env_prefix }}_DATA_DIR"
+
+// dataDir is where the database, the identity signing key and the secrets state live: the
+// override, else $XDG_DATA_HOME/{{ .inputs.repo_name }}, else ~/.local/share/{{ .inputs.repo_name }}.
+func dataDir() (string, error) {
+	if d := os.Getenv(dataDirEnv); d != "" {
+		return filepath.Abs(d)
+	}
+	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
+		return filepath.Join(x, "{{ .inputs.repo_name }}"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".local", "share", "{{ .inputs.repo_name }}"), nil
+}
+
+// start starts the modules the manifest selects. The data directory is only known at run time,
+// so AfterConfig makes the file paths absolute (a path the operator's override already made
+// absolute is left alone) after the SUBSTRATE_CONFIG override is applied.
+func start(ctx context.Context) (*boot.Running, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, err
+	}
+	database.UseMigrationFS(storage.Migrations())
+	return boot.StartWith(ctx, substrateApp, substrateModules, substrateConfigJSON, boot.Options{
+		AfterConfig: func(_ context.Context, app *module.App) error {
+			place(app, dir, "database", "sqlite", "path")
+			place(app, dir, "identity", "key_file")
+			place(app, dir, "secrets", "state_dir")
+			return nil
+		},
+	})
+}
+
+// place makes the config value at path absolute under dir, unless it already is.
+func place(app *module.App, dir string, path ...string) {
+	m := app.Config
+	for _, k := range path[:len(path)-1] {
+		child, _ := m[k].(map[string]any)
+		if child == nil {
+			child = map[string]any{}
+			m[k] = child
+		}
+		m = child
+	}
+	key := path[len(path)-1]
+	if p, _ := m[key].(string); !filepath.IsAbs(p) {
+		m[key] = filepath.Join(dir, p)
+	}
+}

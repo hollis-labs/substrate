@@ -1,0 +1,23 @@
+# Identity bootstrap
+
+{{ .inputs.repo_name }} is its own identity provider (the Substrate `identity` module). There is no open
+first-run setup over HTTP: `POST /api/setup` is refused (`setup_offline`). The owner and the first
+machine keys are created on the host, before the service starts.
+
+```sh
+export SUBSTRATE_CONFIG=/path/to/{{ .inputs.repo_name }}.yaml   # your override file; never committed
+
+# 1. the owner: the password comes from the first line of stdin (or a terminal prompt)
+printf '%s\n' "$OWNER_PASSWORD" | {{ .inputs.repo_name }} identity setup --username owner --display-name "Owner"
+
+# 2. one key per machine caller, written once to a new 0600 file
+{{ .inputs.repo_name }} identity key create --name my-caller --scope {{ .inputs.repo_name }}.read --out /path/to/my-caller.key
+
+# 3. start, then check
+{{ .inputs.repo_name }} serve &
+curl -s http://127.0.0.1:{{ .inputs.http_port }}/api/setup    # {"setup_over_http":false,"setup_required":false}
+```
+
+The data directory is `${{ .computed.env_prefix }}_DATA_DIR`, else `$XDG_DATA_HOME/{{ .inputs.repo_name }}`, else
+`~/.local/share/{{ .inputs.repo_name }}`: the database, the identity signing key (never lose or commit it) and the secrets
+state. Details: Substrate `docs/identity.md`.
