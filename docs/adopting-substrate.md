@@ -93,6 +93,51 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 - Use the `database` module's store (`database.From(app)`), not your own `sql.Open`. SQLite and Postgres are both
   supported by the module; if your SQL uses `?` placeholders and SQLite syntax, say in the architecture note that the
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
+- The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
+  connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
+  (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, a write through
+  it fails with "attempt to write a readonly database"). Rules that follow:
+  - A second statement issued on the write handle while a cursor (`*sql.Rows`) is open on it waits for the one
+    connection forever, a deadlock. It bites as a hung test, and as a hung request in production. The same happens
+    inside a `WriteTx` callback if it uses anything but the `tx` it was given (the store itself, `DB()`, the read
+    pool): libs says the callback may use only its `tx`.
+  - Reads go through `Reader()`. Writes go through `WriteTx` (use `ExecContext` only for a single statement).
+  - Read the rows you need, close the cursor (or finish the loop), then write. Never write from inside a loop over
+    rows you are still reading, and give `WriteTx` callbacks no side effects other than the `tx`: they are retried
+    from scratch on `SQLITE_BUSY`.
+  - SQLite in memory (`:memory:`) uses a single shared connection for reads and writes, so there even a `Reader()`
+    query inside an open cursor waits. Tests on `:memory:` hang sooner, not differently.
+  - Postgres has one pool (`Reader()` and `DB()` share it), so the deadlock is SQLite's. Keep the same discipline
+    anyway: the code has to run on both.
+
+  ```go
+  st := database.From(app)
+
+  // Read first, on the read pool, and close the cursor before writing.
+  rows, err := st.Reader().QueryContext(ctx, `SELECT id FROM jobs WHERE state = ?`, "stale")
+  if err != nil { return err }
+  var ids []string
+  for rows.Next() {
+      var id string
+      if err := rows.Scan(&id); err != nil { _ = rows.Close(); return err }
+      ids = append(ids, id)
+  }
+  if err := rows.Close(); err != nil { return err }
+
+  // Then write, in one transaction, using only the tx.
+  return st.WriteTx(ctx, func(ctx context.Context, tx store.Tx) error {
+      for _, id := range ids {
+          if _, err := tx.ExecContext(ctx, `UPDATE jobs SET state = ? WHERE id = ?`, "retry", id); err != nil {
+              return err
+          }
+      }
+      return nil
+  })
+  ```
+
+  Wrong, and hangs on SQLite: `rows, _ := st.DB().QueryContext(...)` and then `st.DB().ExecContext(...)` or
+  `tx.ExecContext(...)` for each row, while `rows` is still open. (Checked against libs `core/store` v0.1.0 and
+  `core/util` v0.6.0 `sqlitekit`: the write pool is `MaxOpenConns=1`.)
 - One goose migration set, embedded, registered with `database.UseMigrationFS(fsys, root)`. A fresh schema edited in
   place until the first release is fine. Do not carry per-version `ALTER` ladders from the old code in a clean break.
 - Libraries that own their tables (for example `libs/security/pairing`) keep creating them; do not duplicate their DDL.
