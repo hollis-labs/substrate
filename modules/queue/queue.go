@@ -19,6 +19,10 @@
 //	              are for an app whose own tables collide with the defaults; each
 //	              must be a plain SQL identifier (letters, digits, underscore) and
 //	              they are refused with the memory driver.
+//	reservation_secs: how long a reserved job may run before the sqlite driver hands
+//	              it out again, in whole seconds (default 60; at least 1). Set it
+//	              above the longest handler, or that job runs twice. Refused with
+//	              the memory driver, which has no such window.
 //	queues:       queue names the worker polls, in priority order (default ["default"]).
 //	concurrency:  polling goroutines (default 1).
 //	poll_ms:      sleep between empty polls (default 3000).
@@ -143,10 +147,21 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 		if table != "" && table == failedTable {
 			return errors.New("queue: table and failed_table must differ")
 		}
+		var reservation time.Duration
+		if v, set := cfg["reservation_secs"]; set {
+			n, ok := v.(float64)
+			if !ok || n < 1 || n != float64(int64(n)) {
+				return errors.New("queue: reservation_secs must be a whole number of seconds, at least 1")
+			}
+			reservation = time.Duration(n) * time.Second
+		}
 		switch driver {
 		case "memory":
 			if table != "" || failedTable != "" {
 				return errors.New("queue: table and failed_table apply to the sqlite driver only")
+			}
+			if reservation != 0 {
+				return errors.New("queue: reservation_secs applies to the sqlite driver only")
 			}
 			q = memory.New()
 		case "", "sqlite":
@@ -157,7 +172,7 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 			if st.Config().Driver != store.DriverSQLite {
 				return errors.New("queue: libs has a SQLite queue driver only; with Postgres call queue.UseDriver")
 			}
-			d, err := qsqlite.New(st.DB(), qsqlite.Opts{Table: table, FailedTable: failedTable})
+			d, err := qsqlite.New(st.DB(), qsqlite.Opts{Table: table, FailedTable: failedTable, RetryAfter: reservation})
 			if err != nil {
 				return fmt.Errorf("queue: %w", err)
 			}
