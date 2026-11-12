@@ -95,8 +95,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
-  (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, a write through
-  it fails with "attempt to write a readonly database"). Rules that follow:
+  (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with
+  `database.sqlite.read_pool` (1 to 64), a write through it fails with "attempt to write a readonly database"). The
+  write side stays one connection; a bigger read pool lets more cursors be open at once, it does not add writers. Rules that follow:
   - A second statement issued on the write handle while a cursor (`*sql.Rows`) is open on it waits for the one
     connection forever, a deadlock. It bites as a hung test, and as a hung request in production. The same happens
     inside a `WriteTx` callback if it uses anything but the `tx` it was given (the store itself, `DB()`, the read
