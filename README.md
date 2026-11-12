@@ -47,5 +47,5 @@ go run ./cmd/substrate pins check
 python3 scripts/scan-public --ref HEAD
 ```
 
-See [`docs/writing-a-module.md`](docs/writing-a-module.md), [`docs/compat-policy.md`](docs/compat-policy.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md), [`SECURITY.md`](SECURITY.md) and
+Moving an existing app onto Substrate: [`docs/adopting-substrate.md`](docs/adopting-substrate.md). See [`docs/writing-a-module.md`](docs/writing-a-module.md), [`docs/compat-policy.md`](docs/compat-policy.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md), [`SECURITY.md`](SECURITY.md) and
 [`CHANGELOG.md`](CHANGELOG.md). Licensed under the [MIT License](LICENSE).
