@@ -28,6 +28,8 @@ minor releases may break APIs.
 
 ### Fixed
 
+- `identity`: a 429 `rate_limited` answer (sign-in, password change, pairing redeem) now carries `Retry-After`, in whole seconds (rounded up, at least 1) until the limiter's window lets the caller try again. These are the only 429s Substrate writes.
+
 - The generated frontend manifest wrote each region as `{"Name","Docked","Anchor"}`; it is now `{"name","docked","anchor"}` as the shell reads it, and a test fixes the key names.
 
 - `mcp.UseToolFilter`: a per-caller visibility filter for `tools/list`: one call per request with every tool name, returning the names to list (the caller's principal is on the context for HTTP and stdio). Visibility only; a hidden tool is still callable, so handlers authorize with `mcp.Authorize`. For apps whose tool set differs per caller or changes while serving.
