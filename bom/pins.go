@@ -5,6 +5,7 @@
 package bom
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -32,6 +33,10 @@ type BOM struct {
 	// libs, third_party and app_libs together; see CheckApp.
 	AppLibs map[string]string `yaml:"app_libs"`
 	Kits    map[string]string `yaml:"kits"` // npm packages the frontend manifest may name, by full name
+	// KitExceptions are known incoherences between pinned kits that this repo does not
+	// control (a kit's own dependency range lagging a sibling). Each key is
+	// "<kit>><dependency>" and each value the reason; they are reported, not hidden.
+	KitExceptions map[string]string `yaml:"kit_exceptions"`
 }
 
 var ciKeys = []string{"actions_checkout", "actions_setup_go", "golangci_lint_action", "golangci_lint_version", "govulncheck_version"}
@@ -85,9 +90,14 @@ func (b *BOM) validate() error {
 
 var semverRe = regexp.MustCompile(`^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$`)
 
-// CheckNPM reports every pinned kit version the registry does not have. It
-// needs the network, so it runs on request and nightly, not on every change.
-func CheckNPM(b *BOM, registry string) ([]Diff, error) {
+// CheckNPM reports every pinned kit the registry does not have, and every pinned
+// kit whose dependency or peer range on another @hollis-labs package the BOM's pin
+// of that package does not satisfy (or that the BOM does not pin at all): two
+// versions of a binding contract or a token set installed side by side is the
+// failure this prevents. Known incoherences listed in kit_exceptions are returned
+// as accepted notes instead of failures. It needs the network, so it runs on
+// request and nightly, not on every change.
+func CheckNPM(b *BOM, registry string) (diffs []Diff, accepted []string, err error) {
 	if registry == "" {
 		registry = "https://registry.npmjs.org"
 	}
@@ -97,20 +107,54 @@ func CheckNPM(b *BOM, registry string) ([]Diff, error) {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	var ds []Diff
+	type meta struct {
+		Dependencies     map[string]string `json:"dependencies"`
+		PeerDependencies map[string]string `json:"peerDependencies"`
+	}
 	for _, n := range names {
-		resp, err := c.Get(registry + "/" + n + "/" + b.Kits[n])
-		if err != nil {
-			return nil, err
+		resp, gerr := c.Get(registry + "/" + n + "/" + b.Kits[n])
+		if gerr != nil {
+			return nil, nil, gerr
 		}
+		var m meta
+		derr := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&m)
 		_ = resp.Body.Close()
-		if resp.StatusCode == http.StatusNotFound {
-			ds = append(ds, Diff{"bom/bom.yaml", fmt.Sprintf("kits: %s@%s is not published on the registry", n, b.Kits[n])})
-		} else if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("%s@%s: registry answered %s", n, b.Kits[n], resp.Status)
+		switch {
+		case resp.StatusCode == http.StatusNotFound:
+			diffs = append(diffs, Diff{"bom/bom.yaml", fmt.Sprintf("kits: %s@%s is not published on the registry", n, b.Kits[n])})
+			continue
+		case resp.StatusCode != http.StatusOK:
+			return nil, nil, fmt.Errorf("%s@%s: registry answered %s", n, b.Kits[n], resp.Status)
+		case derr != nil:
+			return nil, nil, fmt.Errorf("%s@%s: unreadable registry metadata: %w", n, b.Kits[n], derr)
+		}
+		for _, deps := range []map[string]string{m.Dependencies, m.PeerDependencies} {
+			for dep, rng := range deps {
+				if !strings.HasPrefix(dep, "@hollis-labs/") {
+					continue
+				}
+				var msg string
+				if pin, ok := b.Kits[dep]; !ok {
+					msg = fmt.Sprintf("kits: %s@%s needs %s %s, which the BOM does not pin", n, b.Kits[n], dep, rng)
+				} else if ok, serr := satisfies(pin, rng); serr != nil {
+					return nil, nil, fmt.Errorf("%s@%s: %s range %q: %w", n, b.Kits[n], dep, rng, serr)
+				} else if !ok {
+					msg = fmt.Sprintf("kits: %s@%s needs %s %s, but the BOM pins %s", n, b.Kits[n], dep, rng, pin)
+				}
+				if msg == "" {
+					continue
+				}
+				if why, known := b.KitExceptions[n+">"+dep]; known {
+					accepted = append(accepted, msg+" (accepted: "+why+")")
+				} else {
+					diffs = append(diffs, Diff{"bom/bom.yaml", msg})
+				}
+			}
 		}
 	}
-	return ds, nil
+	sort.Strings(accepted)
+	sort.SliceStable(diffs, func(i, j int) bool { return diffs[i].Msg < diffs[j].Msg })
+	return diffs, accepted, nil
 }
 
 // Diff is one place a consumer disagrees with the BOM.

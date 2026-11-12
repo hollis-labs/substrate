@@ -201,7 +201,7 @@ func TestCheckNPMReportsUnpublishedVersions(t *testing.T) {
 	}))
 	defer srv.Close()
 	b := &BOM{Kits: map[string]string{"@s/a": "1.0.0", "@s/b": "2.0.0"}}
-	ds, err := CheckNPM(b, srv.URL)
+	ds, _, err := CheckNPM(b, srv.URL)
 	if err != nil || len(ds) != 1 || !strings.Contains(ds[0].Msg, "@s/b@2.0.0 is not published") {
 		t.Fatalf("diffs = %v, err = %v", ds, err)
 	}
@@ -314,5 +314,62 @@ func TestAppLibsMustBeLibsAndNotDuplicated(t *testing.T) {
 		if _, err := Load(p); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+}
+
+// registry serves package metadata for the coherence check.
+func registry(t *testing.T, pkgs map[string]string) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, ok := pkgs[strings.TrimPrefix(r.URL.Path, "/")]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func TestCheckNPMVerifiesKitRangesAgainstTheOtherPins(t *testing.T) {
+	srv := registry(t, map[string]string{
+		"@s/a/1.0.0": `{"dependencies":{"@s/b":"^2.0.0","@s/c":"^1.0.0","lodash":"^4"}}`,
+		"@s/b/2.1.0": `{}`,
+		"@s/c/1.0.0": `{"peerDependencies":{"@s/b":"^1.0.0 || ^2.0.0"}}`,
+	})
+	b := &BOM{Kits: map[string]string{"@s/a": "1.0.0", "@s/b": "2.1.0", "@s/c": "1.0.0"}}
+	ds, acc, err := CheckNPM(b, srv.URL)
+	if err != nil || len(ds) != 0 || len(acc) != 0 {
+		t.Fatalf("a coherent set: diffs=%v accepted=%v err=%v", ds, acc, err)
+	}
+
+	b.Kits["@s/b"] = "3.0.0"
+	srv2 := registry(t, map[string]string{
+		"@s/a/1.0.0": `{"dependencies":{"@s/b":"^2.0.0"}}`,
+		"@s/b/3.0.0": `{}`,
+	})
+	b.Kits = map[string]string{"@s/a": "1.0.0", "@s/b": "3.0.0"}
+	ds, _, err = CheckNPM(b, srv2.URL)
+	if err != nil || len(ds) != 1 || !strings.Contains(ds[0].Msg, "@s/a@1.0.0 needs @s/b ^2.0.0, but the BOM pins 3.0.0") {
+		t.Fatalf("a range the pin does not satisfy: %v %v", ds, err)
+	}
+
+	b.Kits = map[string]string{"@s/a": "1.0.0"}
+	ds, _, _ = CheckNPM(b, srv2.URL)
+	if len(ds) != 1 || !strings.Contains(ds[0].Msg, "which the BOM does not pin") {
+		t.Fatalf("a dependency the BOM does not pin: %v", ds)
+	}
+}
+
+func TestKitExceptionsAreAcceptedAndReportedNotHidden(t *testing.T) {
+	srv := registry(t, map[string]string{
+		"@s/a/1.0.0": `{"dependencies":{"@s/b":"^1.0.0"}}`,
+		"@s/b/2.0.0": `{}`,
+	})
+	b := &BOM{Kits: map[string]string{"@s/a": "1.0.0", "@s/b": "2.0.0"}, KitExceptions: map[string]string{"@s/a>@s/b": "a lags b"}}
+	ds, acc, err := CheckNPM(b, srv.URL)
+	if err != nil || len(ds) != 0 || len(acc) != 1 || !strings.Contains(acc[0], "accepted: a lags b") {
+		t.Fatalf("diffs=%v accepted=%v err=%v", ds, acc, err)
 	}
 }

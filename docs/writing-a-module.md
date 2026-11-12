@@ -88,7 +88,6 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
   - A frontend `route` is a path in the SPA and must never equal a backend path.
   - A companion npm package is named in `package.name` and must be pinned in the BOM's `kits:` section; the
     version lives only there.
-  - `plugin-host-ui` 0.2.0 still exports `dock.tab` as `drawer.tab`; hosts map the name until the kit renames it.
 - `substrate frontend` merges the contributions of exactly the modules a manifest selects, so removing your
   module removes its UI.
 

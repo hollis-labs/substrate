@@ -65,11 +65,14 @@ func pins(args []string) {
 		fail(err)
 	}
 	if *npm {
-		nd, err := bom.CheckNPM(b, "")
+		nd, accepted, err := bom.CheckNPM(b, "")
 		if err != nil {
 			fail(err)
 		}
 		ds = append(ds, nd...)
+		for _, a := range accepted {
+			fmt.Println(a)
+		}
 	}
 	for _, d := range ds {
 		fmt.Fprintln(os.Stderr, d)

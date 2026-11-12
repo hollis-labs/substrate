@@ -117,9 +117,8 @@ type Vocabulary struct {
 	Regions []string
 }
 
-// Default is the vocabulary v0.3 approved by the owner on 2026-11-05. Note
-// dock.tab: the design-kit's plugin-host-ui 0.2.0 still exports it as
-// drawer.tab; a host maps the name until the kit renames it.
+// Default is the vocabulary v0.3 approved by the owner on 2026-11-05. dock.tab
+// replaced drawer.tab with no alias; plugin-host-ui 0.3.0 renamed its kind to match.
 var Default = Vocabulary{
 	Kinds: []string{"nav.item", "nav.group", "settings.region", "surface", "panel", "dock.tab", "widget", "slot"},
 }
