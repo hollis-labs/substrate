@@ -249,7 +249,7 @@ var regionName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]*$`)
 func coreRegion(name string) bool {
 	switch name {
 	case "nav.primary", "nav.footer", "settings.sections", "surface.page", "aside.panels", "widgets.grid",
-		"command.palette", "row.actions", "toolbar.primary":
+		"command.palette", "row.actions", "toolbar.primary", "user.menu":
 		return true
 	}
 	return strings.HasPrefix(name, "nav.group:") || strings.HasPrefix(name, "menu:")
