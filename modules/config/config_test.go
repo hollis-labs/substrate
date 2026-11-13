@@ -72,7 +72,7 @@ func TestKeyOnlyInOverrideAdded(t *testing.T) {
 		t.Fatal(err)
 	}
 	sq := got["database"].(map[string]any)["sqlite"].(map[string]any)
-	if sq["extra"] != 1 || sq["path"] != "a.db" {
+	if sq["extra"] != float64(1) || sq["path"] != "a.db" {
 		t.Fatalf("sqlite = %#v", sq)
 	}
 	if got["other"].(map[string]any)["k"] != "v" {
