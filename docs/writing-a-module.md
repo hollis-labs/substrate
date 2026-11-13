@@ -35,7 +35,7 @@ func (*mod) Stop(ctx context.Context) error { ... }
 
 Config arrives as `app.Config["<name>"]`, a `map[string]any` from the manifest's `config` block (JSON types:
 numbers are `float64`). Document every key in the package comment, give each a default, and refuse a bad value
-at Start with an error that names the key. The `config` module deep-merges the YAML file named by `SUBSTRATE_CONFIG` over it (maps merge recursively; scalars and lists replace; `null` removes a key, so your default applies). Override numbers arrive as `int` (YAML), manifest numbers as `float64`: accept both.
+at Start with an error that names the key. The `config` module deep-merges the YAML file named by `SUBSTRATE_CONFIG` over it (maps merge recursively; scalars and lists replace; `null` removes a key, so your default applies). Numbers always arrive as `float64`, whichever source set them: the manifest's JSON gives `float64`, and the `config` module converts every integer from the override file (nested maps and lists included) to `float64` as it merges, refusing an integer above 2^53 with an error naming the key. Read a number with `.(float64)` only; an `int` case is dead code.
 
 ## Hooks for the app
 
