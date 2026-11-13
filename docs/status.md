@@ -17,7 +17,7 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 - `httphost.Stopping(r)` and a handler-counting shutdown: SSE and hijacked (WebSocket) handlers learn of a stop, `Serve` returns nil once all handlers returned, or an error after `GracePeriod` naming how many did not.
 
 - UI vocabulary v0.4.1: the `user.menu` core region, `group` and `requires` on `menu.item` (builder side). The identity
-  module's own `user.menu` items are pending (the identity UI kit, kit-identity 0.1.1, is now pinned in the BOM kits; the module's `ui.json` that references it is pending).
+  module's own `user.menu` items are pending (the identity UI kit, kit-identity 0.1.3, is now pinned in the BOM kits; the module's `ui.json` that references it is pending).
 
 - App UI contributions (`frontend.contributions`: the app's own file, validated and merged like a module's) and an app
   config block (`config.<app>`) in the manifest.
