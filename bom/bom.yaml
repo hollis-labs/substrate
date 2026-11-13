@@ -42,17 +42,18 @@ third_party:
 kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
   "@hollis-labs/design-tokens": 0.5.0
   "@hollis-labs/design-components": 0.5.1
-  "@hollis-labs/design-app-runtime": 0.5.0
-  "@hollis-labs/design-bindings": 0.2.0
+  "@hollis-labs/design-app-runtime": 0.6.0
+  "@hollis-labs/design-bindings": 0.3.0
   "@hollis-labs/kit-settings": 0.2.0
   "@hollis-labs/kit-admin": 0.2.0
-  # kit-chat is not pinned: 0.6.0 needs design-bindings and kit-cards ^0.1, the BOM is on ^0.2 for app-shell;
-  # pin the next kit-chat release that follows
-  "@hollis-labs/kit-cards": 0.2.0
-  "@hollis-labs/kit-account": 0.1.0
+  # kit-chat (0.7.0) and kit-cards (0.2.0) are not pinned: both depend on design-bindings ^0.2, and app-shell 0.11.0
+  # needs ^0.3 (a 0.x caret does not span minors), so pinning them installs two binding contracts side by side.
+  # kit-cards has no other consumer in this set. Pin the kit-chat and kit-cards releases that follow bindings 0.3.
+  "@hollis-labs/kit-account": 0.3.0
+  "@hollis-labs/kit-identity": 0.1.0
   "@hollis-labs/kit-observe": 0.1.2
-  "@hollis-labs/app-shell": 0.1.0
-  "@hollis-labs/kit-dashboard": 0.6.0
+  "@hollis-labs/app-shell": 0.11.0
+  "@hollis-labs/kit-dashboard": 0.6.1
   "@hollis-labs/plugin-host-ui": 0.3.0
   "@hollis-labs/plugin-registry": 0.2.0
 kit_exceptions:           # known incoherences between pinned kits that this repo does not control; reported, not hidden
