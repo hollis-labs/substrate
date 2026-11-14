@@ -203,6 +203,50 @@ func TestBadTableNamesFailStart(t *testing.T) {
 	queue.Reset()
 }
 
+// handedOutAgain pushes one job, reserves it, and reports whether it is handed out
+// again within wait.
+func handedOutAgain(t *testing.T, queueCfg string, wait time.Duration) bool {
+	t.Helper()
+	queue.Reset()
+	t.Cleanup(queue.Reset)
+	run := start(t, sqliteCfg(t, queueCfg))
+	ctx := context.Background()
+	if err := queue.Push(ctx, run.App, "long", []byte(`1`)); err != nil {
+		t.Fatal(err)
+	}
+	q := queue.Queue(run.App)
+	if j, err := q.Pop(ctx, "default"); err != nil || j == nil {
+		t.Fatalf("first pop: %v %v", j, err)
+	}
+	deadline := time.Now().Add(wait)
+	for time.Now().Before(deadline) {
+		if j, _ := q.Pop(ctx, "default"); j != nil {
+			return true
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return false
+}
+
+func TestReservationSecsSetsWhenAReservedJobIsHandedOutAgain(t *testing.T) {
+	if !handedOutAgain(t, `{"autostart":false,"reservation_secs":1}`, 4*time.Second) {
+		t.Error("with reservation_secs 1 a reserved job was not handed out again")
+	}
+	if handedOutAgain(t, `{"autostart":false}`, 2500*time.Millisecond) {
+		t.Error("with the default window a job was handed out again within 2.5s")
+	}
+}
+
+func TestBadReservationSecsFailStart(t *testing.T) {
+	for _, qc := range []string{`{"reservation_secs":0}`, `{"reservation_secs":-3}`, `{"reservation_secs":1.5}`, `{"reservation_secs":"5"}`, `{"driver":"memory","reservation_secs":5}`} {
+		queue.Reset()
+		if _, err := boot.Start(context.Background(), "t", []string{"health", "database", "queue"}, `{"database":{"sqlite":{"path":":memory:"}},"queue":`+qc+`}`); err == nil {
+			t.Errorf("%s was accepted", qc)
+		}
+	}
+	queue.Reset()
+}
+
 func TestUseDriverFuncBuildsTheDriverOverTheOpenedDatabase(t *testing.T) {
 	queue.Reset()
 	t.Cleanup(queue.Reset)
@@ -283,4 +327,66 @@ func TestAutostartFalseHoldsJobsUntilRun(t *testing.T) {
 	}
 	_ = queue.Run(run.App) // idempotent
 	eventually(t, "the held job after Run", ran.Load)
+}
+
+// TestTableFailedTableReservationAndRetryAfterAllTakeEffectTogether sets the four
+// sqlite-driver keys at once, so that wiring one cannot silently drop another
+// (they are read in different places of Start).
+func TestTableFailedTableReservationAndRetryAfterAllTakeEffectTogether(t *testing.T) {
+	queue.Reset()
+	t.Cleanup(queue.Reset)
+	var mu sync.Mutex
+	var at []time.Time
+	queue.Handle("flaky", func(context.Context, *libqueue.QueuedJob) error {
+		mu.Lock()
+		at = append(at, time.Now())
+		mu.Unlock()
+		return errors.New("nope")
+	})
+	// The worker polls "work"; "default" is left to the manual Pop below.
+	run := start(t, sqliteCfg(t, `{"table":"bg_jobs","failed_table":"bg_failed","reservation_secs":1,"retry_after_secs":2,"max_tries":2,"queues":["work"],"poll_ms":10}`))
+	ctx := context.Background()
+	db := database.From(run.App).DB()
+	count := func(table string) int {
+		var n int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&n); err != nil {
+			t.Fatalf("table %s: %v", table, err)
+		}
+		return n
+	}
+
+	// reservation_secs and table: a reserved job comes back after about a second
+	// (the default window is 60 s), and it sat in bg_jobs.
+	if err := queue.Push(ctx, run.App, "long", []byte(`1`)); err != nil {
+		t.Fatal(err)
+	}
+	if count("bg_jobs") != 1 {
+		t.Error("table: the job did not land in bg_jobs")
+	}
+	q := queue.Queue(run.App)
+	if j, err := q.Pop(ctx, "default"); err != nil || j == nil {
+		t.Fatalf("first pop: %v %v", j, err)
+	}
+	again := false
+	for deadline := time.Now().Add(4 * time.Second); time.Now().Before(deadline) && !again; time.Sleep(50 * time.Millisecond) {
+		j, _ := q.Pop(ctx, "default")
+		again = j != nil
+	}
+	if !again {
+		t.Error("reservation_secs: a reserved job was not handed out again within 4s")
+	}
+
+	// retry_after_secs and failed_table: the failing job waits about 2 s between
+	// attempts, then lands in bg_failed.
+	if err := queue.Push(ctx, run.App, "flaky", []byte(`1`), libqueue.OnQueue("work")); err != nil {
+		t.Fatal(err)
+	}
+	eventually(t, "two attempts", func() bool { mu.Lock(); defer mu.Unlock(); return len(at) >= 2 })
+	mu.Lock()
+	gap := at[1].Sub(at[0])
+	mu.Unlock()
+	if gap < 1800*time.Millisecond {
+		t.Errorf("retry_after_secs: gap between attempts = %v, want about 2s", gap)
+	}
+	eventually(t, "the exhausted job in bg_failed", func() bool { return count("bg_failed") == 1 })
 }
