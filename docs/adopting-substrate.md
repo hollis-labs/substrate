@@ -104,16 +104,27 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 - Use the `database` module's store (`database.From(app)`), not your own `sql.Open`. SQLite and Postgres are both
   supported by the module; if your SQL uses `?` placeholders and SQLite syntax, say in the architecture note that the
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
-- Local store plus a data store. If the app must start and be repairable without its data server (settings,
-  definitions and identity local; events, logs, domain tables on Postgres), keep the default store local and add a
-  named one: `database.stores.data` with `required: false`, `driver: postgres`, `schema_mode: verify`, and
-  `database.UseNamedMigrationFS("data", fsys, root)`. In code take `h := database.Named(app, "data")`; `h.Get()` returns
-  the store or an error wrapping `database.ErrUnavailable`, which a handler maps to `database.WriteUnavailable(w, h)`
-  (503 `database_unavailable`), or wrap a route group in `database.Gate(h)`. While the store is down the app is up,
-  `/healthz` is `degraded` (503) naming the store and its host and database (never credentials), writes to it are
-  refused (nothing is queued or spooled), and the module reconnects by itself with backoff. Producers that must not
-  block (events, telemetry) batch in memory with a bound and drop the oldest, counting drops; they do not persist
-  locally. Run Postgres migrations from a deploy step with the migration role (`migrate_dsn_*`), not from the app.
+- Local store plus a data store (after adoption, not for it). Substrate cutovers keep the app's one store; no port needs
+  a second store to cut over. When an app later moves its growing data to Postgres but must still start and be repairable
+  without that server (settings, definitions and identity local; events, logs, domain tables on Postgres), keep the default
+  store local and add a named one: `database.stores.data` with `driver: postgres`, `required: false`,
+  `schema_mode: verify`, `postgres: {dsn_file: ..., migrate_dsn_file: ...}`, and
+  `database.UseNamedMigrationFS("data", fsys, root)`. In code take `h := database.Named(app, "data")`; `h.Get()` returns the
+  store or an error wrapping `database.ErrUnavailable`. A handler maps that, and any connection-level error
+  (`database.IsUnavailable(err)`, which it also passes to `h.Report(err)` so the state flips at once), to
+  `database.WriteUnavailable(w, h)` (503 `database_unavailable`), or wraps a route group in `database.Gate(h)`;
+  `database.GateWith(h, deny)` keeps a protocol-fixed API's own error envelope. `h.OnChange(fn)` re-arms work that depends
+  on the store after an outage, and `h.Wait(ctx)` waits for the first time it is ready.
+  While an optional store is down the app is up and `/healthz` says `degraded` with HTTP 200 (naming the store and its host
+  and database, never credentials; a 503 would make a deploy gate or supervisor treat the app as dead), writes to it are
+  refused (nothing is queued or spooled), and the module reconnects by itself with backoff. A store whose error will not
+  fix itself (a rejected login, a missing database, a schema that is behind) shows as `failed`. Producers that must not
+  block (events, telemetry) batch in memory with a bound and drop the oldest, counting drops; they do not persist locally.
+  Each named store has its own version table (`goose_db_version_<name>`), so two stores can share one database.
+  Migrations: a Postgres named store defaults to `schema_mode: verify`, so the running app does not migrate a shared server.
+  The deploy step runs them with the schema-owner role: the app exposes `database.MigrateNamed(ctx, app, name)` as a verb
+  (for example `<app> migrate --store data`) run with `migrate_dsn_file` or `migrate_dsn_env` set. If the app starts while
+  the schema is behind, the store is `failed` and recovers by itself once the deploy step has migrated it.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
   (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with

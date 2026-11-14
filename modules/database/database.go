@@ -104,7 +104,11 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if reg := health.From(app); reg != nil {
 		reg.Add("database", st.Ping)
 	}
-	if err := m.startNamed(ctx, app); err != nil {
+	defaultPath := ""
+	if sc.Driver == store.DriverSQLite && !isMemory(sc.SQLite.Path) {
+		defaultPath = sc.SQLite.Path
+	}
+	if err := m.startNamed(ctx, app, defaultPath); err != nil {
 		_ = m.Stop(ctx)
 		return err
 	}
@@ -130,7 +134,7 @@ func openAndMigrate(ctx context.Context, sc store.Config, lockTimeout time.Durat
 	if src != nil && src.FS != nil { // an empty Source (a cleared registration) means no migrations
 		if err := migrate.Ensure(ctx, sc, st, *src); err != nil {
 			_ = st.Close()
-			return nil, fmt.Errorf("migrate: %w", err)
+			return nil, &migrateError{err}
 		}
 	}
 	return st, nil

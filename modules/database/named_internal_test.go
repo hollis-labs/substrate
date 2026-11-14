@@ -34,6 +34,12 @@ func TestRedactErrorMasksCredentials(t *testing.T) {
 		"dial postgres://app:" + pw + "@db:5432/x: refused",
 		"failed host=db user=app password=" + pw + " dbname=x",
 		"PASSWORD='" + pw + "' bad",
+		"dsn sslpassword=" + pw + " host=db",
+		"postgres://u:x@db/app?sslpassword=" + pw + "&sslmode=disable",
+		"password='it\\'s " + pw + " here' dbname=x",
+		`password="a \" ` + pw + `" dbname=x`,
+		"postgres://app:" + pw + "@db.example/app failed",
+		"postgres://app:p/" + pw + "@db.example/app failed",
 	} {
 		if out := redactError(errors.New(in)); strings.Contains(out, pw) {
 			t.Errorf("redactError(%q) = %q leaks the secret", in, out)

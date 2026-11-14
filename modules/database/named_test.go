@@ -115,7 +115,9 @@ func TestOptionalNamedStoreStartsDegradedAndRecovers(t *testing.T) {
 		t.Fatalf("status while down = %+v", s)
 	}
 	rec := get(health.From(run.App).Handler(), "/healthz")
-	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"degraded"`) ||
+	// An optional store being down is degraded but the process is serving: 200, so a deploy gate or supervisor
+	// does not roll back or restart the app.
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"degraded"`) ||
 		!strings.Contains(rec.Body.String(), "database unavailable: store data (data.db)") {
 		t.Fatalf("degraded health = %d %s", rec.Code, rec.Body)
 	}
@@ -198,8 +200,14 @@ func TestNamedConfigErrorsFailStart(t *testing.T) {
 		want  string
 	}{
 		"bad name":          {sqliteStore(ok, nil), "Data-1", "name must match"},
+		"no driver":         {map[string]any{"sqlite": map[string]any{"path": ok}}, "data", "driver is required"},
+		"no sqlite path":    {map[string]any{"driver": "sqlite"}, "data", "sqlite.path is required"},
+		"typo in store":     {sqliteStore(ok, map[string]any{"requird": false}), "data", `stores.data: unknown key "requird"`},
+		"typo in retry":     {sqliteStore(ok, map[string]any{"retry": map[string]any{"inital": "1s"}}), "data", `stores.data.retry: unknown key "inital"`},
+		"typo in sqlite":    {map[string]any{"driver": "sqlite", "sqlite": map[string]any{"path": ok, "jurnal": "wal"}}, "data", `stores.data.sqlite: unknown key "jurnal"`},
+		"typo in postgres":  {map[string]any{"driver": "postgres", "postgres": map[string]any{"dsn_fle": "x"}}, "data", `stores.data.postgres: unknown key "dsn_fle"`},
 		"required not bool": {sqliteStore(ok, map[string]any{"required": "no"}), "data", "required must be true or false"},
-		"unknown driver":    {map[string]any{"driver": "mysql"}, "data", "must be sqlite or postgres"},
+		"unknown driver":    {map[string]any{"driver": "mysql"}, "data", "stores.data: driver"},
 		"literal dsn":       {map[string]any{"driver": "postgres", "postgres": map[string]any{"dsn": "postgres://x"}}, "data", "cannot be written in config"},
 		"bad duration":      {sqliteStore(ok, map[string]any{"connect_timeout": "soon"}), "data", "positive duration"},
 		"retry order":       {sqliteStore(ok, map[string]any{"retry": map[string]any{"initial": "5s", "max": "1s"}}), "data", "retry.max must be at least"},
@@ -259,20 +267,15 @@ func TestPostgresOptionalStoreDownKeepsCredentialsOut(t *testing.T) {
 			t.Fatalf("credential leaked (%q): health=%s status=%+v", leak, rec.Body, s)
 		}
 	}
-	if rec.Code != 503 || !strings.Contains(rec.Body.String(), "database unavailable: store down (127.0.0.1:1/appdb)") {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"degraded"`) ||
+		!strings.Contains(rec.Body.String(), "database unavailable: store down (127.0.0.1:1/appdb)") {
 		t.Fatalf("health = %d %s", rec.Code, rec.Body)
 	}
 }
 
 // A live server. CI provides one; set SUBSTRATE_TEST_POSTGRES_DSN to run it locally.
 func TestPostgresNamedStoreReady(t *testing.T) {
-	dsn := os.Getenv("SUBSTRATE_TEST_POSTGRES_DSN")
-	if dsn == "" {
-		if os.Getenv("SUBSTRATE_REQUIRE_POSTGRES") == "1" {
-			t.Fatal("SUBSTRATE_REQUIRE_POSTGRES=1 but SUBSTRATE_TEST_POSTGRES_DSN is not set")
-		}
-		t.Skip("SUBSTRATE_TEST_POSTGRES_DSN is not set; the Postgres path is covered in CI")
-	}
+	dsn := pgDSN(t)
 	useNamedMigrations(t, "data")
 	t.Setenv("T_PG_DSN", dsn)
 	ctx := context.Background()
@@ -289,10 +292,6 @@ func TestPostgresNamedStoreReady(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Get: %v (status %+v)", err, h.Status())
 	}
-	t.Cleanup(func() {
-		_, _ = st.ExecContext(ctx, `DROP TABLE IF EXISTS notes`)
-		_, _ = st.ExecContext(ctx, `DROP TABLE IF EXISTS goose_db_version`)
-	})
 	if _, err := st.ExecContext(ctx, `INSERT INTO notes (body) VALUES ('hi')`); err != nil {
 		t.Fatalf("migration did not create notes on postgres: %v", err)
 	}
