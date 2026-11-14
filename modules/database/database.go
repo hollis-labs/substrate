@@ -191,8 +191,6 @@ func readPoolFrom(s map[string]any) (int, error) {
 		if float64(n) != x {
 			return 0, fmt.Errorf("database: sqlite.read_pool %v must be a whole number from 1 to %d", v, MaxReadPool)
 		}
-	case int:
-		n = x
 	default:
 		return 0, fmt.Errorf("database: sqlite.read_pool must be a whole number from 1 to %d", MaxReadPool)
 	}

@@ -101,3 +101,30 @@ func TestNormalizeDoesNotMutateItsInput(t *testing.T) {
 		t.Fatalf("input mutated: %#v", in)
 	}
 }
+
+func TestNonStringKeyRefusedNamingThePath(t *testing.T) {
+	cases := []struct{ name, yaml, path string }{
+		{"in a map", "m:\n  a:\n    1: x\n", `"m.a"`},
+		{"in a list's map", "m:\n  xs:\n    - {2: y}\n", `"m.xs[0]"`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := run(t, map[string]any{}, c.yaml)
+			if err == nil || !strings.Contains(err.Error(), c.path) || !strings.Contains(err.Error(), "not a string") {
+				t.Fatalf("want an error naming %s, got %v", c.path, err)
+			}
+		})
+	}
+}
+
+// Documented limit: an integer literal beyond 64 bits arrives from yaml.v3
+// already as a float64, so it is indistinguishable from a float and is not refused.
+func TestIntegerBeyond64BitsPassesAsFloat(t *testing.T) {
+	got, err := run(t, map[string]any{}, "m:\n  big: 100000000000000000000000\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["m"].(map[string]any)["big"].(float64); !ok {
+		t.Fatalf("got %#v", got)
+	}
+}
