@@ -275,6 +275,18 @@ must not call such a path expecting the flat shape.
 - Pins are edited only in `bom/bom.yaml` in Substrate. `go run github.com/hollis-labs/substrate/cmd/substrate pins
   check --app .` must pass in the app; `pins sync` rewrites `go.mod` and the CI workflow. A lib the BOM does not
   list is a one-line Substrate PR, not a local `go.mod` exception.
+- Frontend: `go run github.com/hollis-labs/substrate/cmd/substrate pins check --app . --frontend` (add
+  `--frontend-dir DIR` if it is not `frontend`) also reads `package.json` and the committed `package-lock.json` and fails
+  when (1) a pinned `@hollis-labs` kit in `package.json` or at the lockfile's top level is not the BOM's exact version;
+  (2) any package in the tree asks for a pinned kit in a range the copy node would resolve does not meet, or cannot find it
+  (what `npm ls` calls invalid and missing); (3) a pinned kit is installed a second time, nested, at another version (every
+  path is listed, for example a stale `kit-code/node_modules/@hollis-labs/design-tokens` 0.4.0 left by an old lockfile; the
+  top-level check alone passes that); and (4) `npm ls --all --package-lock-only` reports a problem for a pinned kit. Steps
+  1 to 3 are pure Go and need no network and no `node_modules`; step 4 needs `npm` on `PATH` and fails when it is not
+  there (use `--no-npm-ls` to skip it on a machine without node; CI should not). The BOM's `kit_exceptions` (today
+  kit-settings' nested design-tokens and design-components 0.4) are honoured and printed as `accepted:`. Fix a finding by
+  moving `package.json` to the BOM versions and regenerating the lockfile (`rm package-lock.json && npm install`, not a
+  partial update), then run it again. Add it to the app's CI beside the Go pins check.
 - CI: `go vet`, the pins check, `go test -race`, `golangci-lint`, the frontend typecheck/lint/build (built before
   `go test` so the embed has assets) and `go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD`.
   Copy the workflow from a ported app.
