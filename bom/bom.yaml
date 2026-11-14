@@ -25,11 +25,12 @@ libs:
   github.com/hollis-labs/libs/security/policy: v0.1.0
   github.com/hollis-labs/libs/security/secrets: v0.1.0
   github.com/hollis-labs/libs/security/redact: v0.2.0
-  github.com/hollis-labs/libs/ui/ui-go: v0.1.0
+  github.com/hollis-labs/libs/ui/ui-go: v0.4.0   # v0.2 to v0.4 add streamhub event ids, epochs, logkit and retention; nothing removed
 app_libs:                 # libs an app may import that Substrate itself does not require
   github.com/hollis-labs/libs/workflow/engine: v0.2.0
   github.com/hollis-labs/libs/harness/core: v0.16.0
-  github.com/hollis-labs/libs/mesh/core: v0.6.0      # Tether client, messaging (Hadron agent sessions)
+  github.com/hollis-labs/libs/mesh/core: v0.10.0     # Tether client, messaging (Hadron agent sessions; Tachyon port). v0.7 to v0.10 are additions and two fixes
+  github.com/hollis-labs/libs/mesh/eventbus: v0.2.0  # event export and hub relay (Cerberus port)
   github.com/hollis-labs/libs/security/pairing: v0.0.0-20261018164511-e8bfb38b4f31   # device grants and renewable device tokens (Basalisk companion); untagged in libs
   github.com/hollis-labs/libs/llm/core: v0.4.0        # cost, quota, pricing and usage-ledger types (Station llm-gateway)
   github.com/hollis-labs/libs/core/panics: v0.1.0     # recovered-panic refs and the HTTP recovery guard (Conduit)
