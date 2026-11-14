@@ -104,6 +104,16 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 - Use the `database` module's store (`database.From(app)`), not your own `sql.Open`. SQLite and Postgres are both
   supported by the module; if your SQL uses `?` placeholders and SQLite syntax, say in the architecture note that the
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
+- Local store plus a data store. If the app must start and be repairable without its data server (settings,
+  definitions and identity local; events, logs, domain tables on Postgres), keep the default store local and add a
+  named one: `database.stores.data` with `required: false`, `driver: postgres`, `schema_mode: verify`, and
+  `database.UseNamedMigrationFS("data", fsys, root)`. In code take `h := database.Named(app, "data")`; `h.Get()` returns
+  the store or an error wrapping `database.ErrUnavailable`, which a handler maps to `database.WriteUnavailable(w, h)`
+  (503 `database_unavailable`), or wrap a route group in `database.Gate(h)`. While the store is down the app is up,
+  `/healthz` is `degraded` (503) naming the store and its host and database (never credentials), writes to it are
+  refused (nothing is queued or spooled), and the module reconnects by itself with backoff. Producers that must not
+  block (events, telemetry) batch in memory with a bound and drop the oldest, counting drops; they do not persist
+  locally. Run Postgres migrations from a deploy step with the migration role (`migrate_dsn_*`), not from the app.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
   (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with

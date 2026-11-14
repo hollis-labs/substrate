@@ -76,7 +76,10 @@ func UseMigrationFS(fsys fs.FS, root string) {
 
 func init() { module.Register(&mod{}) }
 
-type mod struct{ st *store.Store }
+type mod struct {
+	st    *store.Store
+	named []*Handle
+}
 
 func (*mod) Name() string { return "database" }
 
@@ -89,37 +92,60 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if err != nil {
 		return err
 	}
-	if sc.Driver == store.DriverSQLite && !isMemory(sc.SQLite.Path) {
-		release, err := acquireOpenLock(ctx, sc.SQLite.Path, lockTimeout)
-		if err != nil {
-			return err
-		}
-		defer release()
-	}
-	st, err := store.Open(ctx, sc)
-	if err != nil {
-		return fmt.Errorf("open: %w", err)
-	}
 	mu.Lock()
 	src := migrations
 	mu.Unlock()
-	if src != nil {
-		if err := migrate.Ensure(ctx, sc, st, *src); err != nil {
-			_ = st.Close()
-			return fmt.Errorf("migrate: %w", err)
-		}
+	st, err := openAndMigrate(ctx, sc, lockTimeout, src)
+	if err != nil {
+		return err
 	}
 	m.st = st
 	app.Set(Key, st)
 	if reg := health.From(app); reg != nil {
 		reg.Add("database", st.Ping)
 	}
+	if err := m.startNamed(ctx, app); err != nil {
+		_ = m.Stop(ctx)
+		return err
+	}
 	return nil
 }
 
-// configFrom builds the store config from app config.
+// openAndMigrate opens the store (taking the SQLite open lock for a file
+// database) and applies or verifies the schema when a migration source is
+// registered. It is the one open path for the default store and every named
+// store.
+func openAndMigrate(ctx context.Context, sc store.Config, lockTimeout time.Duration, src *migrate.Source) (*store.Store, error) {
+	if sc.Driver == store.DriverSQLite && !isMemory(sc.SQLite.Path) {
+		release, err := acquireOpenLock(ctx, sc.SQLite.Path, lockTimeout)
+		if err != nil {
+			return nil, err
+		}
+		defer release()
+	}
+	st, err := store.Open(ctx, sc)
+	if err != nil {
+		return nil, fmt.Errorf("open: %w", err)
+	}
+	if src != nil && src.FS != nil { // an empty Source (a cleared registration) means no migrations
+		if err := migrate.Ensure(ctx, sc, st, *src); err != nil {
+			_ = st.Close()
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+	}
+	return st, nil
+}
+
+// configFrom builds the default store's config from app config.
 func configFrom(app *module.App) (store.Config, error) {
 	cfg, _ := app.Config["database"].(map[string]any)
+	return storeConfig(app.Name, cfg)
+}
+
+// storeConfig builds a store config from one store's config block (the
+// "database" block for the default store, "database.stores.<name>" for a named
+// one). Secrets are read here, so calling it again re-reads a rotated secret.
+func storeConfig(appName string, cfg map[string]any) (store.Config, error) {
 	str := func(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 	sub := func(k string) map[string]any { m, _ := cfg[k].(map[string]any); return m }
 
@@ -146,7 +172,7 @@ func configFrom(app *module.App) (store.Config, error) {
 			return sc, err
 		}
 		sc.SQLite = store.SQLiteConfig{
-			Path:            orDefault(str(s, "path"), app.Name+".db"),
+			Path:            orDefault(str(s, "path"), appName+".db"),
 			Synchronous:     str(s, "synchronous"),
 			Journal:         str(s, "journal"),
 			ReadConns:       readPool,
@@ -162,7 +188,7 @@ func configFrom(app *module.App) (store.Config, error) {
 		if err != nil && !errors.Is(err, errUnset) {
 			return sc, err
 		}
-		pc := store.PostgresConfig{DSN: dsn, MigrateDSN: mig, ApplicationName: orDefault(str(p, "application_name"), app.Name)}
+		pc := store.PostgresConfig{DSN: dsn, MigrateDSN: mig, ApplicationName: orDefault(str(p, "application_name"), appName)}
 		pc.AllowInsecure, _ = p["allow_insecure"].(bool)
 		if n, ok := p["max_conns"].(float64); ok {
 			pc.MaxConns = int(n)
@@ -202,6 +228,12 @@ func readPoolFrom(s map[string]any) (int, error) {
 
 var errUnset = errors.New("not set")
 
+// errSecret marks a secret that could not be read (file missing, variable
+// empty). A named store that is allowed to start unavailable retries these,
+// because the secret may be provisioned after the app starts; every other
+// configuration error fails the start.
+var errSecret = errors.New("secret unavailable")
+
 // secretFrom reads <name>_file or <name>_env from m. The value is never put in
 // an error.
 func secretFrom(m map[string]any, name string) (string, error) {
@@ -213,13 +245,13 @@ func secretFrom(m map[string]any, name string) (string, error) {
 	case file != "":
 		b, err := os.ReadFile(file)
 		if err != nil {
-			return "", fmt.Errorf("database: cannot read postgres.%s_file", name)
+			return "", fmt.Errorf("database: cannot read postgres.%s_file: %w", name, errSecret)
 		}
 		return strings.TrimSpace(string(b)), nil
 	case env != "":
 		v := os.Getenv(env)
 		if v == "" {
-			return "", fmt.Errorf("database: environment variable %s (postgres.%s_env) is empty", env, name)
+			return "", fmt.Errorf("database: environment variable %s (postgres.%s_env) is empty: %w", env, name, errSecret)
 		}
 		return v, nil
 	}
@@ -234,6 +266,10 @@ const defaultOpenLockTimeout = 30 * time.Second
 // openLockTimeout reads database.sqlite.open_lock_timeout (a Go duration).
 func openLockTimeout(app *module.App) (time.Duration, error) {
 	cfg, _ := app.Config["database"].(map[string]any)
+	return openLockTimeoutFrom(cfg)
+}
+
+func openLockTimeoutFrom(cfg map[string]any) (time.Duration, error) {
 	s, _ := cfg["sqlite"].(map[string]any)
 	v, ok := s["open_lock_timeout"].(string)
 	if !ok || v == "" {
@@ -258,11 +294,14 @@ func orDefault(s, def string) string {
 	return def
 }
 
-func (m *mod) Stop(context.Context) error {
+func (m *mod) Stop(ctx context.Context) error {
+	err := m.stopNamed(ctx)
 	if m.st == nil {
-		return nil
+		return err
 	}
-	err := m.st.Close()
+	if cerr := m.st.Close(); err == nil {
+		err = cerr
+	}
 	m.st = nil
 	return err
 }
