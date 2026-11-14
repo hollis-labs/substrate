@@ -21,11 +21,21 @@ func pins(args []string) {
 	root := fs.String("root", ".", "substrate repo root (holds bom/bom.yaml, go.mod, .github/workflows/ci.yml)")
 	npm := fs.Bool("npm", false, "check also that every pinned kit version is published (network)")
 	app := fs.String("app", "", "check or sync an app's go.mod (directory) against this BOM; the BOM comes from the Substrate version the app requires")
+	frontend := fs.Bool("frontend", false, "with --app: also hold the app's frontend (package.json, package-lock.json) to the BOM kits: exact top-level pins, no invalid range on a pinned kit, no nested copy at another version, and `npm ls` clean")
+	frontendDir := fs.String("frontend-dir", "frontend", "with --frontend: the frontend directory, relative to --app")
+	noNPMLs := fs.Bool("no-npm-ls", false, "with --frontend: do not run `npm ls` (the lockfile is still analysed); the default fails when npm is not installed")
+	bomFile := fs.String("bom", "", "with --app: use this bom.yaml instead of the one the app's Substrate release carries")
 	folio := fs.String("folio", "", "Folio's platform-pins.yaml: a directory or file (check also accepts an http(s) URL)")
 	_ = fs.Parse(args[1:])
 
+	if *frontend && *app == "" {
+		fail(fmt.Errorf("--frontend needs --app DIR"))
+	}
+	if *frontend && verb != "check" {
+		fail(fmt.Errorf("--frontend only applies to `pins check`"))
+	}
 	if *app != "" {
-		pinsApp(verb, *app)
+		pinsApp(verb, *app, *bomFile, *frontend, filepath.Join(*app, *frontendDir), *noNPMLs)
 		return
 	}
 	b, err := bom.Load(filepath.Join(*root, "bom", "bom.yaml"))
@@ -84,12 +94,16 @@ func pins(args []string) {
 }
 
 // pinsApp holds an app's go.mod to the BOM of the Substrate release it requires.
-func pinsApp(verb, dir string) {
-	root, err := goList(dir, "-m", "-f", "{{.Dir}}", "github.com/hollis-labs/substrate")
-	if err != nil || root == "" {
-		fail(fmt.Errorf("find the substrate module the app requires: %v", err))
+func pinsApp(verb, dir, bomFile string, frontend bool, feDir string, noNPMLs bool) {
+	bomPath := bomFile
+	if bomPath == "" {
+		root, err := goList(dir, "-m", "-f", "{{.Dir}}", "github.com/hollis-labs/substrate")
+		if err != nil || root == "" {
+			fail(fmt.Errorf("find the substrate module the app requires: %v", err))
+		}
+		bomPath = filepath.Join(root, "bom", "bom.yaml")
 	}
-	b, err := bom.Load(filepath.Join(root, "bom", "bom.yaml"))
+	b, err := bom.Load(bomPath)
 	if err != nil {
 		fail(err)
 	}
@@ -111,11 +125,25 @@ func pinsApp(verb, dir string) {
 	if err != nil {
 		fail(err)
 	}
+	if frontend {
+		fd, accepted, ferr := bom.CheckFrontend(b, bom.FrontendOptions{Dir: feDir, SkipNPMLs: noNPMLs})
+		if ferr != nil {
+			fail(ferr)
+		}
+		ds = append(ds, fd...)
+		for _, a := range accepted {
+			fmt.Println("accepted:", a)
+		}
+	}
 	for _, d := range ds {
 		fmt.Fprintln(os.Stderr, d)
 	}
 	if len(ds) > 0 {
 		os.Exit(1)
+	}
+	if frontend {
+		fmt.Println("app pins and frontend kits match the bom")
+		return
 	}
 	fmt.Println("app pins match the bom")
 }

@@ -35,5 +35,5 @@ v0.1.0 (2026-11-02). Pre-1.0: APIs and the manifest schema may change in minor r
 
 Standards: cobra, stdlib mux, goose via libs core/store, `/healthz` `{status, checks}`, YAML config,
 security/auth + security/policy as defaults. `bom/bom.yaml` is the only hand-edited pin source
-(`substrate pins sync|check` keeps `go.mod`, the CI workflows and Folio's mirror in step); the builder emits the
+(`substrate pins sync|check` keeps `go.mod`, the CI workflows and Folio's mirror in step; `pins check --app . --frontend` holds an app's `package.json` and lockfile to the kits, including nested stale copies); the builder emits the
 wiring file only. Tasks live in Torque project Substrate (PRJ-20261102-0001).

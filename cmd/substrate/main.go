@@ -32,6 +32,7 @@ const usage = `substrate <command> [flags]
                                         private IPs and paths; exit 0 clean, 1 findings, 2 could not run.
                                         Needs python3; flags as in scripts/scan-public
   pins check|sync [--root .] [--folio dir|file|url] [--app dir]
+                  [--frontend [--frontend-dir frontend] [--no-npm-ls]] [--bom file]
                                         verify or rewrite go.mod, the CI workflow and
                                         Folio's platform-pins.yaml from bom/bom.yaml
 `
