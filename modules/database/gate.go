@@ -10,6 +10,10 @@ import (
 // it answers 503 {"code":"database_unavailable"} with Retry-After and does not
 // call next. Put it in front of data endpoints and leave sign-in, settings and
 // /healthz outside it.
+//
+// Gate panics at construction if h is nil: database.Named returns nil for a name
+// that is not configured, and a route that is silently always 503 hides that
+// typo until someone calls the endpoint.
 func Gate(h *Handle) func(http.Handler) http.Handler {
 	return GateWith(h, func(w http.ResponseWriter, _ *http.Request, _ Status) { WriteUnavailable(w, h) })
 }
@@ -17,8 +21,14 @@ func Gate(h *Handle) func(http.Handler) http.Handler {
 // GateWith is Gate with the refusal written by deny, for a route whose clients
 // expect their own error envelope (a protocol-fixed API). deny is called with
 // the store's Status and must write the response; set Retry-After as Gate does.
-// A nil Handle is never ready, so the gate refuses.
+// It panics at construction if h or deny is nil.
 func GateWith(h *Handle, deny func(w http.ResponseWriter, r *http.Request, s Status)) func(http.Handler) http.Handler {
+	if h == nil {
+		panic("database: Gate called with a nil *Handle; database.Named returns nil for a store that is not configured, check the name")
+	}
+	if deny == nil {
+		panic("database: GateWith called with a nil deny function")
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !h.Ready() {

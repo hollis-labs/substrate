@@ -35,6 +35,7 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/llm/core: v0.4.0        # cost, quota, pricing and usage-ledger types (Station llm-gateway)
   github.com/hollis-labs/libs/core/panics: v0.1.0     # recovered-panic refs and the HTTP recovery guard (Conduit)
 third_party:
+  github.com/jackc/pgx/v5: v5.11.0   # pgconn.ParseConfig, to show a Postgres store's host:port/database without credentials (database module); the version libs core/store requires
   github.com/spf13/cobra: v1.10.2   # CLI standard (matches torque, tether, hadron, cerberus)
   gopkg.in/yaml.v3: v3.0.1          # manifest and BOM parsing
   golang.org/x/crypto: v0.58.0      # password hashing (identity module)

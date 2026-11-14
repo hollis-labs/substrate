@@ -279,12 +279,28 @@ func TestWaitReturnsAfterStopAndNilHandlesAreSafe(t *testing.T) {
 	if database.Named(run.App, "misspelt") != nil {
 		t.Fatal("unknown name must give nil")
 	}
-	reached := false
-	rec := get(database.Gate(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { reached = true })), "/x")
-	if rec.Code != 503 || reached {
-		t.Fatalf("Gate(nil) = %d reached=%v", rec.Code, reached)
+	// A nil handle (a misspelt store name) fails at construction, not as a route that is silently always 503.
+	mustPanic := func(name string, f func()) {
+		defer func() {
+			if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "nil") {
+				t.Fatalf("%s did not panic with a message about nil: %v", name, r)
+			}
+		}()
+		f()
 	}
-	rec = httptest.NewRecorder()
+	mustPanic("Gate(nil)", func() { database.Gate(nil) })
+	mustPanic("GateWith(nil)", func() { database.GateWith(nil, func(http.ResponseWriter, *http.Request, database.Status) {}) })
+	mustPanic("GateWith(h, nil)", func() {
+		h2 := database.Named(run.App, "down")
+		_ = h2
+		var nonNil = database.Named(run.App, "down")
+		if nonNil == nil {
+			// run is stopped but the handle stays published; fall back to a handle that exists
+			panic("nil handle for test setup")
+		}
+		database.GateWith(nonNil, nil)
+	})
+	rec := httptest.NewRecorder()
 	database.WriteUnavailable(rec, nil)
 	if rec.Code != 503 {
 		t.Fatalf("WriteUnavailable(nil) = %d", rec.Code)
@@ -390,6 +406,9 @@ func TestLogsNameTheStoreAndNeverCarryCredentials(t *testing.T) {
 	mu.Lock()
 	defer mu.Unlock()
 	out := buf.String()
+	if !strings.Contains(out, "optional store is unavailable at start; the app is starting degraded") {
+		t.Fatalf("an optional store that is down at start must be logged loudly, got:\n%s", out)
+	}
 	if !strings.Contains(out, "store unavailable") || !strings.Contains(out, "store=data") || !strings.Contains(out, "127.0.0.1:1/appdb") {
 		t.Fatalf("expected a warning naming the store and target, got:\n%s", out)
 	}

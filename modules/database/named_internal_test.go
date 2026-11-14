@@ -13,9 +13,9 @@ func TestTargetOfNeverIncludesCredentials(t *testing.T) {
 	pw := "p" + "w0rd"
 	for dsn, want := range map[string]string{
 		"postgres://user:" + pw + "@db.example:5432/app?sslmode=verify-full": "db.example:5432/app",
-		"postgresql://user@db.example/app":                                   "db.example/app",
+		"postgresql://user@db.example/app":                                   "db.example:5432/app",
 		"host=db.example port=5433 user=u password=" + pw + " dbname=app":    "db.example:5433/app",
-		"host='db.example' dbname='app'":                                     "db.example/app",
+		"host='db.example' dbname='app'":                                     "db.example:5432/app",
 		"nonsense":                                                           "postgres",
 	} {
 		got := targetOf(store.Config{Driver: store.DriverPostgres, Postgres: store.PostgresConfig{DSN: dsn}})

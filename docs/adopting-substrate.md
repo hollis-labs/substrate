@@ -104,27 +104,32 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 - Use the `database` module's store (`database.From(app)`), not your own `sql.Open`. SQLite and Postgres are both
   supported by the module; if your SQL uses `?` placeholders and SQLite syntax, say in the architecture note that the
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
-- Local store plus a data store (after adoption, not for it). Substrate cutovers keep the app's one store; no port needs
-  a second store to cut over. When an app later moves its growing data to Postgres but must still start and be repairable
-  without that server (settings, definitions and identity local; events, logs, domain tables on Postgres), keep the default
-  store local and add a named one: `database.stores.data` with `driver: postgres`, `required: false`,
-  `schema_mode: verify`, `postgres: {dsn_file: ..., migrate_dsn_file: ...}`, and
-  `database.UseNamedMigrationFS("data", fsys, root)`. In code take `h := database.Named(app, "data")`; `h.Get()` returns the
-  store or an error wrapping `database.ErrUnavailable`. A handler maps that, and any connection-level error
-  (`database.IsUnavailable(err)`, which it also passes to `h.Report(err)` so the state flips at once), to
-  `database.WriteUnavailable(w, h)` (503 `database_unavailable`), or wraps a route group in `database.Gate(h)`;
-  `database.GateWith(h, deny)` keeps a protocol-fixed API's own error envelope. `h.OnChange(fn)` re-arms work that depends
-  on the store after an outage, and `h.Wait(ctx)` waits for the first time it is ready.
+- Local store plus a data store. This is not a step of every port, and no port needs it to cut over. Whether a port uses a
+  second store (its class B and C data on Postgres) is its director's ruling; it comes after adoption, with the Postgres
+  switch. When an app does move its growing data to Postgres but must still start and be repairable without that server
+  (settings, definitions and identity local; events, logs, domain tables on Postgres), keep the default store local and add
+  a named one: `database.stores.data` with `driver: postgres`, `required: false`, `schema_mode: verify`,
+  `postgres: {dsn_file: ..., migrate_dsn_file: ...}`, and `database.UseNamedMigrationFS("data", fsys, root)`. In code take
+  `h := database.Named(app, "data")`; `h.Get()` returns the store or an error wrapping `database.ErrUnavailable`. A handler
+  maps that, and any connection-level error (`database.IsUnavailable(err)`, which it also passes to `h.Report(err)` so the
+  state flips at once), to `database.WriteUnavailable(w, h)` (503 `database_unavailable`), or wraps a route group in
+  `database.Gate(h)` (`GateWith(h, deny)` keeps a protocol-fixed API's own error envelope). Both panic at construction on a
+  nil handle: `database.Named` returns nil for a name that is not configured, and that typo should not surface as a route that
+  is quietly always 503. `h.OnChange(fn)` re-arms work that depends on the store after an outage; `h.Wait(ctx)` waits for
+  the first time it is ready.
   While an optional store is down the app is up and `/healthz` says `degraded` with HTTP 200 (naming the store and its host
-  and database, never credentials; a 503 would make a deploy gate or supervisor treat the app as dead), writes to it are
-  refused (nothing is queued or spooled), and the module reconnects by itself with backoff. A store whose error will not
-  fix itself (a rejected login, a missing database, a schema that is behind) shows as `failed`. Producers that must not
-  block (events, telemetry) batch in memory with a bound and drop the oldest, counting drops; they do not persist locally.
-  Each named store has its own version table (`goose_db_version_<name>`), so two stores can share one database.
-  Migrations: a Postgres named store defaults to `schema_mode: verify`, so the running app does not migrate a shared server.
-  The deploy step runs them with the schema-owner role: the app exposes `database.MigrateNamed(ctx, app, name)` as a verb
-  (for example `<app> migrate --store data`) run with `migrate_dsn_file` or `migrate_dsn_env` set. If the app starts while
-  the schema is behind, the store is `failed` and recovers by itself once the deploy step has migrated it.
+  and database, never credentials; a 503 would make a deploy gate roll the app back or a supervisor restart it), writes to it
+  are refused (nothing is queued or spooled), and the module reconnects by itself with backoff. A missing secret file or an
+  unset variable is an outage; a secret file that cannot be read (permission, a directory, empty) fails `Start` and names the
+  path. A store whose error will not fix itself (a rejected login, a missing database, a schema that is behind) shows as
+  `failed`. Producers that must not block (events, telemetry) batch in memory with a bound and drop the oldest, counting
+  drops; they do not persist locally. Each named store has its own version table (`goose_db_version_<name>`), so two stores
+  can share one database.
+  Migrations: a Postgres named store defaults to `schema_mode: verify`, which never reads `migrate_dsn_*`, so the running app
+  needs no schema-owner secret and does not migrate a shared server. The deploy step migrates with the schema-owner role:
+  `<app> db migrate --store data` (the database module adds the `db` verb when the app has named stores and the cli module is
+  selected; it is `database.MigrateNamed(ctx, app, name)` underneath) with `migrate_dsn_file` or `migrate_dsn_env` set. If the
+  app starts while the schema is behind, the store is `failed` and recovers by itself once the deploy step has migrated it.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
   (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with

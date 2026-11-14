@@ -143,13 +143,17 @@ func openAndMigrate(ctx context.Context, sc store.Config, lockTimeout time.Durat
 // configFrom builds the default store's config from app config.
 func configFrom(app *module.App) (store.Config, error) {
 	cfg, _ := app.Config["database"].(map[string]any)
-	return storeConfig(app.Name, cfg)
+	return storeConfig(app.Name, cfg, false)
 }
 
 // storeConfig builds a store config from one store's config block (the
 // "database" block for the default store, "database.stores.<name>" for a named
 // one). Secrets are read here, so calling it again re-reads a rotated secret.
-func storeConfig(appName string, cfg map[string]any) (store.Config, error) {
+//
+// The migration credential (migrate_dsn_*) is read only when this process
+// migrates: schema_mode auto, or forMigration. A process that only verifies
+// never needs the schema owner's secret and must not fail for lack of it.
+func storeConfig(appName string, cfg map[string]any, forMigration bool) (store.Config, error) {
 	str := func(m map[string]any, k string) string { s, _ := m[k].(string); return s }
 	sub := func(k string) map[string]any { m, _ := cfg[k].(map[string]any); return m }
 
@@ -188,9 +192,13 @@ func storeConfig(appName string, cfg map[string]any) (store.Config, error) {
 		if err != nil {
 			return sc, err
 		}
-		mig, err := secretFrom(p, "migrate_dsn")
-		if err != nil && !errors.Is(err, errUnset) {
-			return sc, err
+		mig := ""
+		if forMigration || sc.SchemaMode == store.SchemaAuto {
+			var err error
+			mig, err = secretFrom(p, "migrate_dsn")
+			if err != nil && !errors.Is(err, errUnset) {
+				return sc, err
+			}
 		}
 		pc := store.PostgresConfig{DSN: dsn, MigrateDSN: mig, ApplicationName: orDefault(str(p, "application_name"), appName)}
 		pc.AllowInsecure, _ = p["allow_insecure"].(bool)
@@ -238,6 +246,13 @@ var errUnset = errors.New("not set")
 // configuration error fails the start.
 var errSecret = errors.New("secret unavailable")
 
+// secretError is a secret that is simply not there yet. It carries the original
+// message text and matches errSecret.
+type secretError struct{ msg string }
+
+func (e *secretError) Error() string        { return e.msg }
+func (e *secretError) Is(target error) bool { return target == errSecret }
+
 // secretFrom reads <name>_file or <name>_env from m. The value is never put in
 // an error.
 func secretFrom(m map[string]any, name string) (string, error) {
@@ -249,13 +264,26 @@ func secretFrom(m map[string]any, name string) (string, error) {
 	case file != "":
 		b, err := os.ReadFile(file)
 		if err != nil {
-			return "", fmt.Errorf("database: cannot read postgres.%s_file: %w", name, errSecret)
+			if errors.Is(err, fs.ErrNotExist) { // not provisioned yet: an outage, retried
+				return "", &secretError{fmt.Sprintf("database: cannot read postgres.%s_file", name)}
+			}
+			// Permission denied, a directory, an I/O error: someone has to fix it.
+			reason := err.Error()
+			var pe *fs.PathError
+			if errors.As(err, &pe) {
+				reason = pe.Err.Error()
+			}
+			return "", fmt.Errorf("database: cannot read postgres.%s_file %q: %s", name, file, reason)
 		}
-		return strings.TrimSpace(string(b)), nil
+		v := strings.TrimSpace(string(b))
+		if v == "" {
+			return "", fmt.Errorf("database: postgres.%s_file %q is empty", name, file)
+		}
+		return v, nil
 	case env != "":
 		v := os.Getenv(env)
-		if v == "" {
-			return "", fmt.Errorf("database: environment variable %s (postgres.%s_env) is empty: %w", env, name, errSecret)
+		if v == "" { // not exported yet: an outage, retried
+			return "", &secretError{fmt.Sprintf("database: environment variable %s (postgres.%s_env) is empty", env, name)}
 		}
 		return v, nil
 	}

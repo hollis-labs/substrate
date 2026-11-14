@@ -7,18 +7,21 @@ import (
 	"io/fs"
 	"log/slog"
 	"math/rand/v2"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/hollis-labs/libs/core/store"
 	"github.com/hollis-labs/libs/core/store/migrate"
+	"github.com/hollis-labs/libs/security/redact"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/cli"
 	"github.com/hollis-labs/substrate/modules/health"
 )
 
@@ -71,16 +74,18 @@ import (
 // or a migration that failed); the loop keeps trying, at the slowest backoff, so
 // the fix is picked up without a restart, but the log and health say it is not
 // an outage. A misconfiguration found at Start (bad name, missing or unknown
-// key, literal DSN, both dsn_file and dsn_env) fails Start; an unreadable
-// secret is an outage, because it may be provisioned after the app starts.
+// key, wrong type, literal DSN, both dsn_file and dsn_env, a secret file that
+// cannot be read) fails Start; a missing secret file or an unset or empty
+// variable is an outage, because it may be provisioned after the app starts.
 //
-// Migrations. A Postgres named store defaults to schema_mode verify, so the
-// running app does not migrate a shared server. A deploy step runs them: start
-// the app once with the store's schema_mode set to auto (SUBSTRATE_CONFIG
-// override) and migrate_dsn_file or migrate_dsn_env naming the schema-owner
-// role; the runtime role never needs DDL rights. If the app starts while the
-// schema is behind, the store is failed (health degraded, data endpoints 503)
-// and recovers by itself after the deploy step has migrated it.
+// Migrations. A Postgres named store defaults to schema_mode verify, which never
+// reads migrate_dsn_*, so the running app needs no schema-owner secret and does
+// not migrate a shared server. A deploy step runs them: `<app> db migrate --store
+// <name>` (added to the cli module when the app has named stores; it is
+// MigrateNamed underneath) with migrate_dsn_file or migrate_dsn_env naming the
+// schema-owner role; the runtime role never needs DDL rights. If the app starts
+// while the schema is behind, the store is failed (health degraded, data endpoints
+// 503) and recovers by itself after the deploy step has migrated it.
 
 // NamedKeyPrefix is the key prefix under which a named store's *Handle is
 // published ("database.store.<name>").
@@ -493,9 +498,19 @@ const defaultStartWait = 3 * time.Second
 // startNamed builds and starts a Handle for every database.stores.<name>.
 func (m *mod) startNamed(ctx context.Context, app *module.App, defaultPath string) error {
 	cfg, _ := app.Config["database"].(map[string]any)
+	if _, present := cfg["stores"]; present {
+		if _, isMap := cfg["stores"].(map[string]any); !isMap {
+			return fmt.Errorf("database: stores must be a mapping of store name to its config")
+		}
+	}
 	stores, _ := cfg["stores"].(map[string]any)
 	if len(stores) == 0 {
 		return nil
+	}
+	if _, present := cfg["start_wait"]; present {
+		if _, isStr := cfg["start_wait"].(string); !isStr {
+			return fmt.Errorf("database: start_wait must be a string such as 3s")
+		}
 	}
 	startWait, err := durationAtZero(cfg, "start_wait", "database", defaultStartWait)
 	if err != nil {
@@ -532,6 +547,7 @@ func (m *mod) startNamed(ctx context.Context, app *module.App, defaultPath strin
 		handles = append(handles, h)
 	}
 
+	cli.AddCommand(app, dbCommand(app)) // `<app> db migrate --store <name>`; queued and unused without the cli module
 	for _, h := range handles {
 		app.Set(NamedKeyPrefix+h.name, h)
 		m.named = append(m.named, h)
@@ -582,6 +598,16 @@ func (m *mod) startNamed(ctx context.Context, app *module.App, defaultPath strin
 			case <-ctx.Done():
 				break wait
 			}
+		}
+	}
+	// Say so loudly: an optional store that is not ready after start_wait means the app is starting degraded.
+	for _, h := range optional {
+		switch st := h.Status(); st.State {
+		case StateReady:
+		case StateConnecting, "":
+			h.log.Warn("optional store still connecting after start_wait; the app is starting without it", "start_wait", startWait.String(), "target", st.Target)
+		default:
+			h.log.Error("optional store is unavailable at start; the app is starting degraded", "state", string(st.State), "target", st.Target, "error", st.LastError)
 		}
 	}
 	return nil
@@ -644,7 +670,7 @@ func MigrateNamed(ctx context.Context, app *module.App, name string) error {
 	if _, _, err := newHandle(app.Name, name, raw); err != nil {
 		return err
 	}
-	sc, err := storeConfig(app.Name, raw)
+	sc, err := storeConfig(app.Name, raw, true) // reads migrate_dsn_*: this process migrates
 	if err != nil {
 		return &storeError{name: name, err: err}
 	}
@@ -675,6 +701,79 @@ func setOf(k ...string) map[string]bool {
 		m[s] = true
 	}
 	return m
+}
+
+// Wrong types are refused, not defaulted: connect_timeout: 5 must not quietly become 10s.
+type kind int
+
+const (
+	kString kind = iota
+	kBool
+	kNumber
+	kMap
+)
+
+func (k kind) String() string {
+	return [...]string{"a string", "true or false", "a number", "a mapping"}[k]
+}
+
+func checkKinds(where string, m map[string]any, want map[string]kind) error {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		w, known := want[key]
+		if !known {
+			continue
+		}
+		v := m[key]
+		ok := false
+		switch w {
+		case kString:
+			_, ok = v.(string)
+		case kBool:
+			_, ok = v.(bool)
+		case kNumber:
+			_, ok = v.(float64)
+		case kMap:
+			_, ok = v.(map[string]any)
+		}
+		if !ok {
+			return fmt.Errorf("database: %s.%s must be %s", where, key, w)
+		}
+	}
+	return nil
+}
+
+var (
+	storeKinds = map[string]kind{"driver": kString, "schema_mode": kString, "sqlite": kMap, "postgres": kMap, "required": kBool,
+		"connect_timeout": kString, "retry": kMap, "ping_interval": kString}
+	sqliteKinds   = map[string]kind{"path": kString, "synchronous": kString, "journal": kString, "read_pool": kNumber, "open_lock_timeout": kString}
+	postgresKinds = map[string]kind{"dsn": kString, "dsn_file": kString, "dsn_env": kString, "migrate_dsn": kString, "migrate_dsn_file": kString,
+		"migrate_dsn_env": kString, "allow_insecure": kBool, "max_conns": kNumber, "application_name": kString}
+	retryKinds = map[string]kind{"initial": kString, "max": kString}
+)
+
+// checkValues refuses values the store would only reject at its first connect.
+func checkValues(name string, raw map[string]any) error {
+	if m, _ := raw["schema_mode"].(string); m != "" && m != "auto" && m != "verify" {
+		return fmt.Errorf("database: stores.%s.schema_mode %q must be auto or verify", name, m)
+	}
+	if s, ok := raw["sqlite"].(map[string]any); ok {
+		if j, _ := s["journal"].(string); j != "" && !strings.EqualFold(j, "wal") && !strings.EqualFold(j, "delete") {
+			return fmt.Errorf("database: stores.%s.sqlite.journal %q must be wal or delete", name, j)
+		}
+		if y, _ := s["synchronous"].(string); y != "" {
+			switch strings.ToUpper(y) {
+			case "OFF", "NORMAL", "FULL", "EXTRA":
+			default:
+				return fmt.Errorf("database: stores.%s.sqlite.synchronous %q must be OFF, NORMAL, FULL or EXTRA", name, y)
+			}
+		}
+	}
+	return nil
 }
 
 func unknownKey(where string, m map[string]any, allowed map[string]bool) error {
@@ -714,6 +813,20 @@ func newHandle(appName, name string, raw map[string]any) (*Handle, store.Config,
 	}
 	wrap := func(err error) error { return &storeError{name: name, err: err} }
 	if err := unknownKey("stores."+name, raw, storeKeys); err != nil {
+		return nil, none, err
+	}
+	// Types first, so a "sqlite: 5" is reported as a wrong type and not as a missing path.
+	if err := checkKinds("stores."+name, raw, storeKinds); err != nil {
+		return nil, none, err
+	}
+	for key, kinds := range map[string]map[string]kind{"sqlite": sqliteKinds, "postgres": postgresKinds, "retry": retryKinds} {
+		if m, ok := raw[key].(map[string]any); ok {
+			if err := checkKinds("stores."+name+"."+key, m, kinds); err != nil {
+				return nil, none, err
+			}
+		}
+	}
+	if err := checkValues(name, raw); err != nil {
 		return nil, none, err
 	}
 	if s, ok := raw["sqlite"].(map[string]any); ok {
@@ -774,7 +887,7 @@ func newHandle(appName, name string, raw map[string]any) (*Handle, store.Config,
 	}
 	// Validate the shape before touching the network. A secret that cannot be
 	// read yet is not a shape error.
-	sc, err := storeConfig(appName, raw)
+	sc, err := storeConfig(appName, raw, false)
 	if err != nil && !errors.Is(err, errSecret) {
 		return nil, none, wrap(err)
 	}
@@ -783,7 +896,7 @@ func newHandle(appName, name string, raw map[string]any) (*Handle, store.Config,
 		return nil, none, wrap(err)
 	}
 	h.connect = func(ctx context.Context) (*store.Store, string, error) {
-		sc, err := storeConfig(appName, raw) // re-reads the secret each attempt
+		sc, err := storeConfig(appName, raw, false) // re-reads the secret each attempt
 		if err != nil {
 			if errors.Is(err, errSecret) {
 				return nil, "", wrap(err)
@@ -854,97 +967,52 @@ var reAuth = regexp.MustCompile(`SQLSTATE (28[0-9A-Z]{3}|3D000)`)
 func isPermanent(err error) bool {
 	var pe *permanentError
 	var me *migrateError
-	return errors.As(err, &pe) || errors.As(err, &me) || reAuth.MatchString(err.Error())
+	return errors.As(err, &pe) || errors.As(err, &me) || errors.Is(err, store.ErrBadConfig) || errors.Is(err, store.ErrUnknownDriver) ||
+		reAuth.MatchString(err.Error())
 }
 
-var (
-	// key=value secrets, including quoted values with escaped quotes.
-	rePwd = regexp.MustCompile(`(?i)\b(password|passwd|pwd|sslpassword|passphrase)\s*=\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\S+)`)
-	// everything between :// and the last @ of the word is treated as userinfo, even if an unescaped
-	// "/" in a password makes it look like a path: over-masking beats leaking a fragment.
-	reUserinfo = regexp.MustCompile(`(?i)(://)\S*@`)
-	reKVTarget = regexp.MustCompile(`(?i)\b(host|port|dbname)\s*=\s*('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\S+)`)
-	reHost     = regexp.MustCompile(`^(\[[0-9A-Fa-f:.]+\]|[A-Za-z0-9._-]+)$`)
-	rePort     = regexp.MustCompile(`^[0-9]{1,5}$`)
-	reDBName   = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,63}$`)
-)
+// reUserinfo masks everything between :// and the last @ of a word, even when an
+// unescaped "/" in a password makes it look like a path: over-masking beats
+// leaking a fragment. libs redact runs first and handles the usual shapes
+// (key=value, quoted values, sslpassword, a well-formed URL); this catches the
+// malformed URL it cannot parse.
+var reUserinfo = regexp.MustCompile(`(?i)(://)\S*@`)
 
 // targetOf is where a store connects, for display: host:port/database for
-// Postgres and the file name for SQLite. It never includes a user name or any
-// part of a password: anything that does not parse cleanly collapses to
-// "postgres".
+// Postgres and the file name for SQLite. It comes from pgconn.ParseConfig, never
+// includes a user name or any part of a password, and collapses to "postgres"
+// whenever the DSN does not parse or names a socket or several hosts.
 func targetOf(sc store.Config) string {
 	if sc.Driver == store.DriverSQLite {
 		return filepath.Base(sc.SQLite.Path)
 	}
-	dsn := strings.TrimSpace(sc.Postgres.DSN)
-	var host, port, db string
-	if i := strings.Index(dsn, "://"); i > 0 && (strings.EqualFold(dsn[:i], "postgres") || strings.EqualFold(dsn[:i], "postgresql")) {
-		rest := dsn[i+3:]
-		auth, path := rest, ""
-		if j := strings.IndexAny(rest, "/?"); j >= 0 {
-			auth, path = rest[:j], rest[j:]
-		}
-		if k := strings.LastIndex(auth, "@"); k >= 0 {
-			auth = auth[k+1:]
-		}
-		host, port = splitHostPort(auth)
-		if strings.HasPrefix(path, "/") {
-			db = strings.TrimPrefix(path, "/")
-			if q := strings.IndexByte(db, '?'); q >= 0 {
-				db = db[:q]
-			}
-			if u, err := url.PathUnescape(db); err == nil {
-				db = u
-			}
-		}
-	} else {
-		for _, m := range reKVTarget.FindAllStringSubmatch(dsn, -1) {
-			v := strings.Trim(m[2], `'"`)
-			switch strings.ToLower(m[1]) {
-			case "host":
-				host = v
-			case "port":
-				port = v
-			case "dbname":
-				db = v
-			}
-		}
-	}
-	if !reHost.MatchString(host) || (port != "" && !rePort.MatchString(port)) || (db != "" && !reDBName.MatchString(db)) {
+	cfg, err := pgconn.ParseConfig(strings.TrimSpace(sc.Postgres.DSN))
+	if err != nil || cfg.Host == "" || strings.HasPrefix(cfg.Host, "/") {
 		return "postgres"
 	}
-	t := host
-	if port != "" {
-		t += ":" + port
+	for _, f := range cfg.Fallbacks { // sslmode=prefer adds a same-host non-TLS fallback; a different host means several hosts
+		if f.Host != cfg.Host || f.Port != cfg.Port {
+			return "postgres"
+		}
 	}
-	if db != "" {
-		t += "/" + db
+	t := cfg.Host
+	if strings.Contains(t, ":") && !strings.HasPrefix(t, "[") {
+		t = "[" + t + "]" // IPv6
+	}
+	if cfg.Port != 0 {
+		t += ":" + strconv.Itoa(int(cfg.Port))
+	}
+	if cfg.Database != "" {
+		t += "/" + cfg.Database
 	}
 	return t
 }
 
-func splitHostPort(a string) (host, port string) {
-	if strings.HasPrefix(a, "[") {
-		if j := strings.Index(a, "]"); j > 0 {
-			host = a[:j+1]
-			if strings.HasPrefix(a[j+1:], ":") {
-				port = a[j+2:]
-			}
-			return
-		}
-	}
-	if j := strings.LastIndex(a, ":"); j >= 0 {
-		return a[:j], a[j+1:]
-	}
-	return a, ""
-}
-
-// redactError turns an error into a short string safe to show: passwords in a
-// key=value or URL form (including quoted values and a userinfo part) are
-// masked, and it is cut to 240 characters.
+// redactError turns an error into a short string safe to show: libs redact masks
+// passwords and secrets, a second pass masks malformed URL userinfo, and it is cut
+// to 240 characters.
 func redactError(err error) string {
-	s := rePwd.ReplaceAllString(err.Error(), "$1=***")
+	s := redact.Text(err.Error())
 	s = reUserinfo.ReplaceAllString(s, "$1***@")
 	s = strings.Join(strings.Fields(s), " ")
 	if len(s) > 240 {
