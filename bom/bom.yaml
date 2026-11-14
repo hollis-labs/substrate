@@ -49,7 +49,7 @@ kits:                     # npm packages (public registry, @hollis-labs); exact 
   "@hollis-labs/kit-cards": 0.3.0      # built for design-bindings ^0.3 (0.2.0 needed ^0.2 and was unpinned)
   "@hollis-labs/kit-chat": 0.8.0       # needs kit-cards ^0.3.0 and design-bindings ^0.3.0; one bindings copy with app-shell 0.11.0
   "@hollis-labs/kit-account": 0.3.0
-  "@hollis-labs/kit-identity": 0.1.3   # profile read on boot (0.1.1); focus on the error after a failed sign-in (0.1.2); 429 says when to retry (0.1.3)
+  "@hollis-labs/kit-identity": 0.1.4   # profile read on boot (0.1.1); focus on the error after a failed sign-in (0.1.2); 429 says when to retry (0.1.3); no-owner screen shows --username, sign-out page names who is signed in (0.1.4)
   "@hollis-labs/kit-observe": 0.1.2
   "@hollis-labs/app-shell": 0.11.0
   "@hollis-labs/kit-dashboard": 0.6.2  # adds the --dash-search-min-height token; renders as 0.6.1 by default
