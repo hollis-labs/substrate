@@ -70,9 +70,9 @@ func (s *Service) CreateKey(ctx context.Context, in KeyInput) (string, Credentia
 	if in.TTL < 0 {
 		return "", Credential{}, errors.New("ttl must not be negative")
 	}
-	if n, err := s.db.userCount(ctx); err != nil {
+	if ok, err := s.OwnerExists(ctx); err != nil {
 		return "", Credential{}, err
-	} else if n == 0 {
+	} else if !ok {
 		return "", Credential{}, ErrNoOwner
 	}
 	by := in.CreatedBy
@@ -110,4 +110,23 @@ func (s *Service) RevokeKey(ctx context.Context, id string) error {
 		return ErrNotFound
 	}
 	return s.db.revokeCredential(ctx, id, time.Now())
+}
+
+// ListKeys returns the API keys that are not revoked, oldest first, with no secret (the
+// database holds only hashes): the list GET /api/identity/keys serves, which calls it. An
+// expired key is still listed until it is revoked; ExpiresAt says so. Never nil.
+func (s *Service) ListKeys(ctx context.Context) ([]Credential, error) {
+	keys, err := s.db.listCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return orEmpty(keys), nil
+}
+
+// OwnerExists reports whether the first owner has been created (any user exists), the check
+// GET /api/setup answers as setup_required and CreateKey makes before minting. For an offline
+// command that must refuse before setup.
+func (s *Service) OwnerExists(ctx context.Context) (bool, error) {
+	n, err := s.db.userCount(ctx)
+	return n > 0, err
 }

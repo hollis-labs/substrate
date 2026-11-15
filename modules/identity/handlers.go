@@ -128,14 +128,14 @@ func (s *Service) isAdmin(p libauth.Principal) bool { return p.HasScope(s.app.Na
 // ---- setup, sign-in, sign-out ----
 
 func (s *Service) setupStatus(w http.ResponseWriter, r *http.Request) {
-	n, err := s.db.userCount(r.Context())
+	exists, err := s.OwnerExists(r.Context())
 	if err != nil {
 		failed(w)
 		return
 	}
 	// setup_over_http says whether POST /api/setup can complete it; false means
 	// the owner is created offline ("<app> identity setup").
-	writeJSON(w, http.StatusOK, map[string]any{"setup_required": n == 0, "setup_over_http": s.cfg.setupHTTP})
+	writeJSON(w, http.StatusOK, map[string]any{"setup_required": !exists, "setup_over_http": s.cfg.setupHTTP})
 }
 
 type credentials struct {
@@ -509,12 +509,12 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 // ---- API keys and pairing (machines) ----
 
 func (s *Service) listKeys(w http.ResponseWriter, r *http.Request) {
-	keys, err := s.db.listCredentials(r.Context())
+	keys, err := s.ListKeys(r.Context())
 	if err != nil {
 		failed(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"keys": orEmpty(keys)})
+	writeJSON(w, http.StatusOK, map[string]any{"keys": keys})
 }
 
 type keyRequest struct {
