@@ -10,8 +10,14 @@ import (
 
 type hello struct{}
 
-func (hello) Init(context.Context, subprocess.InitParams) (subprocess.InitResult, error) {
-	return subprocess.InitResult{ID: "hello", Name: "Hello", Version: "0.1.0", Description: "test plugin",
+// Init answers with the id the host passed as config "id" (default "hello"),
+// so one binary can stand in for several plugins.
+func (hello) Init(_ context.Context, p subprocess.InitParams) (subprocess.InitResult, error) {
+	id := p.Config["id"]
+	if id == "" {
+		id = "hello"
+	}
+	return subprocess.InitResult{ID: id, Name: "Hello", Version: "0.1.0", Description: "test plugin",
 		Protocol: subprocess.ProtocolVersion, CapabilityContract: 1}, nil
 }
 func (hello) Load(context.Context) (subprocess.LoadResult, error) {
