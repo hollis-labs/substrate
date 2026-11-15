@@ -251,14 +251,15 @@ Use an explicit repository boundary; the module's parent directory must already 
 
 ```sh
 folio plan substrate-service ./tools/example --repository-root ./tools \
-  --input repo_name=example --input substrate_version=<current-version> --non-interactive
+  --input repo_name=example --input repository_name=tools --input substrate_version=<current-version> --non-interactive
 folio new substrate-service ./tools/example --repository-root ./tools \
-  --input repo_name=example --input substrate_version=<current-version> --non-interactive --yes
+  --input repo_name=example --input repository_name=tools --input substrate_version=<current-version> --non-interactive --yes
 folio inspect ./tools/example --repository-root ./tools
 ```
 
 `repo_name` names the project/binary. `repository_name` names the physical GitHub repository
-(default: the selected root's basename); the target's relative path supplies `repository_location`.
+(required with `--repository-root`); the target's relative path supplies `repository_location`.
+Checkout folder names and worktree labels are never used as GitHub repository identity.
 For this example the module is `github.com/hollis-labs/tools/example`, and the descriptor records
 repository `hollis-labs/tools` and location `example`. Libraries use the same repository option
 without adopting Substrate.

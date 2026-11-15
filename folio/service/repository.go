@@ -47,7 +47,7 @@ func repositoryOptions(opts NewOptions) (NewOptions, string, string, error) {
 	}
 	opts.Inputs["repository_location"] = location
 	if name, _ := opts.Inputs["repository_name"].(string); name == "" {
-		opts.Inputs["repository_name"] = filepath.Base(root)
+		return opts, "", "", fmt.Errorf("--repository-root requires --input repository_name=<github-repository>; checkout folder names are not repository identity")
 	}
 	opts.TargetDir = target
 	opts.repositoryPrepared = true
