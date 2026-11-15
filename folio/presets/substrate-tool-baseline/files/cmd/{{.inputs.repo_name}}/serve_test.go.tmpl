@@ -1,0 +1,102 @@
+{{- if eq .inputs.tool_kind "service" -}}
+package main
+
+import (
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hollis-labs/substrate/boot"
+)
+
+func startApp(t *testing.T, addr string) (context.Context, *boot.Running) {
+	t.Helper()
+	cfg := `{"httphost":{"addr":"` + addr + `"},"logging":{"format":"text","level":"error"}}`
+	ctx := context.Background()
+	run, err := boot.Start(ctx, substrateApp, substrateModules, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	return ctx, run
+}
+
+// TestLoopbackOpenRefusesNonLoopback: loopback_open on a wildcard or non-loopback bind must not start.
+func TestLoopbackOpenRefusesNonLoopback(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	for _, addr := range []string{"0.0.0.0:0", ":0", "192.0.2.1:0", "[::]:0"} {
+		ctx, run := startApp(t, addr)
+		err := serve(ctx, run.App, nil)
+		if err == nil || !strings.Contains(err.Error(), "loopback_open") {
+			t.Errorf("addr %s: want a loopback_open refusal, got %v", addr, err)
+		}
+	}
+}
+
+func TestEnforceNeedsToken(t *testing.T) {
+	t.Setenv(modeEnv, "enforce")
+	t.Setenv(tokenEnv, "")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	if err := serve(ctx, run.App, nil); err == nil {
+		t.Fatal("enforce without a token must not start")
+	}
+}
+
+// TestServeReportsModeAndGuards runs the real server on a free loopback port.
+func TestServeReportsModeAndGuards(t *testing.T) {
+	t.Setenv(modeEnv, "enforce")
+	t.Setenv(tokenEnv, "test-token")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run, err := boot.Start(ctx, substrateApp, substrateModules, `{"httphost":{"addr":"127.0.0.1:0"},"logging":{"format":"text","level":"error"}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = run.Stop(context.Background()) }()
+	ready := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, run.App, func(a net.Addr) { ready <- a }) }()
+	var base string
+	select {
+	case a := <-ready:
+		base = "http://" + a.String()
+	case err := <-done:
+		t.Fatalf("serve returned early: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not start")
+	}
+	get := func(path, token string) (int, string) {
+		req, _ := http.NewRequest(http.MethodGet, base+path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	if code, body := get("/healthz", ""); code != 200 || !strings.Contains(body, "auth_enforce") {
+		t.Errorf("/healthz = %d %s: want 200 naming the active auth mode", code, body)
+	}
+	if code, _ := get("/api/ping", ""); code != 401 {
+		t.Errorf("/api/ping without a token = %d, want 401", code)
+	}
+	if code, _ := get("/api/ping", "wrong"); code != 401 {
+		t.Errorf("/api/ping with a wrong token = %d, want 401", code)
+	}
+	if code, _ := get("/api/ping", "test-token"); code != 200 {
+		t.Errorf("/api/ping with the token = %d, want 200", code)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Errorf("serve after cancel: %v", err)
+	}
+}
+{{- end }}

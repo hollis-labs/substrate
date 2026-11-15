@@ -1,0 +1,30 @@
+{{- if eq .inputs.tool_kind "service" -}}
+package authmode
+
+import "testing"
+
+func TestCheckBind(t *testing.T) {
+	for _, addr := range []string{"127.0.0.1:8080", "[::1]:8080", "localhost:8080"} {
+		if err := CheckBind(LoopbackOpen, addr); err != nil {
+			t.Errorf("%s: %v", addr, err)
+		}
+	}
+	for _, addr := range []string{"0.0.0.0:8080", ":8080", "[::]:8080", "192.0.2.1:8080", "example.invalid:8080", "nonsense"} {
+		if err := CheckBind(LoopbackOpen, addr); err == nil {
+			t.Errorf("%s: loopback_open must be refused", addr)
+		}
+	}
+	if err := CheckBind(Enforce, "0.0.0.0:8080"); err != nil {
+		t.Errorf("enforce may bind anywhere: %v", err)
+	}
+}
+
+func TestResolve(t *testing.T) {
+	if m, err := Resolve(""); err != nil || m != Default {
+		t.Errorf("Resolve(\"\") = %v, %v", m, err)
+	}
+	if _, err := Resolve("open"); err == nil {
+		t.Error("unknown mode accepted")
+	}
+}
+{{- end }}

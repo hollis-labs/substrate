@@ -38,6 +38,17 @@ After rendering: `go mod tidy`, `substrate pins sync --app .`, `go mod tidy`, an
 `npm install` in `frontend/` and commit `package-lock.json`. Folio never installs, builds or runs a
 rendered project.
 
+## Class 2 tools
+
+`substrate-cli` and `substrate-service` (layer `substrate-tool-baseline`) render a class 2 tool of the
+project/1 class model (release candidate 1): `project.yaml` (written once, never overwritten),
+`deploy.yaml` (fleet-deploy/v1), for a service `<name>.cerberus.yaml` (cerberus-project/v1; fleet-install
+places the binary and Cerberus only supervises it), the class 2 CI (vet, pins check, build, race tests,
+scan-public) and a build workflow on the shared reusable workflow. A service's auth mode is `enforce`
+(bearer token) or, for development, `loopback_open`, which it refuses to start with on a non-loopback bind.
+`internal/descriptor` validates `project.yaml` and tests that the three descriptor files agree. Needs
+`substrate_version` (no default). See [`docs/class2-tools.md`](./docs/class2-tools.md).
+
 ## Quickstart
 
 ```sh

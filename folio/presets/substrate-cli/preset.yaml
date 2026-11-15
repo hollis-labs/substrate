@@ -1,0 +1,38 @@
+folio_version: "0.1"
+id: substrate-cli
+version: 0.1.0
+description: Class 2 Substrate CLI tool (variant cli, profile minimal); project.yaml, deploy.yaml, trimmed CI; composed on go-baseline and substrate-tool-baseline
+author: hollis-labs
+license: MIT
+
+# Renders no Cerberus manifest: a CLI-only tool is installed by fleet-install and nothing supervises it.
+
+composes:
+  - id: substrate-tool-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../substrate-tool-baseline
+    vars:
+      tool_kind: cli
+
+inputs:
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary, Substrate app and project id (lowercase, hyphens allowed)
+  - name: substrate_version
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: The github.com/hollis-labs/substrate version for the go.mod require line. No default.
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: "README.md"
+      policy: three-way

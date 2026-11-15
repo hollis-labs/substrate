@@ -1,0 +1,25 @@
+# {{ .inputs.repo_name }}: one binary, deployed by fleet-install from the CI artifact
+# (`fleet-install deploy {{ .inputs.repo_name }} --commit <sha>`, with --dry-run first).
+#
+# Rendered from the same inputs as project.yaml{{ if eq .inputs.tool_kind "service" }} and {{ .inputs.repo_name }}.cerberus.yaml{{ end }}; `internal/descriptor` checks they still agree.
+# Replace the host alias below with the fleet inventory name of the machine that runs it.
+schema: fleet-deploy/v1
+app: {{ .inputs.repo_name }}
+repo: {{ .inputs.github_owner }}/{{ .inputs.repo_name }}
+artifact: {name: "{{ .inputs.repo_name }}-{sha12}", tarball: "{{ .inputs.repo_name }}_{version}_{os}_{arch}.tar.gz", sums: SHA256SUMS}
+targets:
+  - id: {{ .inputs.repo_name }}-linux
+    when: {os: linux, arch: amd64}
+    hosts: [{{ .inputs.deploy_host }}]
+    binary: {{ .inputs.repo_name }}
+    install_root: ~/.local/share/fleet/releases/{{ .inputs.repo_name }}
+    symlinks:
+      - path: ~/.local/bin/{{ .inputs.repo_name }}
+{{- if eq .inputs.tool_kind "service" }}
+    # Cerberus supervises the process (Option B): it runs the symlink above and never builds or places the binary.
+    restart: {via: cerberus, resource: {{ .inputs.repo_name }}}
+    health:
+      url: "http://127.0.0.1:{{ .inputs.http_port }}/healthz"
+      expect_status: [200]
+      timeout: 30s
+{{- end }}
