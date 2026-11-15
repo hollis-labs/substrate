@@ -27,7 +27,7 @@ func TestRepositoryGenerationAndInspection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(target); !os.IsNotExist(err) {
+	if _, err = os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("plan wrote target: %v", err)
 	}
 	if plan.Computed["module_path"] != "github.com/hollis-labs/tools/sample" {
@@ -44,10 +44,10 @@ func TestRepositoryGenerationAndInspection(t *testing.T) {
 		if record.RepositoryPath == "" {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(root, record.RepositoryPath)); err != nil {
+		if _, err = os.Stat(filepath.Join(root, record.RepositoryPath)); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := os.Stat(filepath.Join(target, source)); !os.IsNotExist(err) {
+		if _, err = os.Stat(filepath.Join(target, source)); !os.IsNotExist(err) {
 			t.Fatalf("inactive module workflow remains: %s", source)
 		}
 	}
