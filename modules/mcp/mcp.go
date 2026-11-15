@@ -29,7 +29,8 @@
 // key, and the default is off). It applies only when no token is configured; a
 // token that is given is verified as always and a bad one is an error, never a
 // fallback. The principal is "local:operator" (kind operator, verified by
-// filesystem trust, not by a credential) with scopes "*" or StdioOptions.LocalScopes.
+// filesystem trust, not by a credential) with scopes "*" or StdioOptions.LocalScopes; in
+// enforce mode LocalScopes must cover the mcp scope (as a token must), or ServeStdio refuses.
 // The trust statement: the process runs as a user who can open the data file; the
 // module cannot tell who launched it, and checks nothing about the file or the
 // parent. A child launched by a gateway on the same host as the same user is local
@@ -288,11 +289,20 @@ func identify(ctx context.Context, app *module.App, o StdioOptions) (context.Con
 		tokenFile, _ = cfg["stdio_token_file"].(string)
 	}
 	enforce := g.Mode() == libauth.ModeEnforce
+	scope, _ := cfg["scope"].(string)
+	if scope == "" {
+		scope = app.Name + ".mcp"
+	}
 	if tokenFile == "" {
 		if o.LocalTrust {
 			scopes := o.LocalScopes
 			if len(scopes) == 0 {
 				scopes = []string{"*"}
+			}
+			// The same gate as a token here and as /mcp over HTTP: in enforce mode the local
+			// principal must hold the endpoint scope, or it would reach every tool without one.
+			if enforce && !(libauth.Principal{Scopes: scopes}).HasScope(scope) {
+				return ctx, fmt.Errorf("mcp: StdioOptions.LocalScopes %v lack the mcp scope %q (list it, \"%s.*\" or \"*\")", scopes, scope, app.Name)
 			}
 			notice := o.Notice
 			if notice == nil {
@@ -325,10 +335,6 @@ func identify(ctx context.Context, app *module.App, o StdioOptions) (context.Con
 	p, err := vf.Verify(ctx, tok)
 	if err != nil {
 		return ctx, errors.New("mcp: the stdio token was not accepted")
-	}
-	scope, _ := cfg["scope"].(string)
-	if scope == "" {
-		scope = app.Name + ".mcp"
 	}
 	if enforce && !p.HasScope(scope) {
 		return ctx, fmt.Errorf("mcp: the stdio token lacks the scope %q", scope)

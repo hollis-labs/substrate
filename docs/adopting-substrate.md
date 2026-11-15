@@ -248,7 +248,8 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    call site: `mcp.ServeStdio(ctx, app, mcp.StdioOptions{LocalTrust: true})`. There is no config key and the
    default is off, so a manifest or override file cannot enable it. With no token configured the tools run under
    `local:operator` (kind `operator`, verified by filesystem trust, scopes `*`; narrow with `LocalScopes`, and
-   per-tool `mcp.Authorize` then refuses what the list lacks). A token that is given is verified as always and a
+   per-tool `mcp.Authorize` then refuses what the list lacks; in enforce mode the list must cover `mcp.scope`, as a
+   token must, or `ServeStdio` refuses to start). A token that is given is verified as always and a
    bad one is an error, never a fallback. The trust statement, verbatim: the process runs as a user who can open
    the data file; the module cannot tell who launched it and checks nothing about the file or the parent. A
    child launched by a gateway (Tether) on the same host as the same user counts as local. A gateway that serves
