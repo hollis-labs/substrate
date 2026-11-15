@@ -31,6 +31,20 @@ values and wrong field types. Arbitrary authored data is confined to
 `settings` / `metadata`, tool `meta`, and actual JSON Schema bodies.
 It does not resolve remote references or interpret embedded tool schemas.
 
+Project parsing, `Validate` and `CanonicalID` check descriptor structure,
+**not class-bar certification**. Registry can describe a class 1 project
+without an operator/enforced authentication or a class 2 CLI with auth `none`.
+The class 1 operator/auth bar and class 2 development-only loopback rules belong
+to conformance, promotion and runtime checks. Adopting this parser in Folio must
+preserve its existing static/runtime checks; replacing those with shape
+validation alone would weaken them. No policy engine is supplied here.
+
+YAML support is parse-only. `yaml.Marshal(Project)` is not a supported
+serializer; use `json.Marshal` for typed roundtrips or retain authored YAML.
+Numeric scalar lexemes are checked before YAML float conversion, including
+nested/anchored values, so nonzero underflow cannot silently become zero.
+Quoted and explicitly tagged strings retain their string meaning.
+
 Project class is an integer 1/2/3 or the string `lib`, not a numeric string.
 Library interfaces have type `lib`. Extension settings remain intact; the
 package neither defaults runtime paths nor applies environment-specific
@@ -47,6 +61,9 @@ A project slug stays in the payload: `sample` becomes canonical ID
 `tool:cli/git/push`. Non-CLI identities use source/origin/name; CLI identities
 use the program/subcommand signature with no origin, executable path or flags.
 No case folding, path cleaning or alias substitution is performed.
+MCP names follow the SDK grammar: 1–128 ASCII letters, digits, underscores,
+hyphens or periods in any position, including punctuation prefixes. They are
+protocol names, not CLI path segments; consumers must preserve them exactly.
 
 These IDs have **one global uniqueness domain**. A service must reject a
 second authority claiming the same ID; authority does not silently qualify it.
@@ -73,6 +90,8 @@ For non-CLI tools, hash exactly the present fields
 `{name, description, input_schema, output_schema, annotations}`.
 Title, icons, meta, aliases and provenance are excluded, but should still
 produce immutable service revisions when changed.
+Here title means the top-level definition title. The complete annotations
+object, including MCP `annotations.title`, participates in the hash.
 
 For CLI tools, hash the grammar
 `{signature, help_text_digest, known_flags}`. The help digest is lowercase

@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/big"
+	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -98,8 +101,9 @@ type ProjectEdge struct {
 	To   string   `json:"to"`
 }
 
-// ParseProjectJSON validates before decoding. No server verification stamps are
-// accepted in the authored project descriptor.
+// ParseProjectJSON validates descriptor structure before decoding. It does not
+// certify the operational class bar (operator, enforced auth, deployment or
+// promotion eligibility). No server verification stamps are accepted here.
 func ParseProjectJSON(data []byte) (*Project, error) {
 	var p Project
 	if err := decode(ProjectSchema, data, &p); err != nil {
@@ -111,10 +115,12 @@ func ParseProjectJSON(data []byte) (*Project, error) {
 // ParseProjectYAML accepts one YAML document with string object keys. Duplicate
 // keys and trailing documents are errors. YAML is converted to the same JSON
 // validation path used by API callers; it has no separate project dialect.
+// This is parse-only support: yaml.Marshal(Project) is not a supported encoding.
+// Use json.Marshal for a typed roundtrip or retain the authored YAML source.
 func ParseProjectYAML(data []byte) (*Project, error) {
 	d := yaml.NewDecoder(bytes.NewReader(data))
-	var value map[string]any
-	if err := d.Decode(&value); err != nil {
+	var doc yaml.Node
+	if err := d.Decode(&doc); err != nil {
 		return nil, err
 	}
 	var extra any
@@ -124,6 +130,15 @@ func ParseProjectYAML(data []byte) (*Project, error) {
 		}
 		return nil, fmt.Errorf("project: expected one YAML document")
 	}
+	// yaml.v3 decodes a scalar such as 1e-400 to float64(0). Inspect
+	// original scalar lexemes before any native-number conversion.
+	if err := validateYAMLNumbers(&doc); err != nil {
+		return nil, err
+	}
+	var value map[string]any
+	if err := doc.Decode(&value); err != nil {
+		return nil, err
+	}
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return nil, err
@@ -131,9 +146,75 @@ func ParseProjectYAML(data []byte) (*Project, error) {
 	return ParseProjectJSON(raw)
 }
 
+var yamlDecimal = regexp.MustCompile(`^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$`)
+
+func validateYAMLNumbers(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		lexeme := strings.ReplaceAll(n.Value, "_", "")
+		numeric := n.Tag == "!!int" || n.Tag == "!!float"
+		// The resolver labels an overflowing implicit number as a string.
+		// Quoted and explicitly tagged strings are intentional strings.
+		implicitNumber := n.Style == 0 && n.Tag == "!!str" && yamlDecimal.MatchString(lexeme)
+		if numeric || implicitNumber {
+			number := lexeme
+			if n.Tag == "!!int" {
+				integer, ok := new(big.Int).SetString(lexeme, 0)
+				if !ok {
+					return fmt.Errorf("project YAML line %d: invalid integer", n.Line)
+				}
+				number = integer.String()
+			} else {
+				// Normalize YAML decimal spelling, without converting its value.
+				number = strings.TrimPrefix(number, "+")
+				parts := strings.SplitN(strings.ToLower(number), "e", 2)
+				mantissa := parts[0]
+				if strings.HasPrefix(mantissa, ".") {
+					mantissa = "0" + mantissa
+				}
+				if strings.HasPrefix(mantissa, "-.") {
+					mantissa = "-0" + mantissa[1:]
+				}
+				if strings.HasSuffix(mantissa, ".") {
+					mantissa += "0"
+				}
+				sign := ""
+				if strings.HasPrefix(mantissa, "-") {
+					sign, mantissa = "-", mantissa[1:]
+				}
+				decimal := strings.SplitN(mantissa, ".", 2)
+				whole := strings.TrimLeft(decimal[0], "0")
+				if whole == "" {
+					whole = "0"
+				}
+				mantissa = sign + whole
+				if len(decimal) == 2 {
+					mantissa += "." + decimal[1]
+				}
+				number = mantissa
+				if len(parts) == 2 {
+					number += "e" + parts[1]
+				}
+			}
+			if _, err := canonicalJSON([]byte("[" + number + "]")); err != nil {
+				return fmt.Errorf("project YAML line %d: %w", n.Line, err)
+			}
+		}
+	}
+	// Anchored scalars occur in Content at their definition; do not follow
+	// Alias links, which may form cycles. The normal decoder checks aliases.
+	for _, child := range n.Content {
+		if err := validateYAMLNumbers(child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Validate checks descriptor structure, not operational conformance.
 func (p Project) Validate() error { return validateValue(ProjectSchema, p) }
 
-// CanonicalID leaves the descriptor's immutable slug unchanged.
+// CanonicalID leaves the descriptor's immutable slug unchanged. A valid ID
+// establishes neither class-bar compliance nor permission to deploy or launch.
 func (p Project) CanonicalID() (string, error) {
 	if err := p.Validate(); err != nil {
 		return "", err

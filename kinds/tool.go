@@ -75,6 +75,7 @@ type FlagPattern struct {
 func (c Classification) Validate() error { return validateValue(ClassificationSchema, c) }
 
 var segment = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]*$`)
+var mcpName = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,128}$`)
 
 // ToolID constructs TR-1 identities without case folding, aliases, path cleanup
 // or authority-dependent namespaces. CLI origin must be empty.
@@ -95,8 +96,17 @@ func ToolID(source, origin, name string) (string, error) {
 	default:
 		return "", fmt.Errorf("unsupported tool source %q", source)
 	}
-	if !segment.MatchString(origin) || !segment.MatchString(name) || origin == "." || origin == ".." || name == "." || name == ".." {
-		return "", fmt.Errorf("tool origin and name must be nonempty identity segments")
+	if !segment.MatchString(origin) || origin == "." || origin == ".." {
+		return "", fmt.Errorf("tool origin must be a nonempty identity segment")
+	}
+	if source == "mcp" {
+		// MCP names are opaque protocol names, not CLI path segments. In
+		// particular, punctuation prefixes (even "." and "..") are valid.
+		if !mcpName.MatchString(name) {
+			return "", fmt.Errorf("MCP tool name must be 1-128 ASCII letters, digits, underscores, hyphens or periods")
+		}
+	} else if !segment.MatchString(name) || name == "." || name == ".." {
+		return "", fmt.Errorf("tool name must be a nonempty identity segment")
 	}
 	return "tool:" + source + "/" + origin + "/" + name, nil
 }

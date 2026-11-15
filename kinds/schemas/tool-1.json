@@ -79,6 +79,9 @@
             {
               "type": "object",
               "properties": {
+                "title": {
+                  "type": "string"
+                },
                 "readOnlyHint": {
                   "anyOf": [
                     {
@@ -314,6 +317,10 @@
               "input_schema"
             ],
             "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+              },
               "input_schema": {
                 "type": "object",
                 "properties": {
