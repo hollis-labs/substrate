@@ -304,6 +304,22 @@ type ServeOptions struct {
 	// GracePeriod bounds graceful shutdown (default 10s); in-flight requests get
 	// that long to finish.
 	GracePeriod time.Duration
+	// Listener, if set, is served instead of listening on Addr (a unix socket from ListenUnix,
+	// a socket-activated descriptor). Serve keeps its Stopping, handler tracking and drain over
+	// it and closes it on stop. The auth bind check runs on Listener.Addr(); a unix address is
+	// checked as "unix:<path>", and in off and permissive mode the socket must be a file that
+	// other users cannot write to: file permissions are what protect it, so an abstract socket
+	// (@name), which has none, is refused. Create it with ListenUnix rather than net.Listen
+	// and a chmod, which leaves a window with the umask's permissions. Addr and config
+	// httphost.addr are ignored. Serve takes ownership: it closes the listener on every
+	// return, a refused bind included.
+	Listener net.Listener
+	// ConnContext, if set, is called for each new connection after Serve's own and may return
+	// a derived context (http.Server.ConnContext). Derive from the ctx it is given: that one
+	// carries Stopping and PeerCredentials. c is the connection exactly as the listener
+	// accepted it, never wrapped, so a type assertion (*net.UnixConn, *net.TCPConn) holds;
+	// apps rely on that to tell a local socket caller from a remote one.
+	ConnContext func(ctx context.Context, c net.Conn) context.Context
 }
 
 // Serve listens, serves h and shuts down gracefully when ctx ends, so every app
@@ -322,16 +338,31 @@ type ServeOptions struct {
 // were still running.
 func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions) error {
 	addr := o.Addr
-	if addr == "" {
+	if o.Listener != nil {
+		addr = o.Listener.Addr().String()
+		if ua, ok := listenerUnixAddr(o.Listener); ok {
+			addr = "unix:" + ua.Name
+		}
+	} else if addr == "" {
 		cfg, _ := app.Config["httphost"].(map[string]any)
 		addr, _ = cfg["addr"].(string)
 	}
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
+	if o.Listener == nil && strings.HasPrefix(addr, "unix:") {
+		return fmt.Errorf("httphost: addr %q: Serve listens on TCP only; create the unix socket and pass it as ServeOptions.Listener", addr)
+	}
 	if v, ok := app.Value("auth.guard"); ok {
 		if g, ok := v.(interface{ Mode() libauth.Mode }); ok {
-			if err := libauth.ValidateBind(addr, g.Mode()); err != nil {
+			err := libauth.ValidateBind(addr, g.Mode())
+			if ua, ok := listenerUnixAddr(o.Listener); ok && err == nil {
+				err = checkUnixListener(ua, g.Mode())
+			}
+			if err != nil {
+				if o.Listener != nil {
+					_ = o.Listener.Close()
+				}
 				return fmt.Errorf("httphost: %w", err)
 			}
 			// The auth module stays quiet at Start so a short-lived command
@@ -341,9 +372,12 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 			}
 		}
 	}
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("httphost: %w", err)
+	ln := o.Listener
+	if ln == nil {
+		var err error
+		if ln, err = net.Listen("tcp", addr); err != nil {
+			return fmt.Errorf("httphost: %w", err)
+		}
 	}
 	if o.Ready != nil {
 		o.Ready(ln.Addr())
@@ -365,8 +399,19 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 		h.ServeHTTP(w, r)
 	})
 	srv := &http.Server{
-		Handler:           tracked,
-		BaseContext:       func(net.Listener) context.Context { return base },
+		Handler:     tracked,
+		BaseContext: func(net.Listener) context.Context { return base },
+		// c is what ln.Accept returned, unwrapped: readPeerCreds and the app's ConnContext
+		// type-assert it (*net.UnixConn). Do not wrap the listener or the conn here.
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			if pc, ok := readPeerCreds(c); ok {
+				ctx = context.WithValue(ctx, peerKey{}, pc)
+			}
+			if o.ConnContext != nil {
+				ctx = o.ConnContext(ctx, c)
+			}
+			return ctx
+		},
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
@@ -384,7 +429,7 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 	}
 	sctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
-	err = srv.Shutdown(sctx)
+	err := srv.Shutdown(sctx)
 	for err == nil && active.Load() > 0 {
 		select {
 		case <-sctx.Done():
@@ -430,4 +475,12 @@ type stoppingKey struct{}
 func Stopping(r *http.Request) <-chan struct{} {
 	c, _ := r.Context().Value(stoppingKey{}).(<-chan struct{})
 	return c
+}
+
+func listenerUnixAddr(ln net.Listener) (*net.UnixAddr, bool) {
+	if ln == nil {
+		return nil, false
+	}
+	ua, ok := ln.Addr().(*net.UnixAddr)
+	return ua, ok
 }
