@@ -10,7 +10,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **Class 2 presets** `substrate-cli` and `substrate-service` on the new layer `substrate-tool-baseline`
   (project/1 RC1): `project.yaml`, `deploy.yaml`, a Cerberus manifest for services (Option B), the class 2 CI,
-  the loopback-dev auth guard and `internal/descriptor` (schema copy, drift-pair and declared-auth tests).
+  the loopback-dev auth guard and `internal/descriptor` (shared structural parsing, drift-pair and declared-auth tests).
   See `docs/class2-tools.md` for the current contract.
 
 - Fresh **app-chat** composes the shared app backend/frontend with BOM-pinned kit-chat and kit-identity,
@@ -22,6 +22,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Explicit monorepo generation with repository-root workflows, and `folio deploy render` to regenerate
   deployment output from authored descriptor settings without rewriting `project.yaml` or deploying.
 - Folio's own authored project descriptor and refreshed architecture/conversion/install documentation.
+
+### Changed
+
+- Project/1 parsing now uses Substrate's shared `kinds` contract in deployment rendering and generated
+  class 2 descriptor adapters. Existing class/auth/deployment/runtime checks remain separate and intact;
+  authored descriptor formats are unchanged. New class 2 code requires Substrate revision
+  `45b018004dd2` or a compatible successor, selected explicitly. Folio imports only the pure contract
+  package and still does not boot a Substrate runtime.
 
 ### Fixed
 

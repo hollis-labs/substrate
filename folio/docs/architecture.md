@@ -73,5 +73,7 @@ MCP, managed auth, no-checkout operation and UI serving. App-chat adds real two-
 provider success/failure persistence checks. Missing tools are visible skips locally and failures with
 `FOLIO_REQUIRE_TOOLS=1` in the root Folio workflow.
 
-The project/1 shared schema/catalog remains owned by the framework/catalog work. Folio's current embedded
-validation/projection is temporary; it is not the promised shared JSON Schema package or a registry API.
+Project/1 structure is parsed through Substrate's shared `kinds` package in Folio's deployment
+renderer and generated class 2 descriptor adapters. The shared typed/schema contract is separate from
+Folio's runtime projection and static/runtime conformance checks, which remain intact. This pure package
+import does not boot a Substrate runtime inside Folio. Registry registration is separate.

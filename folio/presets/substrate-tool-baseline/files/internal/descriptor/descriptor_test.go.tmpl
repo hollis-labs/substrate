@@ -11,6 +11,7 @@ import (
 {{- end }}
 	"testing"
 
+	"github.com/hollis-labs/substrate/kinds"
 	"gopkg.in/yaml.v3"
 {{- if eq .inputs.tool_kind "service" }}
 
@@ -73,7 +74,7 @@ func TestProjectYamlValidates(t *testing.T) {
 	if p.ID != app {
 		t.Errorf("project.yaml id = %q, want %q (the id is the repository name)", p.ID, app)
 	}
-	if p.Class != 2 {
+	if p.Class != kinds.ClassTool {
 		t.Errorf("class = %v, want 2: a class change is a promotion, not an edit", p.Class)
 	}
 }
@@ -96,6 +97,9 @@ func TestFleetDescriptorAgrees(t *testing.T) {
 	p, err := Load(filepath.Join(root(t), "project.yaml"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if p.Deploy == nil {
+		t.Fatal("class 2 tools require deployment metadata")
 	}
 	if p.Deploy.Fleet != "deploy.yaml" {
 		t.Fatalf("project.yaml deploy.fleet = %q, want deploy.yaml", p.Deploy.Fleet)
@@ -121,6 +125,9 @@ func TestDriftPairs(t *testing.T) {
 	p, err := Load(filepath.Join(root(t), "project.yaml"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if p.Deploy == nil {
+		t.Fatal("class 2 daemons require deployment metadata")
 	}
 	if p.Deploy.Cerberus != app+".cerberus.yaml" {
 		t.Fatalf("project.yaml deploy.cerberus = %q, want %s.cerberus.yaml", p.Deploy.Cerberus, app)

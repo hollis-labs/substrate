@@ -184,3 +184,60 @@ func TestDeploymentRefusesDescriptorOutputAliases(t *testing.T) {
 		})
 	}
 }
+
+// Shared structure validation and Folio's runtime rules both run before writes.
+func TestDeploymentRejectsInvalidSharedDescriptorBeforeWrites(t *testing.T) {
+	dir, err := renderTool(t, "substrate-service", "shared-contract", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	descriptor := filepath.Join(dir, "project.yaml")
+	original, err := os.ReadFile(descriptor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputs := map[string][]byte{}
+	for _, name := range []string{"deploy.yaml", "shared-contract.cerberus.yaml", ".folio.yaml"} {
+		outputs[name], err = os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for name, mutate := range map[string]func(map[string]any){
+		"class must not be a numeric string":             func(p map[string]any) { p["class"] = "2" },
+		"nested unknown field":                           func(p map[string]any) { p["interfaces"].([]any)[0].(map[string]any)["unexpected"] = true },
+		"missing deploy is not runtime conformant":       func(p map[string]any) { delete(p, "deploy") },
+		"class 3 is not supported by runtime projection": func(p map[string]any) { p["class"] = 3 },
+		"unknown runtime option": func(p map[string]any) {
+			p["settings"].(map[string]any)["runtime"].(map[string]any)["unexpected"] = true
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var p map[string]any
+			if err := yaml.Unmarshal(original, &p); err != nil {
+				t.Fatal(err)
+			}
+			mutate(p)
+			authored, err := yaml.Marshal(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.WriteFile(descriptor, authored, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, err = newGoLibService(t).RenderDeploy(service.DeployOptions{TargetDir: dir, Write: true}); err == nil {
+				t.Fatal("invalid descriptor accepted")
+			}
+			for output, before := range outputs {
+				after, readErr := os.ReadFile(filepath.Join(dir, output))
+				if readErr != nil || !bytes.Equal(before, after) {
+					t.Fatalf("failed validation changed %s: %v", output, readErr)
+				}
+			}
+			after, err := os.ReadFile(descriptor)
+			if err != nil || !bytes.Equal(authored, after) {
+				t.Fatalf("failed validation changed authored descriptor: %v", err)
+			}
+		})
+	}
+}

@@ -44,10 +44,19 @@ The Cerberus manifest carries references, never token values. `health.version_js
 until the service's health endpoint reports a version. Actions use canonical BOM pins; changing
 them to SHA pins is a coordinated BOM change, not an isolated preset override.
 
-## Embedded schema
+## Shared structural contract
 
-`internal/descriptor/descriptor.go` is a copy of the project/1 RC1 rules, marked for replacement by the
-Substrate-owned package (FC-8) when it lands.
+`internal/descriptor` delegates to `github.com/hollis-labs/substrate/kinds` for typed project/1
+parsing. New class 2 output requires a Substrate revision containing that package; the first
+known-compatible revision is `45b018004dd2`
+(`v0.1.1-0.20261115173848-45b018004dd2`). `substrate_version` still has no default; choose
+this revision or a compatible successor explicitly. Render-only legacy fixtures do not establish
+build compatibility with older framework versions.
+
+The shared parser validates structure, including unknown fields and field types. It does not certify
+class-bar compliance: generated class identity, deployment drift, declared-auth checks and runtime
+managed/development guards remain in place. Folio's deployment renderer uses the same parser, then
+checks its own runtime projection rules. Authored descriptor bytes are never reserialized.
 
 ## Not yet
 

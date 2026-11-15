@@ -1,5 +1,5 @@
 // Package deployment projects Folio-owned settings.runtime into fleet/Cerberus
-// files. It is not the shared project/1 schema or validator (FC-8 owns that).
+// files after validating the authored descriptor with Substrate's shared kinds.
 package deployment
 
 import (
@@ -13,6 +13,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/hollis-labs/substrate/kinds"
 	"gopkg.in/yaml.v3"
 )
 
@@ -32,25 +33,8 @@ type Runtime struct {
 	EnvFile        string `yaml:"env_file,omitempty"`
 }
 
-type Project struct {
-	Schema     string `yaml:"schema"`
-	ID         string `yaml:"id"`
-	Name       string `yaml:"name"`
-	Repo       string `yaml:"repo"`
-	Class      any    `yaml:"class"`
-	Interfaces []struct {
-		Type string `yaml:"type"`
-		Auth string `yaml:"auth"`
-	} `yaml:"interfaces"`
-	Deploy struct {
-		Fleet    string `yaml:"fleet"`
-		Cerberus string `yaml:"cerberus"`
-	} `yaml:"deploy"`
-	Settings map[string]yaml.Node `yaml:"settings"`
-}
-
 type Result struct {
-	Project Project
+	Project kinds.Project
 	Runtime Runtime
 	Files   map[string][]byte
 }
@@ -58,19 +42,19 @@ type Result struct {
 var slug = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 var host = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
 
-// Render returns nil when no Folio runtime projection is declared. Other
-// settings belong to their respective owners and are neither changed nor read.
+// Render validates project structure and returns nil when no Folio runtime
+// projection is declared. Other settings are not interpreted or rewritten.
 func Render(data []byte) (*Result, error) {
-	var p Project
-	if err := yaml.Unmarshal(data, &p); err != nil {
-		return nil, err
+	p, err := kinds.ParseProjectYAML(data)
+	if err != nil {
+		return nil, fmt.Errorf("project.yaml: %w", err)
 	}
-	node, ok := p.Settings["runtime"]
+	runtime, ok := p.Settings["runtime"]
 	if !ok {
 		return nil, nil
 	}
 	var r Runtime
-	raw, err := yaml.Marshal(&node)
+	raw, err := yaml.Marshal(runtime)
 	if err != nil {
 		return nil, err
 	}
@@ -79,10 +63,10 @@ func Render(data []byte) (*Result, error) {
 	if err = dec.Decode(&r); err != nil {
 		return nil, fmt.Errorf("settings.runtime: %w", err)
 	}
-	if p.Schema != "project/1" || !slug.MatchString(p.ID) || strings.TrimSpace(p.Name) == "" {
-		return nil, fmt.Errorf("deployment needs project/1, a valid id and name")
+	if strings.TrimSpace(p.Name) == "" {
+		return nil, fmt.Errorf("deployment needs a nonblank project name")
 	}
-	if fmt.Sprint(p.Class) != "1" && fmt.Sprint(p.Class) != "2" {
+	if p.Class != kinds.ClassApp && p.Class != kinds.ClassTool {
 		return nil, fmt.Errorf("runtime projection supports class 1 and 2 projects")
 	}
 	u, err := url.Parse(p.Repo)
@@ -98,6 +82,9 @@ func Render(data []byte) (*Result, error) {
 		if i.Type == "daemon" {
 			service = true
 		}
+	}
+	if p.Deploy == nil {
+		return nil, fmt.Errorf("runtime projection requires deployment metadata")
 	}
 	if p.Deploy.Fleet != "deploy.yaml" {
 		return nil, fmt.Errorf("deploy.fleet must be deploy.yaml")
@@ -133,7 +120,7 @@ func Render(data []byte) (*Result, error) {
 		Service                   bool
 		Runtime                   Runtime
 	}{p.ID, p.Name, strings.Join(parts, "/"), strings.ToUpper(strings.ReplaceAll(p.ID, "-", "_")), service, r}
-	result := &Result{Project: p, Runtime: r, Files: map[string][]byte{}}
+	result := &Result{Project: *p, Runtime: r, Files: map[string][]byte{}}
 	for filename, templateName := range map[string]string{p.Deploy.Fleet: "fleet.tmpl", p.Deploy.Cerberus: "cerberus.tmpl"} {
 		if filename == "" {
 			continue
