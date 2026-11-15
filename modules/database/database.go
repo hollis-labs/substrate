@@ -16,6 +16,10 @@
 //	             is always one connection. Ignored for ":memory:", which has one
 //	             connection for everything).
 //	             open_lock_timeout (Go duration, default 30s; see below).
+//	             foreign_keys (bool, default true): the foreign_keys pragma on
+//	             every connection. false is for a schema whose references were
+//	             never enforced and whose data may not satisfy them; REFERENCES
+//	             and their ON DELETE actions are then not applied.
 //	postgres:    dsn_file or dsn_env (the connection string is a secret, so it is
 //	             read from a file or an environment variable, never from config),
 //	             migrate_dsn_file or migrate_dsn_env (schema-owner role, used only
@@ -145,12 +149,17 @@ func configFrom(app *module.App) (store.Config, error) {
 		if err != nil {
 			return sc, err
 		}
+		fk, err := foreignKeysFrom(s)
+		if err != nil {
+			return sc, err
+		}
 		sc.SQLite = store.SQLiteConfig{
 			Path:            orDefault(str(s, "path"), app.Name+".db"),
 			Synchronous:     str(s, "synchronous"),
 			Journal:         str(s, "journal"),
 			ReadConns:       readPool,
 			CreateParentDir: true,
+			ForeignKeys:     fk,
 		}
 	case store.DriverPostgres:
 		p := sub("postgres")
@@ -172,6 +181,20 @@ func configFrom(app *module.App) (store.Config, error) {
 		return sc, fmt.Errorf("database: driver %q must be sqlite or postgres", driver)
 	}
 	return sc, nil
+}
+
+// foreignKeysFrom reads sqlite.foreign_keys: absent (or null) is nil, which
+// keeps the libs default (on); otherwise it must be a bool.
+func foreignKeysFrom(s map[string]any) (*bool, error) {
+	v, ok := s["foreign_keys"]
+	if !ok || v == nil {
+		return nil, nil
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return nil, fmt.Errorf("database: sqlite.foreign_keys must be true or false, not %v", v)
+	}
+	return &b, nil
 }
 
 // MaxReadPool is the largest accepted database.sqlite.read_pool.

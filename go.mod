@@ -4,7 +4,7 @@ go 1.26.11
 
 require (
 	github.com/hollis-labs/libs/app/app-host v0.1.0
-	github.com/hollis-labs/libs/core/store v0.1.0
+	github.com/hollis-labs/libs/core/store v0.1.1-0.20261115085916-827fe3c708f1
 	github.com/hollis-labs/libs/core/util v0.6.0
 	github.com/hollis-labs/libs/mcp/plugin-mcp v0.6.0
 	github.com/hollis-labs/libs/security/auth v0.3.1

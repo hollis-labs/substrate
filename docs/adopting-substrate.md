@@ -129,6 +129,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
     good as that file system.
   - Postgres has one pool (`Reader()` and `DB()` share it), so the deadlock is SQLite's. Keep the same discipline
     anyway: the code has to run on both.
+  - Foreign keys are enforced on SQLite by default (`PRAGMA foreign_keys` on every connection). An app whose schema
+    never enforced its `REFERENCES`, and whose data may not satisfy them, sets `database.sqlite.foreign_keys: false`;
+    `REFERENCES` and their `ON DELETE` actions are then not applied. Postgres always enforces them.
 
   ```go
   st := database.From(app)
