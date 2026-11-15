@@ -16,6 +16,12 @@ const (
 	ToolSchema           = "tool/1"
 	RelationSchema       = "relation/1"
 	ClassificationSchema = "classification/1"
+	AgentSchema          = "agent/1"
+	AgencySchema         = "agency/1"
+	SkillSchema          = "skill/1"
+	DocumentSchema       = "document/1"
+	WorkstreamSchema     = "workstream/1"
+	CorrelationSchema    = "correlation/1"
 )
 
 var ErrUnknownSchema = errors.New("unknown kind schema")
@@ -24,6 +30,13 @@ var ErrUnknownSchema = errors.New("unknown kind schema")
 var schemas embed.FS
 
 var schemaFiles = map[string]string{
+	AgentSchema:       "schemas/agent-1.json",
+	AgencySchema:      "schemas/agency-1.json",
+	SkillSchema:       "schemas/skill-1.json",
+	DocumentSchema:    "schemas/document-1.json",
+	WorkstreamSchema:  "schemas/workstream-1.json",
+	CorrelationSchema: "schemas/correlation-1.json",
+
 	ProjectSchema:        "schemas/project-1.json",
 	ToolSchema:           "schemas/tool-1.json",
 	RelationSchema:       "schemas/relation-1.json",
@@ -32,7 +45,7 @@ var schemaFiles = map[string]string{
 
 // Schemas returns the supported versions in deterministic order.
 func Schemas() []string {
-	return []string{ProjectSchema, ToolSchema, RelationSchema, ClassificationSchema}
+	return []string{ProjectSchema, ToolSchema, RelationSchema, ClassificationSchema, AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema}
 }
 
 // Schema returns an independent copy of the JSON Schema document.
@@ -52,6 +65,12 @@ type compiledSchema struct {
 
 var compiled = map[string]*compiledSchema{
 	ProjectSchema: {}, ToolSchema: {}, RelationSchema: {}, ClassificationSchema: {},
+	AgentSchema:       {},
+	AgencySchema:      {},
+	SkillSchema:       {},
+	DocumentSchema:    {},
+	WorkstreamSchema:  {},
+	CorrelationSchema: {},
 }
 
 // ValidateJSON checks strict wire shape without applying defaults or discarding
@@ -96,6 +115,10 @@ func ValidateJSON(version string, data []byte) error {
 			return err
 		}
 		return t.validateIdentity()
+	}
+	switch version {
+	case AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema:
+		return validateContent(data, version)
 	}
 	return nil
 }
