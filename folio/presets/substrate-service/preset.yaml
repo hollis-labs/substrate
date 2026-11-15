@@ -16,6 +16,10 @@ composes:
       tool_kind: service
 
 inputs:
+  - name: with_mcp
+    type: bool
+    default: false
+    description: Include agentic modules and scoped MCP over stdio (and HTTP for services)
   - name: repo_name
     type: string
     required: true

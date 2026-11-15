@@ -3,6 +3,9 @@ package main
 
 import (
 	"context"
+{{- if .inputs.with_mcp }}
+	"fmt"
+{{- end }}
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +14,9 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/hollis-labs/substrate/module"
+{{- if .inputs.with_mcp }}
+	"github.com/hollis-labs/substrate/modules/auth"
+{{- end }}
 	"github.com/hollis-labs/substrate/modules/health"
 	"github.com/hollis-labs/substrate/modules/httphost"
 
@@ -54,15 +60,26 @@ func serveWith(ctx context.Context, app *module.App, ready func(net.Addr), dev, 
 	if err := authmode.CheckRun(mode, dev, managed); err != nil {
 		return err
 	}
+{{- if .inputs.with_mcp }}
+	if mode != authmode.Enforce {
+		return fmt.Errorf("MCP-enabled services require enforce auth, including development runs")
+	}
+{{- end }}
 	addr := bindAddr(app)
 	// loopback_open on a non-loopback bind is refused before anything listens.
 	if err := authmode.CheckBind(mode, addr); err != nil {
 		return err
 	}
+{{- if .inputs.with_mcp }}
+	if auth.Guard(app) == nil {
+		return fmt.Errorf("MCP service requires the auth module")
+	}
+{{- else }}
 	guard, err := authmode.Guard(mode, os.Getenv(tokenEnv))
 	if err != nil {
 		return err
 	}
+{{- end }}
 	// The active mode is part of /healthz.
 	health.From(app).Add("auth_"+string(mode), func(context.Context) error { return nil })
 
@@ -79,7 +96,11 @@ func serveWith(ctx context.Context, app *module.App, ready func(net.Addr), dev, 
 	}
 	// The guard wraps the whole host, not just /api/: /mcp and routes that modules mount outside /api/ are
 	// reached through httphost and would otherwise serve without credentials. Only GET /healthz stays open.
+{{- if .inputs.with_mcp }}
+	guarded := auth.Middleware(app, inner)
+{{- else }}
 	guarded := guard(inner)
+{{- end }}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
 			inner.ServeHTTP(w, r)

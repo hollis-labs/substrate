@@ -12,7 +12,7 @@ import (
 
 func TestRootHasCommands(t *testing.T) {
 	ctx := context.Background()
-	run, err := boot.Start(ctx, substrateApp, substrateModules, substrateConfigJSON)
+	run, err := boot.Start(ctx, substrateApp, {{ if .inputs.with_mcp }}commandModules(nil){{ else }}substrateModules{{ end }}, substrateConfigJSON)
 	if err != nil {
 		t.Fatal(err)
 	}

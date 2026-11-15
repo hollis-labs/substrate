@@ -1,3 +1,6 @@
+{{- if and .inputs.with_mcp (eq .inputs.auth "loopback_open") -}}
+{{ fail "with_mcp requires auth=enforce" }}
+{{- end -}}
 # project.yaml — the project descriptor (project/1, release candidate 1: fields may change without a version bump
 # until 1.0). Written once by Folio and never overwritten; edit it by hand. `internal/descriptor` validates it
 # and checks that deploy.yaml{{ if eq .inputs.tool_kind "service" }}, {{ .inputs.repo_name }}.cerberus.yaml{{ end }} and the code agree with it.
@@ -21,7 +24,12 @@ interfaces:
     name: {{ .inputs.repo_name }}
     auth: none
 {{- end }}
-substrate: { variant: {{ if eq .inputs.tool_kind "service" }}microservice{{ else }}cli{{ end }}, profile: minimal, version: {{ .inputs.substrate_version }} }
+{{- if .inputs.with_mcp }}
+  - type: mcp
+    name: {{ .inputs.repo_name }} mcp
+    auth: enforce
+{{- end }}
+substrate: { variant: {{ if eq .inputs.tool_kind "service" }}microservice{{ else }}cli{{ end }}, profile: {{ if .inputs.with_mcp }}agentic{{ else }}minimal{{ end }}, version: {{ .inputs.substrate_version }} }
 deploy:
   fleet: deploy.yaml
 {{- if eq .inputs.tool_kind "service" }}

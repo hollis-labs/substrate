@@ -39,7 +39,7 @@ Substrate-owned package (FC-8) when it lands.
 
 ## Not yet
 
-The optional `mcp` subcommand, the registry registration hook, Folio's own `project.yaml` and `folio sync`/`inspect` in CI.
+The registry registration hook (awaiting the catalog interface), Folio's own `project.yaml` and `folio sync`/`inspect` in CI.
 
 ## Friction notes for the 1.0 cut
 
@@ -63,3 +63,15 @@ runtime operation needs the checkout. These are startup rules, not a way to dete
 
 Installed tools discover optional `$XDG_CONFIG_HOME/<app>/config.yaml` (fallback
 `~/.config/<app>/config.yaml`); `SUBSTRATE_CONFIG` takes precedence. Discovery is read-only.
+
+## Optional MCP
+
+`with_mcp=true` selects the current Substrate agentic profile for either class-2 preset, adds a scoped
+`ping` example and the stdio `mcp` command. A service also exposes authenticated `/mcp`. Auth stays
+enforced; the simple `<APP>_TOKEN` environment credential becomes a hashed Substrate API-key verifier
+with endpoint/read scopes. CLI deployments can instead configure a verifier in operator config.
+`mcp --local-trust` is explicit, stdio-only and narrowed to endpoint/read scopes; a supplied bad token
+still fails. A server verifier must be configured even for trusted local stdio. MCP-enabled service
+HTTP refuses loopback_open, including with --dev. Help/print commands start only read-only modules.
+Secret backend relative state resolves under `$XDG_STATE_HOME/<app>/secrets` (fallback
+`~/.local/state/<app>/secrets`) rather than the checkout; no directory is created by path discovery.

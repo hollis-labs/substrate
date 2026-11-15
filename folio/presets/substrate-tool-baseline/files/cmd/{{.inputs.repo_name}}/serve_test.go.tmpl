@@ -1,4 +1,4 @@
-{{- if eq .inputs.tool_kind "service" -}}
+{{- if and (eq .inputs.tool_kind "service") (not .inputs.with_mcp) -}}
 package main
 
 import (

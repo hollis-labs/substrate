@@ -32,6 +32,8 @@ func FuncMap(ctx Context) template.FuncMap {
 	}
 
 	return template.FuncMap{
+		// Refuse contradictory preset inputs before any files are materialized.
+		"fail": func(message string) (string, error) { return "", errors.New(message) },
 		// --- string ---
 		"lower":      strings.ToLower,
 		"upper":      strings.ToUpper,

@@ -46,6 +46,10 @@ composes:
         - No secret, host name, address or personal path in a file, a commit or CI: `substrate scan-public --ref HEAD` must stay clean.
 
 inputs:
+  - name: with_mcp
+    type: bool
+    default: false
+    description: Include agentic modules and scoped MCP over stdio (and HTTP for services)
   - name: repo_name
     type: string
     required: true

@@ -46,3 +46,25 @@ The binary reads `$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml` when pre
 `~/.config/{{ .inputs.repo_name }}/config.yaml`). `SUBSTRATE_CONFIG` explicitly selects another file.
 Config discovery creates nothing and does not read from the checkout. Store credentials in an
 operator-owned environment file or secret provider outside the repository.
+
+{{ if .inputs.with_mcp }}
+## MCP
+
+This scaffold selects Substrate's agentic profile. Set `{{ .computed.env_prefix }}_TOKEN` through your
+operator environment (or configure a Substrate verifier in the XDG config) before serving MCP.
+The environment credential grants `{{ .inputs.repo_name }}.mcp` and `{{ .inputs.repo_name }}.read`;
+no credential is rendered or stored by Folio. Help and print-only commands need no credentials.
+
+`{{ .inputs.repo_name }} mcp --token-file <credential-file>` serves stdio. For an explicitly trusted
+local caller, `mcp --local-trust` grants only endpoint/read scopes; it does not bypass a bad supplied
+token or the per-tool scope check. The configured server verifier is still required. Local trust
+is never read from config or used for HTTP. Add scopes deliberately when you add operations.
+{{ if eq .inputs.tool_kind "service" }}
+`serve` also exposes `/mcp` behind both the outer service guard and Substrate endpoint/tool scopes.
+MCP-enabled services always require enforced auth, including development runs. The outer guard uses
+the same Substrate verifier and scope table as the MCP endpoint and tool handlers.
+{{ end }}
+`ping` is a scoped read-only example. Replace its implementation with calls into the tool's service layer;
+register every new tool's scope and call `mcp.Authorize` in its handler. Registry registration waits for
+the catalog owner's agreed interface; this scaffold invents no registry endpoint.
+{{ end }}

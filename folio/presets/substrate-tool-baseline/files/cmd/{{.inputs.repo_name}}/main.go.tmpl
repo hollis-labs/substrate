@@ -32,17 +32,28 @@ func run(ctx context.Context) error {
 		return err
 	}
 	defer restore()
+	{{- if .inputs.with_mcp }}
+	mods := commandModules(os.Args[1:])
+	started, err := boot.StartWith(ctx, substrateApp, mods, substrateConfigJSON, boot.Options{AfterConfig: configureMCP})
+{{- else }}
 	started, err := boot.Start(ctx, substrateApp, substrateModules, substrateConfigJSON)
+{{- end }}
 	if err != nil {
 		return err
 	}
 	defer func() { _ = started.Stop(context.Background()) }()
+{{- if .inputs.with_mcp }}
+	registerMCP(started.App)
+{{- end }}
 	return newRoot(ctx, started.App).ExecuteContext(ctx)
 }
 
 // newRoot is the command tree over the started app: Substrate supplies version, config and health.
 func newRoot(ctx context.Context, app *module.App) *cobra.Command {
 	root := cli.Root(app)
+{{- if .inputs.with_mcp }}
+	root.AddCommand(mcpCmd(ctx, app))
+{{- end }}
 {{- if eq .inputs.tool_kind "service" }}
 	root.AddCommand(serveCmd(ctx, app))
 {{- else }}

@@ -1,10 +1,13 @@
 # {{ .inputs.repo_name }} on Substrate (class 2). The manifest is the shell: modules and config.
 app: {{ .inputs.repo_name }}
 variant: {{ if eq .inputs.tool_kind "service" }}microservice{{ else }}cli{{ end }}
-profiles: [minimal]
+profiles: [{{ if .inputs.with_mcp }}agentic{{ else }}minimal{{ end }}]
 modules:
   add: [{{ if eq .inputs.tool_kind "service" }}httphost, {{ end }}cli]
 config:
+{{- if .inputs.with_mcp }}
+  auth: { mode: enforce }
+{{- end }}
   logging: { level: info, format: text }
 {{- if eq .inputs.tool_kind "service" }}
   httphost: { addr: "127.0.0.1:{{ .inputs.http_port }}" }

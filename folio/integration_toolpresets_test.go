@@ -119,6 +119,9 @@ func TestToolPresets_Refusals(t *testing.T) {
 	if _, err := renderTool(t, "substrate-service", "svc-bad", map[string]any{"auth": "open"}); err == nil {
 		t.Error("an unknown auth mode was accepted")
 	}
+	if _, err := renderTool(t, "substrate-service", "mcp-bad", map[string]any{"with_mcp": true, "auth": "loopback_open"}); err == nil || !strings.Contains(err.Error(), "with_mcp requires auth=enforce") {
+		t.Fatalf("contradictory MCP auth inputs: %v", err)
+	}
 	for _, port := range []string{"0", "00", "99999", "65536", "100000", "80a"} {
 		if _, err := renderTool(t, "substrate-service", "svc-port", map[string]any{"http_port": port}); err == nil {
 			t.Errorf("http_port %q was accepted", port)
@@ -142,9 +145,16 @@ func TestToolPresets_BuildAndCheck(t *testing.T) {
 	if !needTool(t, "go") {
 		return
 	}
-	for preset, name := range map[string]string{"substrate-cli": "hello-cli", "substrate-service": "hello-svc"} {
-		t.Run(preset, func(t *testing.T) {
-			dir, err := renderTool(t, preset, name, map[string]any{"substrate_version": version})
+	for _, c := range []struct {
+		preset, name string
+		mcp          bool
+	}{
+		{"substrate-cli", "hello-cli", false}, {"substrate-service", "hello-svc", false},
+		{"substrate-cli", "mcp-cli", true}, {"substrate-service", "mcp-svc", true},
+	} {
+		preset, name := c.preset, c.name
+		t.Run(name, func(t *testing.T) {
+			dir, err := renderTool(t, preset, name, map[string]any{"substrate_version": version, "with_mcp": c.mcp})
 			if err != nil {
 				t.Fatal(err)
 			}
