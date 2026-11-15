@@ -1,7 +1,7 @@
 // Package forwarded is the one trusted-proxy rule Substrate applies to X-Forwarded-Proto, shared
 // by the identity module (identity.trusted_proxy: secure cookies) and httphost.Harden (Scheme).
 // A local TLS proxy is believed: exactly one X-Forwarded-Proto, "https", from a loopback peer.
-// A proxy on another host is not supported; such an app sets identity.secure: always.
+// A proxy on another host is not supported; such an app sets identity.secure_cookies: always.
 package forwarded
 
 import (
