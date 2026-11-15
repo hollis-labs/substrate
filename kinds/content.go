@@ -131,7 +131,17 @@ func ParseContentJSON(schema string, data []byte) (any, error) {
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnknownSchema, schema)
 	}
-	if err := decode(schema, data, out); err != nil {
+	// Canonical numeric spelling makes JSON Schema integer values such as
+	// 1.0 and 1e0 decode into integer Go fields without truncation.
+	// Admission runs first, so fractional/unsafe values cannot be rounded in.
+	if err := ValidateJSON(schema, data); err != nil {
+		return nil, err
+	}
+	canonical, err := canonicalJSON(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(canonical, out); err != nil {
 		return nil, err
 	}
 	return out, nil

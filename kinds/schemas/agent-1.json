@@ -47,8 +47,7 @@
             "minLength": 1
           },
           "kind": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_-]*$"
+            "const": "skill"
           },
           "id": {
             "type": "string",
@@ -79,8 +78,7 @@
             "minLength": 1
           },
           "kind": {
-            "type": "string",
-            "pattern": "^[a-z][a-z0-9_-]*$"
+            "const": "tool"
           },
           "id": {
             "type": "string",
@@ -144,8 +142,7 @@
               "minLength": 1
             },
             "kind": {
-              "type": "string",
-              "pattern": "^[a-z][a-z0-9_-]*$"
+              "const": "launch_profile"
             },
             "id": {
               "type": "string",

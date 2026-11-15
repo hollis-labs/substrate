@@ -67,3 +67,76 @@ func TestContentRejectsEmptyDefinitionsAndRuntimeFields(t *testing.T) {
 		}
 	}
 }
+
+func TestCorrelationIntegerSpellingsAgreeWithValidation(t *testing.T) {
+	for _, n := range []string{"1", "1.0", "1e0", "0.0", "9007199254740991"} {
+		raw := []byte(`{"schema":"correlation/1","id":"c","name":"C","links":{"task":{"authority":"torque","kind":"task","id":"t"}},"trace":{"depth":` + n + `}}`)
+		if err := kinds.ValidateJSON(kinds.CorrelationSchema, raw); err != nil {
+			t.Fatal(err)
+		}
+		out, err := kinds.ParseContentJSON(kinds.CorrelationSchema, raw)
+		if err != nil {
+			t.Fatalf("%s: %v", n, err)
+		}
+		if out.(*kinds.Correlation).Trace.Depth == nil {
+			t.Fatal("depth lost")
+		}
+	}
+	for _, n := range []string{"1.5", "-1", "9007199254740992", "1e400", "1e-400"} {
+		raw := []byte(`{"schema":"correlation/1","id":"c","name":"C","links":{"task":{"authority":"torque","kind":"task","id":"t"}},"trace":{"depth":` + n + `}}`)
+		if err := kinds.ValidateJSON(kinds.CorrelationSchema, raw); err == nil {
+			t.Errorf("validate accepted %s", n)
+		}
+		if _, err := kinds.ParseContentJSON(kinds.CorrelationSchema, raw); err == nil {
+			t.Errorf("parse accepted %s", n)
+		}
+	}
+}
+func TestSpecializedReferencesRejectWrongKinds(t *testing.T) {
+	cases := []struct{ schema, tail string }{
+		{kinds.AgentSchema, `"charter":"a","roles":["r"],"launch_profile":{"reference":{"authority":"tether","kind":"document","id":"p"},"revision":"r"}`},
+		{kinds.AgentSchema, `"charter":"a","roles":["r"],"tools":[{"authority":"registry","kind":"project","id":"p"}]`},
+		{kinds.AgentSchema, `"charter":"a","roles":["r"],"skills":[{"authority":"registry","kind":"tool","id":"p"}]`},
+		{kinds.SkillSchema, `"instructions":"a","documents":[{"authority":"registry","kind":"agent","id":"p"}]`},
+		{kinds.AgencySchema, `"framework":"citadel","charter":"a","cells":[{"name":"r","reference":{"authority":"registry","kind":"tool","id":"p"}}]`},
+	}
+	for _, tc := range cases {
+		raw := []byte(`{"schema":"` + tc.schema + `","id":"example","name":"Example",` + tc.tail + `}`)
+		if err := kinds.ValidateJSON(tc.schema, raw); err == nil {
+			t.Errorf("accepted %s", raw)
+		}
+	}
+	// Parent/causation can point to events or messages; inventory supplies no
+	// universal concrete kind. Native authority/ID remain unchanged.
+	raw := []byte(`{"schema":"correlation/1","id":"c","name":"C","links":{"task":{"authority":"external","kind":"work_item","id":"native-task"},"parent":{"authority":"external","kind":"message","id":"native/../id"},"thread":{"authority":"external","kind":"conversation","id":"thread/1"}}}`)
+	out, err := kinds.ParseContentJSON(kinds.CorrelationSchema, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.(*kinds.Correlation).Links["parent"].ID != "native/../id" {
+		t.Fatal("rewrote native ID")
+	}
+}
+
+func TestWorkstreamRetainsEmptySourceName(t *testing.T) {
+	for _, name := range []string{"", `,"name":""`} {
+		raw := []byte(`{"schema":"workstream/1","id":"native-id","status":"active"` + name + `}`)
+		if err := kinds.ValidateJSON(kinds.WorkstreamSchema, raw); err != nil {
+			t.Fatal(err)
+		}
+		out, err := kinds.ParseContentJSON(kinds.WorkstreamSchema, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out.(*kinds.Workstream).Name != "" {
+			t.Fatal("invented source name")
+		}
+		wire, err := json.Marshal(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := kinds.ValidateJSON(kinds.WorkstreamSchema, wire); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

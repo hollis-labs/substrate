@@ -150,3 +150,17 @@ Workstreams retain source identifiers/times independently of storage timestamps.
 Correlation links qualify native IDs by authority and kind; correlation, reply,
 causation and trace identifiers remain distinct. Runtime leases, credentials and
 session execution state are not accepted definition fields.
+
+Specialized authored-definition slots constrain their kind (tool, skill,
+document, agent, launch_profile). Correlation link names describe roles, not an
+authoritative target-kind vocabulary: every correlation slot retains a generic
+typed external reference. Native authority, kind and ID are preserved without
+inventing adapter mappings. Integer-valued JSON depth
+spellings (`1`, `1.0`, `1e0`) have equal semantics and decode without truncation;
+fractional, unsafe and underflowed numbers fail admission.
+
+Workstream source names may be absent or empty, as permitted by the existing
+source. Typed decoding represents both as an empty name; callers may display an
+ID fallback but must not persist an invented source name. Replacement APIs need
+not adopt the source's PATCH omission-versus-clear command semantics. Project
+URN omission and an empty array both describe no project memberships here.
