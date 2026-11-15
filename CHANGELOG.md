@@ -25,6 +25,14 @@ minor releases may break APIs.
 
 ### Changed
 
+- BOM app libraries: add the merged Tradecraft SDK (`agent/sdk` at `c76ea978573d`)
+  and Gatecrasher coordinator (`mesh/gatecrasher` at `4cb9c2a6b9b7`) pseudo-versions;
+  advance `agent/core` to v0.5.0, `mesh/core` to v0.11.0 and `harness/core` to the
+  merged provider-approval foundation at `8f2ed31176b0`. Keep the existing higher
+  compatible llm/core, redact, eventbus and x/sys pins and Go 1.26.11 floor.
+  Apps can adopt these libraries through normal pins sync after updating Substrate;
+  this changes no framework features, auth configuration or running consumers.
+
 - `httphost`: a service (`variant: service`) answers an unknown path 404 `not_found` and a wrong method 405 `method_not_allowed` in the flat body, instead of 200 placeholder HTML (a client checking only the status took a mistyped API path for success). The builder carries the variant to runtime as new config `httphost.fallback`: `not_found` for a service unless the manifest sets it, `spa` (the default, today's behaviour) otherwise; the key can be set by hand either way. It applies only with nil `Assets`; `Options.NotFound` wins over it. App-host apps, including those with nil `Assets` (hello-app-host and the scaffolds), keep the placeholder. Takes effect when a service regenerates its wiring with the new builder. Service-variant apps today: the Tether port (S4) is the one this was filed for; among the manifests GitHub code search indexes (Sigil `cli`; Mentat and Tangent `app-host`) none is a service. (migration: none; a service that relied on the placeholder sets `httphost: {fallback: spa}`) (CW-20261115-0006)
 
 - `pluginhost` no longer claims all of `/api/plugins/`. It declares one route per registered Spec (`* /api/plugins/<id>/`, scope still `<app>.plugins`), so an app serves its own handlers under the other ids (`httphost.Options.Routes`), for example an app-served `/api/plugins/console/v1/...` next to a running plugin. A path under an id no Spec registered is no longer answered `404 plugin not running` by the module; it falls to the app's routes. The routes now come from `UseSpecs` rather than `ui.json`, which is removed. (CW-20261114-0184)
