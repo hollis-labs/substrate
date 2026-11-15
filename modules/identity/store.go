@@ -421,7 +421,14 @@ func (d db) revokeCredential(ctx context.Context, id string, now time.Time) erro
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
+		// Nothing changed: either the key was already revoked (success, the state the
+		// caller asked for) or there is no such key.
+		var one int
+		err := d.st.QueryRowContext(ctx, d.q(`SELECT 1 FROM identity_credentials WHERE id = ?`), id).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
 	}
 	return nil
 }
