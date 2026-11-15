@@ -12,7 +12,7 @@
 | auth guard | n/a | `internal/authmode` |
 
 Inputs: `repo_name`, `substrate_version` (no default; from the Substrate BOM), `description`; service also `http_port`,
-`auth`; both `owner` (default `user:chrispian`), `deploy_host`, `build_workflow_ref`. `go_version` comes from
+`auth`; both `owner` (default the placeholder `user:owner`; set your own), `deploy_host`, `build_workflow_ref`. `go_version` comes from
 `platform-pins.yaml` through go-baseline.
 
 ## Single source
@@ -23,6 +23,14 @@ fail on divergence of: project id / Cerberus owner / project id; Cerberus `comma
 Cerberus `port`, `url`, `health_check.url` / `deploy.yaml` `health.url` / `substrate.yaml` `httphost.addr`;
 `restart.resource` / Cerberus resource id; declared auth / `authmode.Default`. It also forbids `build_strategy` and
 `artifact_path` in the manifest (Option B: they would overwrite the fleet-install link).
+
+## Decisions (tools #37 review)
+
+- **authmode does not converge on `libs/security/auth`.** That library has a different vocabulary (`off`, `permissive`, `enforce`; `permissive` and tailnet binds are allowed) and its env names are `HOLLIS_AUTH[_<APP>]`. project/1 class 2 declares `enforce` or `loopback_open` (loopback only, never a tailnet or other bind) and the descriptor drift test pins the template to those two, with `<APP>_AUTH` / `<APP>_TOKEN`. Taking the library would widen what `loopback_open` accepts and add a module requirement to every rendered tool. Revisit when the library grows a `loopback_open` mode.
+- **The guard covers the whole host**, not only `/api/`: `/mcp` and module routes mounted by httphost are behind it. Only `GET /healthz` is open.
+- **Token supply**: the Cerberus manifest carries comments, not a value (no secrets in files); see the rendered README, Auth.
+- **No `health.version_json` in `deploy.yaml`** until the service's `/healthz` reports a version; with the key set and no version the health check always fails. The README says so.
+- **Actions in the rendered check workflow are pinned by commit** (tag in a comment).
 
 ## Embedded schema
 

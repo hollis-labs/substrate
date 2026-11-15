@@ -59,19 +59,29 @@ func isLoopbackHost(host string) bool {
 	return ip != nil && ip.IsLoopback()
 }
 
+// bearer returns the credential of an `Authorization: Bearer <credential>` header; the scheme is
+// case-insensitive (RFC 9110).
+func bearer(header string) (string, bool) {
+	const scheme = "Bearer "
+	if len(header) <= len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
+		return "", false
+	}
+	return header[len(scheme):], true
+}
+
 // Guard wraps a handler. enforce needs a non-empty token and answers 401 unless the request carries
-// `Authorization: Bearer <token>`. loopback_open lets a loopback peer in and answers 403 to any other.
+// `Authorization: Bearer <token>` (scheme case-insensitive). A token of only whitespace counts as empty. loopback_open lets a loopback peer in and answers 403 to any other.
 func Guard(mode Mode, token string) (func(http.Handler) http.Handler, error) {
 	switch mode {
 	case Enforce:
-		if token == "" {
+		if strings.TrimSpace(token) == "" {
 			return nil, fmt.Errorf("authmode: enforce needs a bearer token (set the token environment variable)")
 		}
 		want := []byte(token)
 		return func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-				if !strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || subtle.ConstantTimeCompare([]byte(got), want) != 1 {
+				got, ok := bearer(r.Header.Get("Authorization"))
+				if !ok || subtle.ConstantTimeCompare([]byte(got), want) != 1 {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return
 				}

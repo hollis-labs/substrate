@@ -1,7 +1,11 @@
 {{- if eq .inputs.tool_kind "service" -}}
 package authmode
 
-import "testing"
+import (
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
 
 func TestCheckBind(t *testing.T) {
 	for _, addr := range []string{"127.0.0.1:8080", "[::1]:8080", "localhost:8080"} {
@@ -25,6 +29,69 @@ func TestResolve(t *testing.T) {
 	}
 	if _, err := Resolve("open"); err == nil {
 		t.Error("unknown mode accepted")
+	}
+}
+
+func serveWith(t *testing.T, mode Mode, token, remote, auth string) int {
+	t.Helper()
+	guard, err := Guard(mode, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req.RemoteAddr = remote
+	if auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	rec := httptest.NewRecorder()
+	guard(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })).ServeHTTP(rec, req)
+	return rec.Code
+}
+
+func TestGuardEnforce(t *testing.T) {
+	cases := []struct {
+		name, auth string
+		want       int
+	}{
+		{"no header", "", 401},
+		{"token without scheme", "tok", 401},
+		{"other scheme", "Basic tok", 401},
+		{"wrong token", "Bearer nope", 401},
+		{"scheme only", "Bearer ", 401},
+		{"right token", "Bearer tok", 204},
+		{"scheme is case-insensitive", "bearer tok", 204},
+	}
+	for _, c := range cases {
+		if got := serveWith(t, Enforce, "tok", "192.0.2.1:1234", c.auth); got != c.want {
+			t.Errorf("%s: %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+func TestGuardEnforceNeedsRealToken(t *testing.T) {
+	for _, tok := range []string{"", " ", "\t\n"} {
+		if _, err := Guard(Enforce, tok); err == nil {
+			t.Errorf("token %q accepted", tok)
+		}
+	}
+}
+
+func TestGuardLoopbackOpen(t *testing.T) {
+	for _, remote := range []string{"127.0.0.1:1", "[::1]:1"} {
+		if got := serveWith(t, LoopbackOpen, "", remote, ""); got != 204 {
+			t.Errorf("loopback peer %s: %d, want 204", remote, got)
+		}
+	}
+	for _, remote := range []string{"192.0.2.1:1", "garbage", ""} {
+		if got := serveWith(t, LoopbackOpen, "", remote, ""); got != 403 {
+			t.Errorf("peer %q: %d, want 403", remote, got)
+		}
+	}
+}
+
+func TestGuardUnknownMode(t *testing.T) {
+	if _, err := Guard(Mode("open"), "tok"); err == nil {
+		t.Error("an unknown mode was accepted")
 	}
 }
 {{- end }}

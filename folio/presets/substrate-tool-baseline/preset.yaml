@@ -66,7 +66,7 @@ inputs:
   - name: http_port
     type: string
     default: "8080"
-    pattern: "^[0-9]{2,5}$"
+    pattern: "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
     description: Loopback port of a service (httphost.addr, the health URL, the Cerberus manifest)
   - name: auth
     type: string
@@ -77,9 +77,9 @@ inputs:
       loopback caller in and the service refuses to start on any other bind.
   - name: owner
     type: string
-    default: "user:chrispian"
+    default: "user:owner"
     pattern: "^(user|agency|agent):[a-z0-9][a-z0-9._-]*$"
-    description: project.yaml owner ref
+    description: "project.yaml owner ref (a placeholder: set your own, as user:<id>, agency:<id> or agent:<id>)"
   - name: deploy_host
     type: string
     default: fleet-host

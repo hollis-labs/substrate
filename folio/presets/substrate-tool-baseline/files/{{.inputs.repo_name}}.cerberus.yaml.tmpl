@@ -23,6 +23,9 @@ resources:
         - ~/.local/bin/{{ .inputs.repo_name }}
         - serve
       mode: os_service
+      # enforce needs {{ .computed.env_prefix }}_TOKEN at start, and the token is never committed. Supply it with a
+      # Cerberus secret reference or an owner-only env file outside this repository (README, Auth), e.g.:
+      #   env_file: /absolute/path/to/{{ .inputs.repo_name }}.env
       port: {{ .inputs.http_port }}
       run_from: workspace
       supervisor: systemd_user
