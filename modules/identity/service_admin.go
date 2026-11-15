@@ -91,6 +91,10 @@ func (s *Service) CreateKey(ctx context.Context, in KeyInput) (string, Credentia
 	return keyPrefix + secret, c, nil
 }
 
+// RevokeKey, ListKeys, OwnerExists, CreateKey and SetupOwner are the in-process API: they take
+// no principal and check no scope (the caller already holds the database). The HTTP routes keep
+// the admin guard; never wire one of these to an unguarded route.
+//
 // RevokeKey revokes the API key with the given id (the Credential.ID CreateKey
 // returned, or the id in GET /api/identity/keys). It is the one path: the
 // DELETE /api/identity/keys/{id} handler calls it.

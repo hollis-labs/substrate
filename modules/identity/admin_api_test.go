@@ -3,9 +3,12 @@ package identity_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/hollis-labs/substrate/modules/database"
 	"github.com/hollis-labs/substrate/modules/identity"
 )
 
@@ -86,5 +89,26 @@ func TestListKeysMatchesTheKeysRoute(t *testing.T) {
 	}
 	if len(route) != len(got) || route[0] != got[0] || route[1] != got[1] {
 		t.Fatalf("route %v differs from ListKeys %v", route, got)
+	}
+}
+
+// A database failure while revoking answers 500 internal_error, not 404 (which would tell a
+// caller such as Tangent's child-key cleanup that the key is already gone).
+func TestRevokeKeyDatabaseErrorIs500(t *testing.T) {
+	a := start(t, "enforce", "")
+	owner := a.owner()
+	_, id := a.ownerKey("child", 0, "demo.read")
+	// A trigger makes the revoke's UPDATE fail; everything else (the session lookup) still works.
+	if _, err := database.From(a.running.App).ExecContext(context.Background(),
+		`CREATE TRIGGER fail_revoke BEFORE UPDATE ON identity_credentials BEGIN SELECT RAISE(FAIL, 'injected'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.svc.RevokeKey(context.Background(), id); err == nil || errors.Is(err, identity.ErrNotFound) {
+		t.Fatalf("RevokeKey with a failing database: %v, want an error that is not ErrNotFound", err)
+	}
+	w := a.do("DELETE", "/api/identity/keys/"+id, nil, cookie(owner))
+	code(t, w, 500)
+	if !strings.Contains(w.Body.String(), "internal_error") {
+		t.Fatalf("body: %s", w.Body)
 	}
 }
