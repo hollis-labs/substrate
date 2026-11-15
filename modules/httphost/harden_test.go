@@ -6,14 +6,25 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/hollis-labs/substrate/boot"
 	"github.com/hollis-labs/substrate/modules/httphost"
 )
+
+func mustHarden(t *testing.T, h http.Handler, o httphost.HardenOptions) http.Handler {
+	t.Helper()
+	hh, err := httphost.Harden(nil, h, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return hh
+}
 
 func hreq(method, target, host string, body io.Reader) *http.Request {
 	r := httptest.NewRequest(method, target, body)
@@ -39,7 +50,7 @@ func flat(t *testing.T, w *httptest.ResponseRecorder) (code, message string) {
 }
 
 func TestHardenHostCheck(t *testing.T) {
-	h := httphost.Harden(nil, ok("ok"), httphost.HardenOptions{AllowedHosts: []string{"svc.example", "other.example:8443"}})
+	h := mustHarden(t, ok("ok"), httphost.HardenOptions{AllowedHosts: []string{"svc.example", "other.example:8443"}})
 	for host, want := range map[string]int{
 		"localhost:8080":        200,
 		"app.localhost":         200,
@@ -65,13 +76,13 @@ func TestHardenHostCheck(t *testing.T) {
 		}
 	}
 	// Off by default: any Host passes.
-	if w := serveH(httphost.Harden(nil, ok("ok"), httphost.HardenOptions{}), hreq("GET", "/x", "attacker.invalid", nil)); w.Code != 200 {
+	if w := serveH(mustHarden(t, ok("ok"), httphost.HardenOptions{}), hreq("GET", "/x", "attacker.invalid", nil)); w.Code != 200 {
 		t.Errorf("no host check configured: %d", w.Code)
 	}
 }
 
 func TestHardenOriginCheck(t *testing.T) {
-	h := httphost.Harden(nil, ok("ok"), httphost.HardenOptions{AllowedOrigins: []string{"https://ui.example/"}})
+	h := mustHarden(t, ok("ok"), httphost.HardenOptions{AllowedOrigins: []string{"https://ui.example/"}})
 	for _, c := range []struct {
 		method, origin string
 		want           int
@@ -103,7 +114,7 @@ func TestHardenBodyLimit(t *testing.T) {
 		}
 		_, _ = w.Write([]byte("read"))
 	})
-	h := httphost.Harden(nil, echo, httphost.HardenOptions{MaxBodyBytes: 1024})
+	h := mustHarden(t, echo, httphost.HardenOptions{MaxBodyBytes: 1024})
 	// A declared length over the limit is refused before the handler runs.
 	w := serveH(h, hreq("POST", "/x", "", bytes.NewReader(make([]byte, 2048))))
 	if code, _ := flat(t, w); w.Code != 413 || code != "body_too_large" {
@@ -119,12 +130,12 @@ func TestHardenBodyLimit(t *testing.T) {
 		t.Errorf("within the limit: %d", w.Code)
 	}
 	// The default limit is DefaultMaxBodyBytes (8 MiB): a 9 MiB declared body is refused.
-	d := httphost.Harden(nil, echo, httphost.HardenOptions{})
+	d := mustHarden(t, echo, httphost.HardenOptions{})
 	if w := serveH(d, hreq("POST", "/x", "", bytes.NewReader(make([]byte, 9<<20)))); w.Code != 413 {
 		t.Errorf("default limit, 9 MiB: %d", w.Code)
 	}
 	// Negative is no limit.
-	n := httphost.Harden(nil, echo, httphost.HardenOptions{MaxBodyBytes: -1})
+	n := mustHarden(t, echo, httphost.HardenOptions{MaxBodyBytes: -1})
 	if w := serveH(n, hreq("POST", "/x", "", bytes.NewReader(make([]byte, 9<<20)))); w.Code != 200 {
 		t.Errorf("no limit, 9 MiB: %d", w.Code)
 	}
@@ -136,7 +147,7 @@ func TestHardenRecoversPanicsWithoutLeakingThem(t *testing.T) {
 	boom := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
 		panic("db failed: password=fixture-pw-0123456789abcdef")
 	})
-	h := httphost.Harden(nil, boom, httphost.HardenOptions{Logger: logger})
+	h := mustHarden(t, boom, httphost.HardenOptions{Logger: logger})
 	w := serveH(h, hreq("GET", "/x", "", nil))
 	code, msg := flat(t, w)
 	if w.Code != 500 || code != "internal" || !strings.Contains(msg, "ref") {
@@ -149,7 +160,7 @@ func TestHardenRecoversPanicsWithoutLeakingThem(t *testing.T) {
 		t.Errorf("panic log missing or not redacted: %s", logs.String())
 	}
 	// A custom envelope for a raw handler.
-	h = httphost.Harden(nil, boom, httphost.HardenOptions{Logger: logger, ErrorBody: func(w http.ResponseWriter, _ *http.Request, status int, code, message string) {
+	h = mustHarden(t, boom, httphost.HardenOptions{Logger: logger, ErrorBody: func(w http.ResponseWriter, _ *http.Request, status int, code, message string) {
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte(`{"error":{"code":"` + code + `"}}`))
 	}})
@@ -161,54 +172,150 @@ func TestHardenRecoversPanicsWithoutLeakingThem(t *testing.T) {
 func TestHardenAccessLogIsCredentialFree(t *testing.T) {
 	var logs bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logs, nil))
-	h := httphost.Harden(nil, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	h := mustHarden(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(201)
 		_, _ = w.Write([]byte("made"))
 	}), httphost.HardenOptions{AccessLog: true, Logger: logger})
-	r := hreq("POST", "/api/things?access_token=qtok-secret-1&token=qtok-secret-2&api_key=qtok-secret-3&page=2", "", nil)
+	// key and code are credentials redact.SensitiveName does not know; page is not. No value
+	// is logged at all, so none of them can leak.
+	r := hreq("POST", "/api/things?access_token=qv-1&key=qv-2&code=qv-3&page=qv-4", "", nil)
 	r.Header.Set("Authorization", "Bearer hdr-secret-bearer")
 	r.Header.Set("Cookie", "session=cookie-secret-value")
 	serveH(h, r)
 	out := logs.String()
-	for _, secret := range []string{"qtok-secret-1", "qtok-secret-2", "qtok-secret-3", "hdr-secret-bearer", "cookie-secret-value"} {
+	for _, secret := range []string{"qv-1", "qv-2", "qv-3", "qv-4", "hdr-secret-bearer", "cookie-secret-value"} {
 		if strings.Contains(out, secret) {
 			t.Errorf("access log carries %q: %s", secret, out)
 		}
 	}
-	for _, want := range []string{"method=POST", "/api/things", "page=2", "status=201", "bytes=4"} {
+	for _, want := range []string{"method=POST", "path=/api/things", "params=access_token,code,key,page", "status=201", "bytes=4"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("access log lacks %q: %s", want, out)
 		}
 	}
 	// Off by default.
 	logs.Reset()
-	serveH(httphost.Harden(nil, ok("ok"), httphost.HardenOptions{Logger: logger}), hreq("GET", "/x", "", nil))
+	serveH(mustHarden(t, ok("ok"), httphost.HardenOptions{Logger: logger}), hreq("GET", "/x", "", nil))
 	if strings.Contains(logs.String(), "http request") {
 		t.Errorf("access log written without AccessLog: %s", logs.String())
 	}
 }
 
-func TestHardenScheme(t *testing.T) {
+func TestHardenForwardingHeaders(t *testing.T) {
 	var got string
-	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got = httphost.Scheme(r) })
+	var seen http.Header
+	h := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got, seen = httphost.Scheme(r), r.Header.Clone() })
 	for _, c := range []struct {
-		trust bool
-		hdr   []string
-		want  string
+		name    string
+		trusted bool
+		peer    string
+		xfp     []string
+		want    string
 	}{
-		{false, []string{"https"}, "http"},
-		{true, []string{"https"}, "https"},
-		{true, []string{"https", "http"}, "http"}, // more than one: not a single overwriting proxy
-		{true, nil, "http"},
+		{"untrusted", false, "127.0.0.1:5000", []string{"https"}, "http"},
+		{"trusted loopback", true, "127.0.0.1:5000", []string{"https"}, "https"},
+		{"trusted ipv6 loopback", true, "[::1]:5000", []string{"https"}, "https"},
+		{"trusted but not a loopback peer", true, "192.0.2.10:5555", []string{"https"}, "http"},
+		{"two values", true, "127.0.0.1:5000", []string{"https", "http"}, "http"},
+		{"none", true, "127.0.0.1:5000", nil, "http"},
 	} {
 		r := hreq("GET", "/x", "", nil)
-		for _, v := range c.hdr {
+		r.RemoteAddr = c.peer
+		for _, v := range c.xfp {
 			r.Header.Add("X-Forwarded-Proto", v)
 		}
-		serveH(httphost.Harden(nil, h, httphost.HardenOptions{TrustForwardedProto: c.trust}), r)
-		if got != c.want {
-			t.Errorf("trust=%v %v: %q, want %q", c.trust, c.hdr, got, c.want)
+		for _, n := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP"} {
+			r.Header.Set(n, "1.2.3.4")
 		}
+		serveH(mustHarden(t, h, httphost.HardenOptions{TrustedProxy: c.trusted}), r)
+		if got != c.want {
+			t.Errorf("%s: Scheme %q, want %q", c.name, got, c.want)
+		}
+		// The handler (identity included) sees X-Forwarded-Proto only when it was believed,
+		// and never the other forwarding headers.
+		if (seen.Get("X-Forwarded-Proto") != "") != (c.want == "https") {
+			t.Errorf("%s: handler saw X-Forwarded-Proto %q", c.name, seen.Values("X-Forwarded-Proto"))
+		}
+		for _, n := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP"} {
+			if seen.Get(n) != "" {
+				t.Errorf("%s: handler saw %s", c.name, n)
+			}
+		}
+	}
+}
+
+func TestHardenTrustedProxyIsIdentitysSwitch(t *testing.T) {
+	run, err := boot.Start(context.Background(), "t", []string{"health", "httphost"}, `{"identity":{"trusted_proxy":true}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	var got string
+	h, err := httphost.Harden(run.App, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) { got = httphost.Scheme(r) }), httphost.HardenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := hreq("GET", "/x", "", nil)
+	r.RemoteAddr = "127.0.0.1:5000"
+	r.Header.Set("X-Forwarded-Proto", "https")
+	serveH(h, r)
+	if got != "https" {
+		t.Errorf("identity.trusted_proxy: true: Scheme %q", got)
+	}
+}
+
+func TestHardenAllowedHostsAreValidated(t *testing.T) {
+	for _, bad := range []string{"", "*", "*.example", "https://app.example", "app.example/x", "user@app.example", "app example"} {
+		if _, err := httphost.Harden(nil, ok("ok"), httphost.HardenOptions{AllowedHosts: []string{bad}}); err == nil || !strings.Contains(err.Error(), "allowed_hosts") {
+			t.Errorf("allowed_hosts %q: %v, want an error naming the key", bad, err)
+		}
+	}
+	run, err := boot.Start(context.Background(), "t", []string{"health", "httphost"}, `{"httphost":{"allowed_hosts":["*"]}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	if _, err := httphost.Handler(run.App, httphost.Options{}); err == nil || !strings.Contains(err.Error(), "allowed_hosts") {
+		t.Errorf("Handler with allowed_hosts [*]: %v", err)
+	}
+}
+
+// The Host check never applies on a unix-socket listener, decided from the connection.
+func TestHardenHostCheckSkipsUnixSockets(t *testing.T) {
+	h := mustHarden(t, ok("ok"), httphost.HardenOptions{AllowedHosts: []string{"app.example.test"}})
+	sock := filepath.Join(t.TempDir(), "s")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skip("no unix sockets here:", err)
+	}
+	srv := &http.Server{Handler: h}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close() })
+	c := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", sock)
+	}}}
+	for _, host := range []string{"unix", "attacker.invalid"} {
+		resp, err := c.Get("http://" + host + "/healthz")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Errorf("unix socket, Host %q: %d, want 200", host, resp.StatusCode)
+		}
+	}
+	// The same handler on TCP still checks.
+	ts := httptest.NewServer(h)
+	t.Cleanup(ts.Close)
+	req, _ := http.NewRequest("GET", ts.URL+"/healthz", nil)
+	req.Host = "attacker.invalid"
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != 403 {
+		t.Errorf("TCP, Host attacker.invalid: %d, want 403", resp.StatusCode)
 	}
 }
 
@@ -244,6 +351,15 @@ func TestHandlerAppliesHardenFromConfigOrOptions(t *testing.T) {
 	}
 	if w := serveH(h, hreq("POST", "/api/x", "svc.example", strings.NewReader(strings.Repeat("a", 32)))); w.Code != 413 {
 		t.Errorf("config max_body_bytes: %d", w.Code)
+	}
+	// access_log alone changes no request: no implicit body limit.
+	run = start(`{"httphost":{"access_log":true}}`)
+	h, err = httphost.Handler(run.App, httphost.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := serveH(h, hreq("POST", "/api/x", "", bytes.NewReader(make([]byte, 9<<20)))); w.Code == 413 {
+		t.Errorf("access_log alone refused a 9 MiB body")
 	}
 	// Options.Harden turns it on in code.
 	run = start(`{}`)

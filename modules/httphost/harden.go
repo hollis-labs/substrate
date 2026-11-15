@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -23,30 +24,41 @@ import (
 // DefaultMaxBodyBytes is HardenOptions.MaxBodyBytes when it is zero.
 const DefaultMaxBodyBytes = 8 << 20
 
-// HardenOptions configure Harden. Each check is off unless set here or by its config key under
-// httphost: (shown in brackets); a field set here wins over its key.
+// HardenOptions configure Harden. Each check is off unless set here or by its config key (shown
+// in brackets); a field set here wins over its key.
 type HardenOptions struct {
 	// CheckHost refuses (403 host_not_allowed) a request whose Host is not loopback (localhost,
 	// *.localhost, 127.0.0.0/8, ::1) or in AllowedHosts, against DNS rebinding. A non-empty
-	// AllowedHosts turns it on. An entry without a port matches any port. [check_host, allowed_hosts]
+	// AllowedHosts turns it on. An entry is a host name as clients send it in Host, served to any
+	// peer (what #23 called direct_hosts); one without a port matches any port. An empty entry, a
+	// wildcard, a scheme, a path, user info or a space is an error. It never applies to a request
+	// accepted on a unix-socket listener: peer credentials are that listener's caller check.
+	// [httphost.check_host, httphost.allowed_hosts]
 	CheckHost    bool
 	AllowedHosts []string
 	// CheckOrigin refuses (403 origin_not_allowed) a write (any method but GET, HEAD, OPTIONS)
 	// whose Origin header is present and is neither the request's own host nor in AllowedOrigins
 	// ("https://app.example"). A request with no Origin is not a browser cross-site write and
-	// passes. A non-empty AllowedOrigins turns it on. [check_origin, allowed_origins]
+	// passes. A non-empty AllowedOrigins turns it on. [httphost.check_origin, httphost.allowed_origins]
 	CheckOrigin    bool
 	AllowedOrigins []string
-	// TrustForwardedProto makes Scheme believe a single X-Forwarded-Proto, for a local TLS proxy
-	// that overwrites it. Off, the header is ignored. [trust_forwarded_proto]
-	TrustForwardedProto bool
+	// TrustedProxy makes Scheme believe X-Forwarded-Proto from a local TLS proxy: exactly one
+	// value, from a loopback peer. It is the identity module's switch (one definition, not two),
+	// and under Harden an X-Forwarded-Proto that does not meet the rule is removed before the
+	// handler, identity included, sees it. Forwarded, X-Forwarded-For, X-Forwarded-Host and
+	// X-Real-IP are always removed. [identity.trusted_proxy]
+	TrustedProxy bool
 	// MaxBodyBytes bounds a request body: a declared Content-Length above it is refused 413
 	// body_too_large before the handler runs, and reading past it fails in the handler. Zero is
-	// DefaultMaxBodyBytes; negative is no limit. [max_body_bytes]
+	// DefaultMaxBodyBytes when Harden is called (or Options.Harden set) in code; when Handler
+	// applies Harden only because a config key is set, zero is no limit unless max_body_bytes is
+	// configured, so turning on, say, the access log changes no request. Negative is no limit.
+	// [httphost.max_body_bytes]
 	MaxBodyBytes int64
-	// AccessLog writes one line per request to Logger: method, the path with
-	// credential-like query values redacted, status, bytes, duration and remote address. No
-	// header is logged, so Authorization and cookies never are. [access_log]
+	// AccessLog writes one line per request to Logger: method, the path (through redact.Text),
+	// the query parameter NAMES (never their values), status, bytes, duration and remote address.
+	// No header is logged, so Authorization and cookies never are. It changes no request.
+	// [httphost.access_log]
 	AccessLog bool
 	// Logger receives the access log and recovered panics (ref, where, redacted value and stack).
 	// Nil is slog.Default().
@@ -59,16 +71,32 @@ type HardenOptions struct {
 
 // Harden wraps h in the request hardening chain, outermost first: the access log, panic
 // recovery (a panicking handler answers 500 internal with a ref instead of dropping the
-// connection; the panic is reported to Logger, redacted), the Host check, the Origin check and
-// the body limit. Panic recovery is always on; the rest follow o and, when app is not nil, the
-// config keys under httphost: (see HardenOptions). It serves httphost.Handler's result (Handler
-// applies it itself when Options.Harden is set or a key is configured) or an app's own handler.
+// connection; the panic is reported to Logger, redacted), the forwarding headers, the Host
+// check, the Origin check and the body limit. Panic recovery and the forwarding-header rule are
+// always on; the rest follow o and, when app is not nil, the config keys (see HardenOptions). It
+// serves httphost.Handler's result (Handler applies it itself when Options.Harden is set or an
+// httphost hardening key is configured) or an app's own handler. A bad allowed_hosts entry is an
+// error naming it.
 //
 // A raw handler's clients see Harden's refusals in the flat shape unless ErrorBody is set.
-func Harden(app *module.App, h http.Handler, o HardenOptions) http.Handler {
-	o = hardenConfig(app, o)
+func Harden(app *module.App, h http.Handler, o HardenOptions) (http.Handler, error) {
+	o, err := hardenConfig(app, o)
+	if err != nil {
+		return nil, err
+	}
+	hosts := map[string]bool{}
+	for _, a := range o.AllowedHosts {
+		if a == "" || strings.TrimSpace(a) != a || strings.ContainsAny(a, "*/\\@?# \t") {
+			return nil, fmt.Errorf("httphost.allowed_hosts: %q is not a host name (no wildcard, scheme, path, user info or space)", a)
+		}
+		hosts[strings.ToLower(a)] = true
+	}
 	if len(o.AllowedHosts) > 0 {
 		o.CheckHost = true
+	}
+	origins := map[string]bool{}
+	for _, a := range o.AllowedOrigins {
+		origins[strings.ToLower(strings.TrimRight(a, "/"))] = true
 	}
 	if len(o.AllowedOrigins) > 0 {
 		o.CheckOrigin = true
@@ -84,15 +112,6 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) http.Handler {
 			apierr.Write(w, status, code, message, nil)
 		}
 	}
-	hosts := map[string]bool{}
-	for _, a := range o.AllowedHosts {
-		hosts[strings.ToLower(a)] = true
-	}
-	origins := map[string]bool{}
-	for _, a := range o.AllowedOrigins {
-		origins[strings.ToLower(strings.TrimRight(a, "/"))] = true
-	}
-	trust := o.TrustForwardedProto
 
 	next := h
 	if o.MaxBodyBytes > 0 {
@@ -121,7 +140,7 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) http.Handler {
 	if o.CheckHost {
 		inner := next
 		next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !hostAllowed(r.Host, hosts) {
+			if !unixConn(r) && !hostAllowed(r.Host, hosts) {
 				o.ErrorBody(w, r, http.StatusForbidden, "host_not_allowed", "the request's Host is not allowed")
 				return
 			}
@@ -129,9 +148,17 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) http.Handler {
 		})
 	}
 	{
-		inner := next
+		inner, trusted := next, o.TrustedProxy
 		next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			inner.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), trustProtoKey{}, trust)))
+			r = r.Clone(r.Context())
+			for _, name := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP"} {
+				r.Header.Del(name)
+			}
+			https := trusted && forwardedHTTPS(r)
+			if !https {
+				r.Header.Del("X-Forwarded-Proto")
+			}
+			inner.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), forwardedHTTPSKey{}, https)))
 		})
 	}
 	logger := o.Logger
@@ -147,23 +174,43 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) http.Handler {
 	if o.AccessLog {
 		next = accessLog(logger, next)
 	}
-	return next
+	return next, nil
 }
 
-type trustProtoKey struct{}
+type forwardedHTTPSKey struct{}
 
-// Scheme is "https" when r arrived over TLS or, under Harden with TrustForwardedProto, when a
-// single X-Forwarded-Proto says https; otherwise "http".
+// Scheme is "https" when r arrived over TLS or, under Harden with TrustedProxy, through a local
+// TLS proxy (one X-Forwarded-Proto: https from a loopback peer); otherwise "http".
 func Scheme(r *http.Request) string {
 	if r.TLS != nil {
 		return "https"
 	}
-	if trust, _ := r.Context().Value(trustProtoKey{}).(bool); trust {
-		if vals := r.Header.Values("X-Forwarded-Proto"); len(vals) == 1 && strings.EqualFold(strings.TrimSpace(vals[0]), "https") {
-			return "https"
-		}
+	if https, _ := r.Context().Value(forwardedHTTPSKey{}).(bool); https {
+		return "https"
 	}
 	return "http"
+}
+
+// forwardedHTTPS is the trusted-proxy rule: exactly one X-Forwarded-Proto, "https", from a
+// loopback peer.
+func forwardedHTTPS(r *http.Request) bool {
+	vals := r.Header.Values("X-Forwarded-Proto")
+	if len(vals) != 1 || !strings.EqualFold(strings.TrimSpace(vals[0]), "https") {
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// unixConn reports whether the request was accepted on a unix-socket listener, from the
+// connection (the server's local address), never from a header.
+func unixConn(r *http.Request) bool {
+	a, _ := r.Context().Value(http.LocalAddrContextKey).(net.Addr)
+	return a != nil && (a.Network() == "unix" || a.Network() == "unixpacket")
 }
 
 // hostAllowed accepts loopback names and addresses and the allowed list (exact host:port, or a
@@ -188,7 +235,8 @@ func hostAllowed(hostport string, allowed map[string]bool) bool {
 }
 
 // originAllowed passes safe methods, a request without Origin, the request's own host and the
-// allowed list. "null" and unparsable origins are refused.
+// allowed list. "null" and unparsable origins are refused. Like identity's same-origin check,
+// the own-host comparison ignores the scheme.
 func originAllowed(r *http.Request, allowed map[string]bool) bool {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead, http.MethodOptions:
@@ -206,26 +254,37 @@ func originAllowed(r *http.Request, allowed map[string]bool) bool {
 	return err == nil && u.Host != "" && strings.EqualFold(u.Host, r.Host)
 }
 
-// hardenConfig fills the zero fields of o from config httphost.*.
-func hardenConfig(app *module.App, o HardenOptions) HardenOptions {
+// hardenKeys are the httphost config keys that turn Handler's hardening on.
+var hardenKeys = []string{"check_host", "allowed_hosts", "check_origin", "allowed_origins", "max_body_bytes", "access_log"}
+
+// hardenConfig fills the zero fields of o from config.
+func hardenConfig(app *module.App, o HardenOptions) (HardenOptions, error) {
 	if app == nil {
-		return o
+		return o, nil
 	}
 	cfg, _ := app.Config["httphost"].(map[string]any)
 	if b, ok := cfg["check_host"].(bool); ok && !o.CheckHost {
 		o.CheckHost = b
 	}
 	if len(o.AllowedHosts) == 0 {
-		o.AllowedHosts = strList(cfg["allowed_hosts"])
+		l, err := strList(cfg, "allowed_hosts")
+		if err != nil {
+			return o, err
+		}
+		o.AllowedHosts = l
 	}
 	if b, ok := cfg["check_origin"].(bool); ok && !o.CheckOrigin {
 		o.CheckOrigin = b
 	}
 	if len(o.AllowedOrigins) == 0 {
-		o.AllowedOrigins = strList(cfg["allowed_origins"])
+		l, err := strList(cfg, "allowed_origins")
+		if err != nil {
+			return o, err
+		}
+		o.AllowedOrigins = l
 	}
-	if b, ok := cfg["trust_forwarded_proto"].(bool); ok && !o.TrustForwardedProto {
-		o.TrustForwardedProto = b
+	if id, _ := app.Config["identity"].(map[string]any); !o.TrustedProxy {
+		o.TrustedProxy, _ = id["trusted_proxy"].(bool)
 	}
 	if n, ok := cfg["max_body_bytes"].(float64); ok && o.MaxBodyBytes == 0 {
 		o.MaxBodyBytes = int64(n)
@@ -233,69 +292,72 @@ func hardenConfig(app *module.App, o HardenOptions) HardenOptions {
 	if b, ok := cfg["access_log"].(bool); ok && !o.AccessLog {
 		o.AccessLog = b
 	}
-	return o
+	return o, nil
 }
 
-// hardenConfigured reports whether any hardening key is set under httphost:.
-func hardenConfigured(app *module.App) bool {
+// hardenConfigured reports whether any hardening key is set under httphost:, and whether
+// max_body_bytes is one of them.
+func hardenConfigured(app *module.App) (on, limit bool) {
 	cfg, _ := app.Config["httphost"].(map[string]any)
-	for _, k := range []string{"check_host", "allowed_hosts", "check_origin", "allowed_origins", "trust_forwarded_proto", "max_body_bytes", "access_log"} {
+	for _, k := range hardenKeys {
 		if _, ok := cfg[k]; ok {
-			return true
+			on = true
 		}
 	}
-	return false
+	_, limit = cfg["max_body_bytes"]
+	return on, limit
 }
 
-func strList(v any) []string {
+func strList(cfg map[string]any, key string) ([]string, error) {
+	raw, ok := cfg[key]
+	if !ok || raw == nil {
+		return nil, nil
+	}
 	var out []string
-	switch l := v.(type) {
+	switch l := raw.(type) {
 	case []any:
 		for _, e := range l {
-			if s, ok := e.(string); ok && s != "" {
-				out = append(out, s)
+			s, ok := e.(string)
+			if !ok {
+				return nil, fmt.Errorf("httphost.%s: entries must be strings, got %T", key, e)
 			}
+			out = append(out, s)
 		}
 	case []string:
 		out = append(out, l...)
+	default:
+		return nil, fmt.Errorf("httphost.%s must be a list, got %T", key, raw)
 	}
-	return out
+	return out, nil
 }
 
-// accessLog writes one line per request. It never logs a header; the query's values are
-// redacted for credential-like names, and the path and query pass through redact.Text.
+// accessLog writes one line per request. It never logs a header or a query value.
 func accessLog(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		lw := &logWriter{ResponseWriter: w}
-		path := safeTarget(r.URL)
+		path, params := safeTarget(r.URL)
 		defer func() {
 			status := lw.status
 			if status == 0 {
 				status = http.StatusOK
 			}
-			logger.Info("http request", "method", r.Method, "path", path,
+			logger.Info("http request", "method", r.Method, "path", path, "params", params,
 				"status", status, "bytes", lw.bytes, "duration_ms", time.Since(start).Milliseconds(), "remote", r.RemoteAddr)
 		}()
 		next.ServeHTTP(lw, r)
 	})
 }
 
-// safeTarget is the path and query with credential-like query values replaced.
-func safeTarget(u *url.URL) string {
-	out := u.EscapedPath()
-	if u.RawQuery != "" {
-		q := u.Query()
-		for k, vs := range q {
-			if redact.SensitiveName(k) {
-				for i := range vs {
-					vs[i] = "[REDACTED]"
-				}
-			}
-		}
-		out += "?" + q.Encode()
+// safeTarget is the path through redact.Text and the sorted query parameter names (no values;
+// a name is itself passed through redact.Text).
+func safeTarget(u *url.URL) (path, params string) {
+	var names []string
+	for k := range u.Query() {
+		names = append(names, redact.Text(k))
 	}
-	return redact.Text(out)
+	slices.Sort(names)
+	return redact.Text(u.EscapedPath()), strings.Join(names, ",")
 }
 
 // logWriter records the status and bytes, and keeps Flush, Hijack and Unwrap working.
