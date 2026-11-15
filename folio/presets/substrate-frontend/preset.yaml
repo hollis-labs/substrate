@@ -8,15 +8,15 @@ layer_only: true
 
 # A LAYER over `substrate-baseline`. It renders the smallest frontend that works against the backend
 # shell: React 19, Vite, Tailwind, app-shell's ManifestShell over the manifest `substrate frontend`
-# generates, a sign-in screen (identity has no UI kit yet, so the identity screens are app-owned and sit in
-# one directory), and one list surface over GET/POST /api/items. It switches the baseline's frontend steps on
+# generates, the default app-owned sign-in screen, and one list surface over GET/POST /api/items.
+# app-chat overlays published kit-identity presentation and its chat domain. It switches frontend steps on
 # (its `with_frontend` input): the manifest names `ui/app.json` and CI builds the UI before the Go tests.
 #
 # Versions: the @hollis-labs kit versions are inputs with NO default, taken from the `kits:` block of the
 # Substrate bom/bom.yaml; the framework does not mirror them into platform-pins.yaml yet (docs/conversion-notes.md,
-# Gap 2). The toolchain packages (react, vite, tailwind, biome, eslint, typescript, base-ui, lucide-react and
+# Remaining boundaries). The toolchain packages (react, vite, tailwind, biome, eslint, typescript, base-ui, lucide-react and
 # @hollis-labs/eslint-config-design) are not in the BOM at all: they are literals copied from the
-# frontend/package.json of hollis-labs/loom at commit e809f2db451f (Gap 5; the framework has no source for them yet).
+# frontend/package.json of hollis-labs/loom at commit e809f2db451f (the framework has no toolchain source for them yet).
 # `npm install` once and commit the lock file; CI runs `npm ci` and fails with that instruction when it is missing.
 
 composes:
