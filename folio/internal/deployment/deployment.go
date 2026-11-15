@@ -5,6 +5,7 @@ package deployment
 import (
 	"bytes"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path"
@@ -136,7 +137,7 @@ func Render(data []byte) (*Result, error) {
 		if filename == "" {
 			continue
 		}
-		tpl, err := template.New(templateName).Funcs(template.FuncMap{"yaml": func(v string) (string, error) { b, e := yaml.Marshal(v); return strings.TrimSpace(string(b)), e }}).ParseFS(templates, "templates/"+templateName)
+		tpl, err := template.New(templateName).Funcs(template.FuncMap{"yaml": func(v string) (string, error) { b, e := json.Marshal(v); return strings.TrimSpace(string(b)), e }}).ParseFS(templates, "templates/"+templateName)
 		if err != nil {
 			return nil, err
 		}

@@ -84,7 +84,7 @@ func TestToolPresets_ServiceDescriptorsAgree(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := readText(t, filepath.Join(dir, "svc-two.cerberus.yaml"))
-	for _, s := range []string{"kind: cerberus-project/v1", "owner: svc-two", "id: svc-two", "run_from: workspace", "supervisor: auto", "port: 18222", "url: http://127.0.0.1:18222/healthz", "- ~/.local/bin/svc-two"} {
+	for _, s := range []string{"kind: cerberus-project/v1", "owner: svc-two", "id: svc-two", "run_from: workspace", "supervisor: auto", "port: 18222", "url: http://127.0.0.1:18222/healthz", `- "~/.local/bin/svc-two"`} {
 		if !strings.Contains(c, s) {
 			t.Errorf("cerberus manifest missing %q", s)
 		}
@@ -95,7 +95,7 @@ func TestToolPresets_ServiceDescriptorsAgree(t *testing.T) {
 		}
 	}
 	d := readText(t, filepath.Join(dir, "deploy.yaml"))
-	for _, s := range []string{"schema: fleet-deploy/v1", "path: ~/.local/bin/svc-two", "via: cerberus", "resource: svc-two", "http://127.0.0.1:18222/healthz"} {
+	for _, s := range []string{"schema: fleet-deploy/v1", `path: "~/.local/bin/svc-two"`, "via: cerberus", "resource: svc-two", "http://127.0.0.1:18222/healthz"} {
 		if !strings.Contains(d, s) {
 			t.Errorf("deploy.yaml missing %q", s)
 		}

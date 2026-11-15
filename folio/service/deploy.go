@@ -41,6 +41,13 @@ func (s *Service) RenderDeploy(opts DeployOptions) (DeployResult, error) {
 		return result, err
 	}
 	defer root.Close()
+	descriptorInfo, err := root.Lstat("project.yaml")
+	if err != nil {
+		return result, err
+	}
+	if !descriptorInfo.Mode().IsRegular() {
+		return result, fmt.Errorf("project.yaml must be a regular authored file, not a symlink")
+	}
 	authored, err := root.ReadFile("project.yaml")
 	if err != nil {
 		return result, err
@@ -72,6 +79,9 @@ func (s *Service) RenderDeploy(opts DeployOptions) (DeployResult, error) {
 	before := map[string][]byte{}
 	conflict := false
 	for _, name := range slices.Sorted(maps.Keys(projection.Files)) {
+		if info, statErr := root.Lstat(name); statErr == nil && os.SameFile(descriptorInfo, info) {
+			return result, fmt.Errorf("deployment output %s aliases project.yaml", name)
+		}
 		data := projection.Files[name]
 		prior, readErr := root.ReadFile(name)
 		if readErr != nil && !errors.Is(readErr, fs.ErrNotExist) {

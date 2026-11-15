@@ -105,3 +105,82 @@ func TestDeploymentRefusesAuthoredConflictsAndInvalidRuntime(t *testing.T) {
 		t.Fatalf("invalid port accepted: %v", err)
 	}
 }
+
+func TestDeploymentQuotesMultilineNames(t *testing.T) {
+	dir, err := renderTool(t, "substrate-service", "multiline", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(dir, "project.yaml")
+	data, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var authored map[string]any
+	if err = yaml.Unmarshal(data, &authored); err != nil {
+		t.Fatal(err)
+	}
+	authored["name"] = "First\nSecond"
+	data, err = yaml.Marshal(authored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(file, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := newGoLibService(t).RenderDeploy(service.DeployOptions{TargetDir: dir, Write: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range result.Files {
+		var parsed map[string]any
+		if parseErr := yaml.Unmarshal(f.Content, &parsed); parseErr != nil {
+			t.Fatalf("%s: %v", f.Path, parseErr)
+		}
+		if strings.HasSuffix(f.Path, ".cerberus.yaml") {
+			project := parsed["project"].(map[string]any)
+			if project["name"] != authored["name"] {
+				t.Fatalf("name changed: %v", project["name"])
+			}
+		}
+	}
+}
+
+func TestDeploymentRefusesDescriptorOutputAliases(t *testing.T) {
+	for _, link := range []string{"symlink", "hardlink"} {
+		t.Run(link, func(t *testing.T) {
+			dir, err := renderTool(t, "substrate-service", "alias", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			descriptor := filepath.Join(dir, "project.yaml")
+			output := filepath.Join(dir, "deploy.yaml")
+			authored, err := os.ReadFile(descriptor)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = os.Remove(output); err != nil {
+				t.Fatal(err)
+			}
+			if link == "symlink" {
+				if err = os.Rename(descriptor, output); err != nil {
+					t.Fatal(err)
+				}
+				err = os.Symlink("deploy.yaml", descriptor)
+			} else {
+				err = os.Link(descriptor, output)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = newGoLibService(t).RenderDeploy(service.DeployOptions{TargetDir: dir, Write: true, Overwrite: true})
+			if err == nil {
+				t.Fatal("descriptor/output alias accepted")
+			}
+			preserved, readErr := os.ReadFile(descriptor)
+			if readErr != nil || !bytes.Equal(authored, preserved) {
+				t.Fatal("authored descriptor changed")
+			}
+		})
+	}
+}
