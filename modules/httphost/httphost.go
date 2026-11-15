@@ -33,8 +33,11 @@
 // header. GET and HEAD to such a path still reach the SPA, so a browser can load a client route
 // that shares its path with, say, a POST endpoint.
 //
-// An app with no UI whose clients expect its own error envelope sets Options.NotFound (NotFoundFlat
-// is the framework's flat 404). The SPA is then not installed: every request outside /api/ that no
+// A service (variant: service; the builder writes config httphost.fallback: not_found for it)
+// has no SPA: with Assets nil, an unknown path answers 404 not_found and a wrong method 405
+// method_not_allowed, flat (NotFoundFlat). fallback: spa keeps the placeholder; an app-host
+// defaults to spa. An app with no UI whose clients expect its own error envelope sets
+// Options.NotFound, which wins over the config. The SPA is then not installed: every request outside /api/ that no
 // route or mount matches reaches NotFound, raw, and so does a wrong method on a method-specific
 // path, GET included, with the Allow header already set so NotFound can answer 405 in its own
 // shape. Unknown paths under /api/ stay with Options.Routes.
@@ -90,11 +93,12 @@ type Options struct {
 	// equal to a mount's path makes that mount raw. Refused otherwise, naming the prefix.
 	// The guard and the framework's own refusals stay flat.
 	RawPrefixes []string
-	// NotFound, when set, replaces the SPA: it answers, raw and unguarded, every request outside
+	// NotFound, when set, replaces the SPA (and config httphost.fallback): it answers, raw and unguarded, every request outside
 	// /api/ that no route or mount matches, and a wrong method on a method-specific path (with
 	// the Allow header already set; answer 405 when it is present). For an app with no UI whose
 	// clients expect its own error envelope; NotFoundFlat is the flat 404. Refused with Assets.
-	// Nil (the default) keeps the SPA (see the package comment).
+	// It runs unguarded, so it must answer refusals only and never serve data. Nil follows
+	// config httphost.fallback (see the package comment).
 	NotFound http.Handler
 }
 
@@ -130,6 +134,16 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	}
 	if o.NotFound != nil && o.Assets != nil {
 		return nil, fmt.Errorf("httphost: NotFound replaces the SPA; set it or Assets, not both")
+	}
+	if o.NotFound == nil && o.Assets == nil {
+		cfg, _ := app.Config["httphost"].(map[string]any)
+		switch v, _ := cfg["fallback"].(string); v {
+		case "", "spa":
+		case "not_found":
+			o.NotFound = NotFoundFlat
+		default:
+			return nil, fmt.Errorf("httphost: fallback %q is not spa or not_found", v)
+		}
 	}
 	api := http.NewServeMux()
 	if o.Routes != nil {
