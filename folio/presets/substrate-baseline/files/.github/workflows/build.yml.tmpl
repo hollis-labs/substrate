@@ -1,6 +1,6 @@
 name: {{ .inputs.repo_name }} build
 # Publishes the release tarballs (workflow artifacts only: no tag, no release, no install) that
-# `fleet-install` reads; deploy.yaml rides inside the linux/amd64 one.
+# `fleet-install` reads; deployment descriptors ride inside the selected target tarball.
 on:
   push: { branches: [main] }
   pull_request: { branches: [main] }
@@ -11,6 +11,7 @@ jobs:
     uses: hollis-labs/tools/.github/workflows/go-app-build.yml@{{ .inputs.build_workflow_ref }}
     with:
       working_directory: {{ .inputs.repository_location }}
+      targets: '["{{ .inputs.target_os }}/{{ .inputs.target_arch }}"]'
       app: {{ .inputs.repo_name }}
       main_pkg: ./cmd/{{ .inputs.repo_name }}
 {{- if .inputs.with_frontend }}
@@ -18,4 +19,4 @@ jobs:
       ui_cmd: "cd frontend && test -f package-lock.json && npm ci && npm run build"
 {{- end }}
       test_cmd: "go vet ./... && go test -race -count=1 ./..."
-      extra_files: deploy.yaml
+      extra_files: deploy.yaml project.yaml {{ .inputs.repo_name }}.cerberus.yaml

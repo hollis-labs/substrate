@@ -1,7 +1,10 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/spf13/pflag"
@@ -14,6 +17,7 @@ func TestPlan(t *testing.T) {
 		args []string
 	}{
 		{[]string{"serve"}},
+		{[]string{"serve", "--managed", "--addr", "127.0.0.1:8089"}},
 		{[]string{"identity", "setup", "--username", "owner"}},
 		{[]string{"identity", "key", "create", "--name", "x"}},
 	}
@@ -51,4 +55,32 @@ func TestRootHasNoValueFlags(t *testing.T) {
 	}
 	root.PersistentFlags().VisitAll(check)
 	root.Flags().VisitAll(check)
+}
+
+func TestXDGConfigCannotDisableClass1Auth(t *testing.T) {
+	t.Setenv("SUBSTRATE_CONFIG", "")
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(dataDirEnv, t.TempDir())
+	dir := filepath.Join(configHome, substrateApp)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte("auth: {mode: off}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restore, err := useConfigFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restore()
+	started, err := start(t.Context(), plan([]string{"serve", "--managed"}))
+	if err == nil {
+		_ = started.Stop(t.Context())
+		t.Fatal("class1 auth downgrade accepted")
+	}
+	if !strings.Contains(err.Error(), "require auth.mode enforce") {
+		t.Fatalf("unexpected refusal: %v", err)
+	}
 }

@@ -27,10 +27,18 @@ The owner is created offline, never over HTTP (see `docs/identity-bootstrap.md`)
 For automation only, `identity setup` also reads the password from the first line of stdin when stdin is
 not a terminal; take it from your secret store, never from a shell variable or the command line.
 
-Settings are keys in the YAML file named by `SUBSTRATE_CONFIG` (for example `httphost.addr`); the only
-environment variable the app reads is `{{ upper (replace "-" "_" .inputs.repo_name) }}_DATA_DIR`.
+Operator config comes from `SUBSTRATE_CONFIG` or `$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml`
+(fallback `~/.config/{{ .inputs.repo_name }}/config.yaml`). Data and state use XDG paths; see `docs/runbook.md`.
 
 ## Checks
 
 `go vet ./...`, `go test -race ./...`, `golangci-lint run`, `substrate pins check --app .` and
 `substrate scan-public --ref HEAD` (CI runs all of them).
+
+## Operating this class 1 app
+
+`project.yaml` declares the agentic profile, its own identity, owner/operator and runtime target.
+Follow `docs/runbook.md` for bootstrap, descriptor regeneration, fleet-install/Cerberus supervision,
+backup and rollback. No source checkout is required at runtime. Every run enforces authentication,
+including loopback and `serve --managed`; config cannot disable it. Public assets/login remain available,
+while API and MCP access requires the app's verified identity and scopes.

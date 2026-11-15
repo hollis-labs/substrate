@@ -60,13 +60,35 @@ inputs:
   - name: http_port
     type: string
     default: "8080"
-    pattern: "^[0-9]{2,5}$"
+    pattern: "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
     description: Loopback port written into the manifest's httphost.addr (an operator overrides it in the SUBSTRATE_CONFIG file)
+  - name: owner
+    type: string
+    default: "user:owner"
+    pattern: "^(user|agency|agent):[a-z0-9][a-z0-9._-]*$"
+    description: Project owner reference; replace the placeholder
+  - name: operator
+    type: string
+    default: "user:operator"
+    pattern: "^(user|agency|agent):[a-z0-9][a-z0-9._-]*$"
+    description: Named class 1 operator; replace the placeholder
+  - name: target_os
+    type: string
+    default: linux
+    pattern: "^(linux|darwin)$"
+  - name: target_arch
+    type: string
+    default: amd64
+    pattern: "^(amd64|arm64)$"
+  - name: deploy_host
+    type: string
+    default: fleet-host
+    pattern: "^[a-z][a-z0-9-]*$"
   - name: build_workflow_ref
     type: string
-    default: 145fb50d827a1af7e38236eda5751cee22970ba5
+    default: 7aeb3f65de07c0c41cb0e59a1d6f8300fa3381bc
     pattern: "^[0-9a-f]{40}$"
-    description: Commit of hollis-labs/tools whose reusable go-app-build.yml the build workflow calls (pinned by commit, as the ported apps do)
+    description: Commit of hollis-labs/tools whose reusable go-app-build.yml supports the version input used by releases (pinned by commit)
 
 computed:
   env_prefix: '{{ upper (replace "-" "_" .inputs.repo_name) }}'
@@ -88,4 +110,6 @@ sync:
     - glob: "internal/**"
       policy: skip
     - glob: "cmd/**"
+      policy: skip
+    - glob: "project.yaml"
       policy: skip

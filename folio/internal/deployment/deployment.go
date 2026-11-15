@@ -22,13 +22,14 @@ var templates embed.FS
 // Runtime is Folio's temporary projection inside project/1's extensible settings.
 // Credentials are never accepted here: EnvFile is an operator-owned reference.
 type Runtime struct {
-	OS          string `yaml:"target_os"`
-	Arch        string `yaml:"target_arch"`
-	Host        string `yaml:"host"`
-	Port        int    `yaml:"http_port,omitempty"`
-	Link        string `yaml:"binary_link"`
-	InstallRoot string `yaml:"install_root"`
-	EnvFile     string `yaml:"env_file,omitempty"`
+	OS             string `yaml:"target_os"`
+	Arch           string `yaml:"target_arch"`
+	Host           string `yaml:"host"`
+	Port           int    `yaml:"http_port,omitempty"`
+	Link           string `yaml:"binary_link"`
+	InstallRoot    string `yaml:"install_root"`
+	BackupDatabase string `yaml:"backup_database,omitempty"`
+	EnvFile        string `yaml:"env_file,omitempty"`
 }
 
 type Project struct {
@@ -119,8 +120,8 @@ func Render(data []byte) (*Result, error) {
 	if service && (r.Port < 1 || r.Port > 65535) {
 		return nil, fmt.Errorf("runtime.http_port must be 1..65535")
 	}
-	for key, value := range map[string]string{"binary_link": r.Link, "install_root": r.InstallRoot, "env_file": r.EnvFile} {
-		if key == "env_file" && value == "" {
+	for key, value := range map[string]string{"binary_link": r.Link, "install_root": r.InstallRoot, "env_file": r.EnvFile, "backup_database": r.BackupDatabase} {
+		if (key == "env_file" || key == "backup_database") && value == "" {
 			continue
 		}
 		if (!strings.HasPrefix(value, "/") && !strings.HasPrefix(value, "~/")) || strings.ContainsAny(value, "\r\n\x00") || path.Clean(value) != value {

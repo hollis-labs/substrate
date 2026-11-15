@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,8 +15,8 @@ import (
 	"{{ .computed.module_path }}/internal/storage"
 )
 
-// dataDirEnv overrides the data directory. It is the one environment variable the app reads;
-// every other setting is a key in the file named by SUBSTRATE_CONFIG.
+// dataDirEnv overrides persistent application data. Operator config comes from
+// SUBSTRATE_CONFIG or the optional XDG config file; secret state uses XDG_STATE_HOME.
 const dataDirEnv = "{{ .computed.env_prefix }}_DATA_DIR"
 
 // dataDir is where the database, the identity signing key and the secrets state live: the
@@ -65,8 +66,8 @@ func plan(args []string) runPlan {
 	}
 	switch {
 	case len(words) > 0 && words[0] == "serve":
-		// serve takes no flag and no argument, so `serve --typo` and `serve extra` are not a serve: cobra rejects them and nothing is created.
-		if len(args) == 1 {
+		cmd := serveCmd(context.Background(), nil)
+		if err := cmd.ParseFlags(args[1:]); err == nil && len(cmd.Flags().Args()) == 0 {
 			return runPlan{modules: substrateModules, prepare: true}
 		}
 	case len(words) > 1 && words[0] == "identity" && (words[1] == "setup" || (words[1] == "key" && len(words) > 2 && words[2] == "create")):
@@ -96,14 +97,30 @@ func start(ctx context.Context, pl runPlan) (*boot.Running, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, err
-		}
 		database.UseMigrationFS(storage.Migrations())
 		opts.AfterConfig = func(_ context.Context, app *module.App) error {
+			cfg, _ := app.Config["auth"].(map[string]any)
+			if cfg["mode"] != "enforce" {
+				return fmt.Errorf("class 1 applications require auth.mode enforce")
+			}
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				return err
+			}
+			state := os.Getenv("XDG_STATE_HOME")
+			if state == "" {
+				home, err := os.UserHomeDir()
+				if err != nil {
+					return err
+				}
+				state = filepath.Join(home, ".local", "state")
+			}
+			state, err := filepath.Abs(filepath.Join(state, substrateApp))
+			if err != nil {
+				return err
+			}
 			place(app, dir, "database", "sqlite", "path")
 			place(app, dir, "identity", "key_file")
-			place(app, dir, "secrets", "state_dir")
+			place(app, state, "secrets", "state_dir")
 			return nil
 		}
 	}

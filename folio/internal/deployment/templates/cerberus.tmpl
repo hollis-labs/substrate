@@ -19,9 +19,8 @@ resources:
         - --addr
         - 127.0.0.1:{{ .Runtime.Port }}
       mode: os_service
-      # enforce needs {{ .EnvPrefix }}_TOKEN at start, and the token is never committed. Supply it with a
-      # Cerberus secret reference or an owner-only env file outside this repository (README, Auth), e.g.:
-      #   env_file: /absolute/path/to/{{ .ID }}.env
+      # Credentials come from operator config or the app's own identity provider.
+      # env_file, when set, is a reference to an owner-only file outside the repository.
 {{- if .Runtime.EnvFile }}
       env_file: {{ .Runtime.EnvFile | yaml }}
 {{- end }}

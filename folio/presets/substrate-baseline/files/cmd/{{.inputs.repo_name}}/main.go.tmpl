@@ -27,6 +27,11 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	restore, err := useConfigFile()
+	if err != nil {
+		return err
+	}
+	defer restore()
 	args := os.Args[1:]
 	started, err := start(ctx, plan(args))
 	if err != nil {

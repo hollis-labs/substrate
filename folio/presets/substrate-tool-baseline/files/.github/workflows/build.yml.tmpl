@@ -16,4 +16,4 @@ jobs:
       targets: '["{{ .inputs.target_os }}/{{ .inputs.target_arch }}"]'
       main_pkg: ./cmd/{{ .inputs.repo_name }}
       test_cmd: "go vet ./... && go test -race -count=1 ./..."
-      extra_files: deploy.yaml project.yaml
+      extra_files: deploy.yaml project.yaml{{ if eq .inputs.tool_kind "service" }} {{ .inputs.repo_name }}.cerberus.yaml{{ end }}

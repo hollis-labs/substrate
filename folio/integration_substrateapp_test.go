@@ -91,7 +91,11 @@ func TestSubstrateApp_RendersTree(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(target, path)
 		s := string(b)
-		if strings.Contains(s, "<no value>") || (!strings.HasSuffix(rel, "check.yml") && !strings.HasSuffix(rel, "build.yml") && strings.Contains(s, "{{")) {
+		templateText := s
+		if strings.HasPrefix(filepath.ToSlash(rel), ".github/workflows/") {
+			templateText = regexp.MustCompile(`\$\{\{[^{}]*\}\}`).ReplaceAllString(s, "")
+		}
+		if strings.Contains(templateText, "<no value>") || strings.Contains(templateText, "{{") {
 			t.Errorf("%s has unresolved template text", rel)
 		}
 		for _, banned := range []string{"chimera", "go-webui", "myapp.example.com"} {
@@ -213,19 +217,31 @@ func driveSubstrateBinary(t *testing.T, bin, name, port string) {
 		t.Fatal(err)
 	}
 	prefix := strings.ToUpper(strings.ReplaceAll(name, "-", "_"))
-	env := append(os.Environ(), prefix+"_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg)
+	env := append(os.Environ(), prefix+"_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg, "XDG_STATE_HOME="+t.TempDir())
 	cred := randomHex(t) // generated per run: no literal credential in the tree
 
 	setup := exec.Command(bin, "identity", "setup", "--username", "owner", "--display-name", "Owner")
 	setup.Env, setup.Stdin = env, strings.NewReader(cred+"\n")
+	setup.Dir = data
 	if out, err := setup.CombinedOutput(); err != nil {
 		t.Fatalf("identity setup: %v\n%s", err, out)
 	}
 
+	keyFile := filepath.Join(data, "mcp.key")
+	issue := exec.Command(bin, "identity", "key", "create", "--name", "mcp-smoke", "--scope", name+".mcp", "--out", keyFile)
+	issue.Env, issue.Dir = env, data
+	if out, issueErr := issue.CombinedOutput(); issueErr != nil {
+		t.Fatalf("issue scoped MCP key: %v\n%s", issueErr, out)
+	}
+	key, keyErr := os.ReadFile(keyFile)
+	if keyErr != nil {
+		t.Fatal(keyErr)
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	srv := exec.CommandContext(ctx, bin, "serve")
-	srv.Env = env
+	srv := exec.CommandContext(ctx, bin, "serve", "--managed", "--addr", "127.0.0.1:"+port)
+	srv.Env, srv.Dir = env, data
 	stderr, _ := srv.StderrPipe()
 	var logBuf bytes.Buffer
 	if err := srv.Start(); err != nil {
@@ -281,6 +297,40 @@ func driveSubstrateBinary(t *testing.T, bin, name, port string) {
 	}
 	if code, _ := do("GET", "/api/items", "", nil); code != http.StatusUnauthorized {
 		t.Errorf("signed-out GET /api/items = %d, want 401", code)
+	}
+	if code, _ := do("POST", "/mcp", `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, map[string]string{"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}); code != http.StatusUnauthorized {
+		t.Errorf("anonymous MCP = %d, want 401", code)
+	}
+	// A separate client has no owner session cookie: the app-issued endpoint key
+	// must authenticate both initialize and tools/list by itself.
+	mcpClient := &http.Client{Timeout: 10 * time.Second}
+	session := ""
+	for _, message := range []string{
+		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-03-26","capabilities":{},"clientInfo":{"name":"folio-test","version":"1"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`,
+	} {
+		req, reqErr := http.NewRequest("POST", base+"/mcp", strings.NewReader(message))
+		if reqErr != nil {
+			t.Fatal(reqErr)
+		}
+		req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(string(key)))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Accept", "application/json, text/event-stream")
+		if session != "" {
+			req.Header.Set("Mcp-Session-Id", session)
+		}
+		resp, callErr := mcpClient.Do(req)
+		if callErr != nil {
+			t.Fatal(callErr)
+		}
+		body, readErr := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if readErr != nil || resp.StatusCode != http.StatusOK || !strings.Contains(string(body), `"result"`) {
+			t.Fatalf("scoped MCP initialization/list: status %d, %s, %v", resp.StatusCode, body, readErr)
+		}
+		if id := resp.Header.Get("Mcp-Session-Id"); id != "" {
+			session = id
+		}
 	}
 	if code, body := do("POST", "/api/login", `{"username":"owner","password":"`+cred+`"}`, csrf); code != 200 {
 		t.Fatalf("login = %d %s", code, body)
@@ -577,7 +627,7 @@ func serveAndFetchSPA(t *testing.T, bin, name, port string) {
 	if err := os.WriteFile(cfg, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := append(os.Environ(), "WEBBY_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg)
+	env := append(os.Environ(), "WEBBY_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg, "XDG_STATE_HOME="+t.TempDir())
 	setup := exec.Command(bin, "identity", "setup", "--username", "owner")
 	setup.Env, setup.Stdin = env, strings.NewReader(randomHex(t)+"\n")
 	if out, err := setup.CombinedOutput(); err != nil {
