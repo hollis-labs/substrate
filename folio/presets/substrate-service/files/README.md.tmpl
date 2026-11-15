@@ -31,3 +31,9 @@ cerberus resource apply {{ .inputs.repo_name }} --ack
 ## Auth
 
 Default `{{ .inputs.auth }}`. `enforce` needs a bearer token in `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN`. `{{ upper (replace "-" "_" .inputs.repo_name) }}_AUTH=loopback_open` is for development on a loopback bind only; the service refuses to start otherwise. `/healthz` names the active mode.
+
+## After a deploy
+
+`deploy.yaml` restarts through Cerberus (`restart: {via: cerberus, resource: {{ .inputs.repo_name }}}`). fleet-install runs that restart itself only when the step has `run: true` and the deploy is run by the local user on that host; otherwise it prints a request for a human to approve and the deploy stays pending until `--restart-done`.
+
+Health 200 is not proof of the new build: the manifest must keep `command[0]` on the fleet-installed path, otherwise Cerberus can restart an older copy. After a deploy check that the running executable is the new version (`readlink /proc/<pid>/exe`, or `health.version_json`).

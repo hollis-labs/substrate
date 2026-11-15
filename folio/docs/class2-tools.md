@@ -37,6 +37,7 @@ The optional `mcp` subcommand, the registry registration hook, Folio's own `proj
 
 - `project.yaml` "rendered from" is one-shot: re-render after a descriptor edit is not possible, so a drift test replaces it.
 - `fleet-install` needs `--target` when the host alias is a placeholder; dry-run with a tarball works offline.
+- Restart cost (Substrate manager, fleet-install spec): `via: cerberus` needs `resource`; fleet-install runs it itself only with `run: true` as the local user, else it prints a human request and the deploy stays pending until `--restart-done`. A Cerberus unit without the fleet-install `command[0]` could restart an old copy with health still 200; verify the running executable after a deploy. Verb and resource id on live Cerberus still to be confirmed with the Mig Cerberus Lead.
 - `deploy.yaml` `restart: {via: cerberus, resource: ...}` is accepted by the installed `fleet-install` (it prints a
   request for a human to run `cerberus resource reload <id> --ack`); the Substrate manager should confirm this is the intended shape.
 - `substrate pins sync --app` is not in tag v0.1.0; the tests use a pseudo-version.
