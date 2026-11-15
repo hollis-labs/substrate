@@ -17,7 +17,7 @@ func TestRepositoryGenerationAndInspection(t *testing.T) {
 	svc := newGoLibService(t)
 	target := filepath.Join(root, "sample")
 	opts := service.NewOptions{PresetID: "substrate-service", TargetDir: target, RepositoryRoot: root,
-		Inputs: map[string]any{"repo_name": "sample", "substrate_version": "v0.1.1-0.20261115140033-66978e9d84cd"}}
+		Inputs: map[string]any{"repo_name": "sample", "repository_name": "tools", "substrate_version": "v0.1.1-0.20261115140033-66978e9d84cd"}}
 	plan, err := svc.Plan(opts)
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +98,7 @@ func TestRepositoryRefusesCollisionAndEscape(t *testing.T) {
 	if err := os.WriteFile(collision, []byte("authored workflow\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	opts := service.NewOptions{PresetID: "go-lib", TargetDir: filepath.Join(root, "sample"), RepositoryRoot: root, Inputs: map[string]any{"repo_name": "sample", "package_name": "sample"}}
+	opts := service.NewOptions{PresetID: "go-lib", TargetDir: filepath.Join(root, "sample"), RepositoryRoot: root, Inputs: map[string]any{"repo_name": "sample", "repository_name": "tools", "package_name": "sample"}}
 	svc := newGoLibService(t)
 	if _, err := svc.New(opts); err == nil || !strings.Contains(err.Error(), "create repository workflow") {
 		t.Fatalf("workflow collision did not reach exclusive creation: %v", err)
