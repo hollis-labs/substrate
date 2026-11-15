@@ -23,7 +23,9 @@ type (
 type Service struct {
 	read  Reader
 	write Writer
-}
+{{ if .inputs.with_chat }}
+	responder Responder
+{{ end }}}
 
 // New builds the service. The composition root (cmd/{{ .inputs.repo_name }}) is the only caller that opens the store.
 func New(read Reader, write Writer) *Service { return &Service{read: read, write: write} }

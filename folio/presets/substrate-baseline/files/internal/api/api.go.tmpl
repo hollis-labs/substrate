@@ -26,10 +26,12 @@ type Route struct{ Method, Pattern, Scope string }
 
 // Routes lists every route with its scope. A route missing here is refused in enforce mode.
 func Routes() []Route {
-	return []Route{
+	routes := []Route{
 		{http.MethodGet, "/api/items", ScopeRead},
 		{http.MethodPost, "/api/items", ScopeWrite},
 	}
+{{ if .inputs.with_chat }}	routes = append(routes, chatRoutes()...)
+{{ end }}	return routes
 }
 
 // RegisterScopes declares the scope of every route on the guard's table.
@@ -56,7 +58,8 @@ func (h *Handler) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/items", h.list)
 	mux.HandleFunc("POST /api/items", h.create)
-	return mux
+{{ if .inputs.with_chat }}	h.registerChat(mux)
+{{ end }}	return mux
 }
 
 // owner is the verified principal's subject: the data owner of a row is never a request field.

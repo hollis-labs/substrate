@@ -209,7 +209,7 @@ func TestSubstrateApp_BuildsAndRuns(t *testing.T) {
 
 // driveSubstrateBinary runs the real binary on a throwaway data directory: offline owner creation,
 // setup closed over HTTP, sign-in, a write, a read, refused requests, SIGTERM.
-func driveSubstrateBinary(t *testing.T, bin, name, port string) {
+func driveSubstrateBinary(t *testing.T, bin, name, port string, checks ...func(*http.Client, string)) {
 	t.Helper()
 	data := t.TempDir()
 	cfg := filepath.Join(data, "override.yaml") // an empty override: the manifest's defaults rule
@@ -350,6 +350,10 @@ func driveSubstrateBinary(t *testing.T, bin, name, port string) {
 	}
 	if code, _ := do("GET", "/healthz", "", map[string]string{"Host": "evil.example"}); code != http.StatusForbidden {
 		t.Errorf("unknown Host = %d, want 403", code)
+	}
+
+	for _, check := range checks {
+		check(client, base)
 	}
 
 	if err := srv.Process.Signal(syscall.SIGTERM); err != nil {
@@ -627,7 +631,7 @@ func serveAndFetchSPA(t *testing.T, bin, name, port string) {
 	if err := os.WriteFile(cfg, []byte("{}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	env := append(os.Environ(), "WEBBY_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg, "XDG_STATE_HOME="+t.TempDir())
+	env := append(os.Environ(), strings.ToUpper(strings.ReplaceAll(name, "-", "_"))+"_DATA_DIR="+data, "SUBSTRATE_CONFIG="+cfg, "XDG_STATE_HOME="+t.TempDir())
 	setup := exec.Command(bin, "identity", "setup", "--username", "owner")
 	setup.Env, setup.Stdin = env, strings.NewReader(randomHex(t)+"\n")
 	if out, err := setup.CombinedOutput(); err != nil {
