@@ -203,6 +203,11 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    response (status, headers, body, streams) then passes untouched. The guard's and the scope table's refusals,
    `route_not_mapped` included, still answer flat, so a client sees the upstream dialect for upstream errors and the
    framework shape for framework refusals. Do not use it for the app's own API: the frontend reads the flat shape.
+   **Unknown paths without a UI.** By default a path no route or mount matches loads the SPA (the placeholder page
+   when there are no assets), 200 HTML. A service whose clients expect its own error envelope sets
+   `httphost.Options{NotFound: h}` (`httphost.NotFoundFlat` for the flat 404): it then answers every unmatched path
+   outside `/api/`, raw, and a wrong method on a method-specific mount with `Allow` set (answer 405 when it is). A wrong
+   method other than GET or HEAD on a method-specific path is 405, never the SPA, in either case.
 5. The data owner of a row is the verified principal subject from the request context, never a request field.
 6. Keep stored secrets behind the `secrets` module's resolver. Never return a secret, a secret reference, a hash or a
    session value from any API.
