@@ -23,6 +23,24 @@
 // The guard, the scope table and every other refusal by the framework for that path still
 // answer in the flat shape, so a client sees the upstream dialect for upstream errors and the
 // framework shape for framework refusals. Do not use it for an app's own API.
+//
+// # Unknown paths and wrong methods
+//
+// A request that no route or mount matches falls to the SPA at "/" (the placeholder page when
+// Assets is nil or not built), so a client-side route works on reload. A request whose path a
+// method-specific mount, module route or /healthz serves but whose method none of them accepts
+// does not fall to the SPA: it is answered 405 method_not_allowed in the flat body with an Allow
+// header. GET and HEAD to such a path still reach the SPA, so a browser can load a client route
+// that shares its path with, say, a POST endpoint.
+//
+// A service (variant: service; the builder writes config httphost.fallback: not_found for it)
+// has no SPA: with Assets nil, an unknown path answers 404 not_found and a wrong method 405
+// method_not_allowed, flat (NotFoundFlat). fallback: spa keeps the placeholder; an app-host
+// defaults to spa. An app with no UI whose clients expect its own error envelope sets
+// Options.NotFound, which wins over the config. The SPA is then not installed: every request outside /api/ that no
+// route or mount matches reaches NotFound, raw, and so does a wrong method on a method-specific
+// path, GET included, with the Allow header already set so NotFound can answer 405 in its own
+// shape. Unknown paths under /api/ stay with Options.Routes.
 package httphost
 
 import (
@@ -33,6 +51,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -74,7 +93,24 @@ type Options struct {
 	// equal to a mount's path makes that mount raw. Refused otherwise, naming the prefix.
 	// The guard and the framework's own refusals stay flat.
 	RawPrefixes []string
+	// NotFound, when set, replaces the SPA (and config httphost.fallback): it answers, raw and unguarded, every request outside
+	// /api/ that no route or mount matches, and a wrong method on a method-specific path (with
+	// the Allow header already set; answer 405 when it is present). For an app with no UI whose
+	// clients expect its own error envelope; NotFoundFlat is the flat 404. Refused with Assets.
+	// It runs unguarded, so it must answer refusals only and never serve data. Nil follows
+	// config httphost.fallback (see the package comment).
+	NotFound http.Handler
 }
+
+// NotFoundFlat answers 404 not_found, or 405 method_not_allowed when the Allow header is set,
+// in the flat error body. Use it as Options.NotFound for an app with no UI.
+var NotFoundFlat http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	if w.Header().Get("Allow") != "" {
+		apierr.Write(w, http.StatusMethodNotAllowed, "method_not_allowed", fmt.Sprintf("method %s is not allowed on %s", r.Method, r.URL.Path), nil)
+		return
+	}
+	apierr.Write(w, http.StatusNotFound, "not_found", fmt.Sprintf("no route for %s", r.URL.Path), nil)
+})
 
 // Mount is an app handler at a net/http mux pattern ("/a2a/" or "GET /.well-known/agent.json").
 // It is guarded by the auth module like /api/ and gets the flat error body, so
@@ -95,6 +131,19 @@ type Mount struct {
 func Handler(app *module.App, o Options) (http.Handler, error) {
 	if err := checkRawPrefixes(app, o); err != nil {
 		return nil, err
+	}
+	if o.NotFound != nil && o.Assets != nil {
+		return nil, fmt.Errorf("httphost: NotFound replaces the SPA; set it or Assets, not both")
+	}
+	if o.NotFound == nil && o.Assets == nil {
+		cfg, _ := app.Config["httphost"].(map[string]any)
+		switch v, _ := cfg["fallback"].(string); v {
+		case "", "spa":
+		case "not_found":
+			o.NotFound = NotFoundFlat
+		default:
+			return nil, fmt.Errorf("httphost: fallback %q is not spa or not_found", v)
+		}
 	}
 	api := http.NewServeMux()
 	if o.Routes != nil {
@@ -149,10 +198,15 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	outer.Handle("GET /healthz", health.From(app).Handler())
+	// rest is "/": only a request no other pattern on outer matched reaches it. probe holds the
+	// method-specific patterns, to tell a wrong method from an unknown path there.
+	rest := &fallback{probe: http.NewServeMux(), notFound: o.NotFound}
+	rest.add("GET /healthz")
 	if len(module.Routes(app)) > 0 {
 		for _, r := range module.Routes(app) {
 			if !strings.HasPrefix(r.Path, "/api/") {
 				outer.Handle(r.Pattern(), outerRoutes)
+				rest.add(r.Pattern())
 			}
 		}
 	}
@@ -173,9 +227,73 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		if err := handle(outer, m.Pattern, hh); err != nil {
 			return nil, err
 		}
+		rest.add(m.Pattern)
 	}
-	outer.Handle("/", h.Handler())
+	if o.NotFound == nil {
+		rest.spa = h.Handler()
+	} else {
+		outer.Handle("/api/", h.Handler())
+	}
+	outer.Handle("/", rest)
 	return outer, nil
+}
+
+// fallback serves "/" on the outer mux. A wrong method on a path a method-specific pattern
+// serves is answered 405 (or by notFound), never by the SPA; GET and HEAD still reach the SPA.
+type fallback struct {
+	probe    *http.ServeMux
+	methods  []string // the methods the probe's patterns use
+	spa      http.Handler
+	notFound http.Handler
+}
+
+// add records a method-specific pattern already registered on outer (so it cannot conflict here).
+func (f *fallback) add(pattern string) {
+	i := strings.IndexByte(pattern, ' ')
+	if i < 0 {
+		return
+	}
+	f.probe.Handle(pattern, http.NotFoundHandler())
+	if m := pattern[:i]; !slices.Contains(f.methods, m) {
+		f.methods = append(f.methods, m)
+	}
+}
+
+// allowed lists the methods the probe accepts for r's path, with HEAD where GET is.
+func (f *fallback) allowed(r *http.Request) []string {
+	var out []string
+	for _, m := range f.methods {
+		r2 := *r
+		r2.Method = m
+		if _, p := f.probe.Handler(&r2); p != "" {
+			out = append(out, m)
+			if m == http.MethodGet && !slices.Contains(f.methods, http.MethodHead) {
+				out = append(out, http.MethodHead)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+func (f *fallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	browse := r.Method == http.MethodGet || r.Method == http.MethodHead
+	if f.spa == nil || !browse {
+		if allow := f.allowed(r); len(allow) > 0 {
+			w.Header().Set("Allow", strings.Join(allow, ", "))
+			if f.notFound != nil {
+				f.notFound.ServeHTTP(w, r)
+				return
+			}
+			apierr.Write(w, http.StatusMethodNotAllowed, "method_not_allowed", fmt.Sprintf("method %s is not allowed on %s", r.Method, r.URL.Path), nil)
+			return
+		}
+	}
+	if f.spa != nil {
+		f.spa.ServeHTTP(w, r)
+		return
+	}
+	f.notFound.ServeHTTP(w, r)
 }
 
 // rawSplit serves a request whose path is raw through the guard with the guard's own refusals
