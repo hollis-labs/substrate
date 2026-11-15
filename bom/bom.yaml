@@ -40,6 +40,7 @@ third_party:
   golang.org/x/crypto: v0.58.0      # password hashing (identity module)
   golang.org/x/term: v0.47.0        # no-echo password prompt (identity offline bootstrap); the version x/crypto requires
   github.com/modelcontextprotocol/go-sdk: v1.8.0   # MCP stdio transport (go-mcp wraps it)
+  golang.org/x/sys: v0.49.0         # unix peer credentials on darwin (httphost.PeerCredentials); the version x/crypto requires
 kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
   "@hollis-labs/design-tokens": 0.5.0
   "@hollis-labs/design-components": 0.5.1

@@ -1,8 +1,8 @@
-//go:build !linux
+//go:build !linux && !darwin
 
 package httphost
 
 import "net"
 
-// readPeerCreds is not implemented off Linux (darwin needs x/sys/unix, not a pinned dependency yet).
+// readPeerCreds is implemented on Linux (SO_PEERCRED) and darwin (LOCAL_PEERCRED).
 func readPeerCreds(net.Conn) (peerCreds, bool) { return peerCreds{}, false }

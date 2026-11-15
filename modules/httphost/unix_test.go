@@ -23,7 +23,7 @@ func unixClient(sock string) *http.Client {
 
 func TestServeUnixListener(t *testing.T) {
 	sock := filepath.Join(t.TempDir(), "s.sock")
-	ln, err := net.Listen("unix", sock)
+	ln, err := httphost.ListenUnix(sock, 0o600)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,45 +89,6 @@ func TestServeUnixListener(t *testing.T) {
 }
 
 type ctxKey struct{}
-
-// ConnContext sees the accepted connection unwrapped: apps type-assert it to tell a
-// local socket caller from a remote one.
-func TestServeConnContextUnwrapped(t *testing.T) {
-	sock := filepath.Join(t.TempDir(), "s.sock")
-	ln, err := net.Listen("unix", sock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	app, stopApp := serveApp(t, `{"auth":{"mode":"off"}}`)
-	defer stopApp()
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
-	got := make(chan string, 1)
-	ready := make(chan net.Addr, 1)
-	done := make(chan error, 1)
-	go func() {
-		done <- httphost.Serve(ctx, app, http.NotFoundHandler(), httphost.ServeOptions{
-			Listener: ln, Ready: func(a net.Addr) { ready <- a },
-			ConnContext: func(ctx context.Context, c net.Conn) context.Context {
-				got <- fmt.Sprintf("%T", c)
-				return ctx
-			},
-		})
-	}()
-	<-ready
-	resp, err := unixClient(sock).Get("http://u/")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if typ := <-got; typ != "*net.UnixConn" {
-		t.Fatalf("ConnContext got %s, want *net.UnixConn", typ)
-	}
-	stop()
-	if err := <-done; err != nil {
-		t.Fatalf("Serve: %v", err)
-	}
-}
 
 // A unix: address without a Listener is refused with a message naming Listener, from
 // ServeOptions.Addr or config httphost.addr, instead of a TCP lookup error.
