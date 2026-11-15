@@ -130,3 +130,23 @@ go vet ./...
 go test ./...
 go run ./cmd/substrate pins check
 ```
+
+### Authored content contracts
+
+`agent/1`, `agency/1`, `skill/1`, `document/1`, `workstream/1` and
+`correlation/1` add retrievable authored definitions. `ParseContentJSON` and
+`ValidateJSON` enforce the same strict shape. Their canonical IDs prefix
+`<kind>:` to the exact native payload ID; punctuation, slashes and case are
+preserved. They are independent of the owning authority. Existence, uniqueness,
+lifecycle and review authorization remain service responsibilities.
+
+Agent bodies and roles are required; launch profiles are versioned references to
+an external authority, with no copied permission schema. Citadel agencies carry
+bounded named cells containing either an inline agent definition or a typed
+reference. These are minimal authored contracts, not an execution engine or a
+claim of a pre-existing normative Citadel schema. Skills retain instructions;
+documents retain Markdown/plain-text bodies and explicit supported subtypes.
+Workstreams retain source identifiers/times independently of storage timestamps.
+Correlation links qualify native IDs by authority and kind; correlation, reply,
+causation and trace identifiers remain distinct. Runtime leases, credentials and
+session execution state are not accepted definition fields.
