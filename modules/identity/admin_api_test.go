@@ -3,6 +3,7 @@ package identity_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/hollis-labs/substrate/modules/identity"
@@ -78,9 +79,10 @@ func TestListKeysMatchesTheKeysRoute(t *testing.T) {
 	for _, k := range body.Keys {
 		route = append(route, k.ID)
 	}
-	want := []string{id1, id3}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
-		t.Fatalf("ListKeys = %v, want %v", got, want)
+	// Keys made in the same second tie on created_at and are then ordered by id, so compare
+	// the set here and the order against the route below.
+	if len(got) != 2 || !slices.Contains(got, id1) || !slices.Contains(got, id3) {
+		t.Fatalf("ListKeys = %v, want %s and %s (not the revoked %s)", got, id1, id3, id2)
 	}
 	if len(route) != len(got) || route[0] != got[0] || route[1] != got[1] {
 		t.Fatalf("route %v differs from ListKeys %v", route, got)
