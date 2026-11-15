@@ -38,7 +38,7 @@ The token never goes in a file of this repository. Under Cerberus an `enforce` s
 
 `deploy.yaml` restarts through Cerberus (`restart: {via: cerberus, resource: {{ .inputs.repo_name }}}`). fleet-install runs that restart itself only when the step has `run: true` and the deploy is run by the local user on that host; otherwise it prints a request for a human to approve and the deploy stays pending until `--restart-done`.
 
-Health 200 is not proof of the new build: the manifest must keep `command[0]` on the fleet-installed path, otherwise Cerberus can restart an older copy. After a deploy check that the running executable is the new version (`readlink /proc/<pid>/exe`). deploy.yaml has no `health.version_json`: this service's `/healthz` does not report a version, so the check would always fail; add the key once the service exposes one.
+Health 200 is not proof of the new build: the manifest must keep `command[0]` on the fleet-installed path, otherwise Cerberus can restart an older copy. After a deploy check that the running executable is the new version (on Linux, `readlink /proc/<pid>/exe`; on macOS, inspect the running executable with `lsof -p <pid>` and compare it with the fleet-installed binary). deploy.yaml has no `health.version_json`: this service's `/healthz` does not report a version, so the check would always fail; add the key once the service exposes one.
 
 ## Installed configuration
 
