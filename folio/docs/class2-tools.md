@@ -17,12 +17,21 @@ Inputs: `repo_name`, `substrate_version` (no default; from the Substrate BOM), `
 
 ## Single source
 
-`project.yaml`, `deploy.yaml` and the Cerberus manifest are rendered once, from the same inputs. Folio does not
-re-render `project.yaml` (sync policy `skip`), so later edits can diverge; `internal/descriptor` tests, run by CI,
-fail on divergence of: project id / Cerberus owner / project id; Cerberus `command[0]` / `deploy.yaml` symlink path;
-Cerberus `port`, `url`, `health_check.url` / `deploy.yaml` `health.url` / `substrate.yaml` `httphost.addr`;
-`restart.resource` / Cerberus resource id; declared auth / `authmode.Default`. It also forbids `build_strategy` and
-`artifact_path` in the manifest (Option B: they would overwrite the fleet-install link).
+`project.yaml` is authored once. Its Folio-owned `settings.runtime` projection generates `deploy.yaml`
+and the daemon's Cerberus manifest, both initially and through `folio deploy render <dir> --plan`.
+Use `--write` after review. Authored output conflicts are refused unless explicitly accepted with
+`--overwrite`; the descriptor, comments and unrelated settings are never rewritten. This operation
+only writes local files and never calls fleet-install or Cerberus.
+
+Runtime keys: `target_os` (linux/darwin), `target_arch` (amd64/arm64), `host` (fleet inventory alias),
+`binary_link`, `install_root`, and daemon `http_port`; optional `env_file` is an operator-owned reference,
+never a credential value. Paths must be absolute or home-relative. These keys are a temporary Folio
+projection inside project/1's extensible settings, separate from FC-8's shared schema ownership.
+The generated `serve --managed --addr` command applies the selected runtime port and keeps auth enforced.
+Regenerating deployment data does not change application auth, code, or compiled development defaults.
+A target OS/architecture change also requires updating the CI build target before producing artifacts.
+Existing descriptor checks still detect identity/link/health/auth disagreement; runtime ports no longer
+need to match the compiled development default because the supervisor passes the explicit address.
 
 ## Decisions (tools #37 review)
 

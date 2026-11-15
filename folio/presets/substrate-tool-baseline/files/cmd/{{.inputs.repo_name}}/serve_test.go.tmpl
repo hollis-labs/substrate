@@ -46,6 +46,16 @@ func TestLoopbackOpenRefusesNonLoopback(t *testing.T) {
 	}
 }
 
+func TestAddressFlagRetainsBindPolicy(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	cmd := serveCmd(ctx, run.App)
+	cmd.SetArgs([]string{"--dev", "--addr", "0.0.0.0:0"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "non-loopback") {
+		t.Fatalf("address override bypassed bind policy: %v", err)
+	}
+}
+
 func TestEnforceNeedsToken(t *testing.T) {
 	t.Setenv(modeEnv, "enforce")
 	t.Setenv(tokenEnv, "")

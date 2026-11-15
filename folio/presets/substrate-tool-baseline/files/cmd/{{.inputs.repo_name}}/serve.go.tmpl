@@ -32,12 +32,24 @@ const (
 
 func serveCmd(ctx context.Context, app *module.App) *cobra.Command {
 	var dev, managed bool
+	var addr string
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Serve the HTTP API",
 		Args:  cobra.NoArgs,
-		RunE:  func(*cobra.Command, []string) error { return serveWith(ctx, app, nil, dev, managed) },
+		RunE: func(*cobra.Command, []string) error {
+			if addr != "" {
+				cfg, _ := app.Config["httphost"].(map[string]any)
+				if cfg == nil {
+					cfg = map[string]any{}
+					app.Config["httphost"] = cfg
+				}
+				cfg["addr"] = addr
+			}
+			return serveWith(ctx, app, nil, dev, managed)
+		},
 	}
+	cmd.Flags().StringVar(&addr, "addr", "", "Listener address (overrides httphost.addr)")
 	cmd.Flags().BoolVar(&dev, "dev", false, "Allow loopback_open for a local development run")
 	cmd.Flags().BoolVar(&managed, "managed", false, "Require enforced auth for a supervised run")
 	return cmd

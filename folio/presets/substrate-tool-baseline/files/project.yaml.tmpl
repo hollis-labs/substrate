@@ -37,3 +37,14 @@ deploy:
   cerberus: {{ .inputs.repo_name }}.cerberus.yaml
 {{- end }}
 release: { tagging: ci-artifact-only }
+settings:
+  # Folio-owned deployment projection; credentials belong in operator config.
+  runtime:
+    target_os: {{ .inputs.target_os }}
+    target_arch: {{ .inputs.target_arch }}
+    host: {{ .inputs.deploy_host }}
+{{- if eq .inputs.tool_kind "service" }}
+    http_port: {{ .inputs.http_port }}
+{{- end }}
+    binary_link: ~/.local/bin/{{ .inputs.repo_name }}
+    install_root: ~/.local/share/fleet/releases/{{ .inputs.repo_name }}

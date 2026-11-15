@@ -5,10 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/hollis-labs/go-materialize/artifact"
 	"github.com/hollis-labs/go-materialize/materialize"
 	"github.com/hollis-labs/tools/folio/internal/compose"
+	"github.com/hollis-labs/tools/folio/internal/deployment"
 	"github.com/hollis-labs/tools/folio/internal/manifest"
 	"github.com/hollis-labs/tools/folio/internal/preset"
 	"github.com/hollis-labs/tools/folio/internal/render"
@@ -572,6 +575,21 @@ func (s *Service) renderAllLayers(layers []layer) (map[string]renderedFile, []st
 				orderedPaths = append(orderedPaths, f.RelPath)
 			}
 			rendered[f.RelPath] = renderedFile{File: f, PresetID: l.Preset.ID}
+		}
+	}
+	if descriptor, ok := rendered["project.yaml"]; ok {
+		projected, err := deployment.Render(descriptor.File.Content)
+		if err != nil {
+			return nil, nil, fmt.Errorf("project deployment: %w", err)
+		}
+		if projected != nil {
+			for _, name := range slices.Sorted(maps.Keys(projected.Files)) {
+				if _, exists := rendered[name]; exists {
+					return nil, nil, fmt.Errorf("deployment output conflicts with preset file %s", name)
+				}
+				orderedPaths = append(orderedPaths, name)
+				rendered[name] = renderedFile{PresetID: descriptor.PresetID, File: render.RenderedFile{RelPath: name, Content: projected.Files[name], IsTemplate: true}}
+			}
 		}
 	}
 	return rendered, orderedPaths, nil

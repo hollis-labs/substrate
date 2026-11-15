@@ -1,0 +1,38 @@
+# Generated from project.yaml settings.runtime; regenerate with folio deploy render.
+kind: cerberus-project/v1
+owner: {{ .ID }}
+namespace: local
+project:
+  id: {{ .ID }}
+  name: {{ .Name | yaml }}
+resources:
+  - id: {{ .ID }}
+    name: {{ .Name | yaml }}
+    type: process
+    project: {{ .ID }}
+    connector: local
+    config:
+      command:
+        - {{ .Runtime.Link | yaml }}
+        - serve
+        - --managed
+        - --addr
+        - 127.0.0.1:{{ .Runtime.Port }}
+      mode: os_service
+      # enforce needs {{ .EnvPrefix }}_TOKEN at start, and the token is never committed. Supply it with a
+      # Cerberus secret reference or an owner-only env file outside this repository (README, Auth), e.g.:
+      #   env_file: /absolute/path/to/{{ .ID }}.env
+{{- if .Runtime.EnvFile }}
+      env_file: {{ .Runtime.EnvFile | yaml }}
+{{- end }}
+      port: {{ .Runtime.Port }}
+      run_from: workspace
+      supervisor: auto
+      url: http://127.0.0.1:{{ .Runtime.Port }}/healthz
+      health_check:
+        url: http://127.0.0.1:{{ .Runtime.Port }}/healthz
+    tags:
+      - api
+      - go
+      - daemon
+      - {{ .ID }}

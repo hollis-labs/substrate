@@ -46,3 +46,12 @@ the same Substrate verifier and scope table as the MCP endpoint and tool handler
 register every new tool's scope and call `mcp.Authorize` in its handler. Registry registration waits for
 the catalog owner's agreed interface; this scaffold invents no registry endpoint.
 {{ end }}
+
+## Regenerate deployment descriptors
+
+Edit `project.yaml` → `settings.runtime`, then run `folio deploy render . --plan` and review the result.
+`folio deploy render . --write` updates generated descriptors and their tracking digests. It refuses
+local edits to those outputs unless you explicitly add `--overwrite` after review. It never rewrites
+`project.yaml`, starts a service or installs a binary. `env_file`, if set, references operator-owned
+configuration outside the repository; no credentials belong in the descriptor. Changing runtime
+target OS/architecture also requires updating CI build targets. Application auth/code are not rewritten.
