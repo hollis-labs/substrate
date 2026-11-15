@@ -1,0 +1,62 @@
+name: {{ .inputs.repo_name }} release
+on:
+  push:
+    tags: ['{{ if ne .inputs.repository_location "." }}{{ .inputs.repository_location }}/{{ end }}v*']
+permissions:
+  contents: read
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: {{ "${{" }} steps.tag.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - name: Release commit belongs to main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - id: tag
+        env:
+          PROJECT_LOCATION: {{ .inputs.repository_location }}
+          RELEASE_TAG: {{ "${{" }} github.ref_name }}
+        run: |
+          python3 - <<'PYTAG'
+          import os, re
+          location = os.environ["PROJECT_LOCATION"]
+          prefix = "" if location == "." else location + "/"
+          tag = os.environ["RELEASE_TAG"]
+          if not tag.startswith(prefix):
+              raise SystemExit("release tag does not belong to this project location")
+          version = tag[len(prefix):]
+          match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", version)
+          if not match or (match[4] and any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in match[4].split("."))):
+              raise SystemExit("release tag must end in valid v-prefixed SemVer")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write("version=" + version + "\n")
+          PYTAG
+  build:
+    needs: gate
+    uses: hollis-labs/tools/.github/workflows/go-app-build.yml@{{ .inputs.build_workflow_ref }}
+    with:
+      version: {{ "${{" }} needs.gate.outputs.version }}
+      working_directory: {{ .inputs.repository_location }}
+      targets: '["{{ .inputs.target_os }}/{{ .inputs.target_arch }}"]'
+      app: {{ .inputs.repo_name }}
+      main_pkg: ./cmd/{{ .inputs.repo_name }}
+{{- if .inputs.with_frontend }}
+      node_version: "24"
+      ui_cmd: "cd frontend && test -f package-lock.json && npm ci && npm run build"
+{{- end }}
+      test_cmd: "go vet ./... && go test -race -count=1 ./..."
+      extra_files: deploy.yaml project.yaml {{ .inputs.repo_name }}.cerberus.yaml
+  publish:
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    permissions: { contents: write, actions: read }
+    env:
+      GH_TOKEN: {{ "${{" }} github.token }}
+      BUILD_ARTIFACT: {{ "${{" }} needs.build.outputs.artifact }}
+    steps:
+      - name: Download checksummed build artifacts
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$BUILD_ARTIFACT" --dir dist
+      - name: Publish reviewed tag artifacts
+        run: gh release create "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes --target "$GITHUB_SHA"

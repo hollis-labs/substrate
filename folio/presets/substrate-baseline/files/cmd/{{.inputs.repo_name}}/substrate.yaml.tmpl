@@ -4,9 +4,9 @@ variant: app-host
 {{- if .inputs.with_frontend }}
 frontend: { contributions: ui/app.json }
 {{- end }}
-profiles: [minimal]
+profiles: [agentic]
 modules:
-  add: [secrets, auth, database, identity, cli]
+  add: [database, identity, cli]
 config:
   logging: { level: info, format: text }
   httphost: { addr: "127.0.0.1:{{ .inputs.http_port }}" }

@@ -1,0 +1,60 @@
+# {{ .computed.app_title }} operations
+
+This class 1 app owns its identity and enforces auth on every run. Assign the real `owner` and
+`operator` in `project.yaml`; keep passwords, API keys and signing keys outside the repository.
+The agentic profile supplies MCP, capabilities and secrets; new tool handlers must use the service
+layer and explicit scope authorization. Registry registration waits for the catalog's agreed interface.
+
+## Install and bootstrap
+
+Fleet-install owns the binary and its `~/.local/bin/{{ .inputs.repo_name }}` link. Cerberus supervises
+that installed path with the native supervisor (`auto`: launchd on macOS, systemd user on Linux).
+The process needs no checkout. `project.yaml` → `settings.runtime` selects the platform, inventory
+host, port, binary link, release directory and SQLite backup path. Optional `env_file` is a reference
+for operator configuration, never a credential value.
+
+1. Build with the checked-in CI workflow for the selected platform. Review `folio deploy render . --plan`
+   after descriptor edits, then use `--write` to refresh the generated deployment files. Resolve authored
+   output conflicts deliberately; `--overwrite` explicitly replaces them. Platform edits also need a
+   matching CI build target. Descriptor regeneration never changes application auth/code.
+2. Review `fleet-install deploy {{ .inputs.repo_name }} --repo {{ .inputs.github_owner }}/{{ .computed.repository_slug }} --commit <sha> --dry-run`
+   and the backup/restart plan before an authorized install. For monorepos, select the root build workflow
+   `{{ .inputs.repo_name }}-build.yml` with `--workflow` when locating CI artifacts.
+3. Bootstrap the owner offline using the installed binary (`docs/identity-bootstrap.md`). Login/setup
+   does not create an owner over HTTP. Issue narrowly scoped machine keys for API/MCP callers.
+4. Validate the downloaded `{{ .inputs.repo_name }}.cerberus.yaml`, register it, and apply the resource only
+   after reviewing its installed command, credentials, health URL and runtime target. Fleet-install owns
+   the binary; do not add Cerberus build_strategy or artifact_path.
+
+## Configuration and state
+
+`SUBSTRATE_CONFIG` explicitly selects an override file. Otherwise the binary discovers
+`$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml` (fallback `~/.config/{{ .inputs.repo_name }}/config.yaml`).
+Discovery creates nothing. Database and signing key live under `${{ .computed.env_prefix }}_DATA_DIR`, else
+`$XDG_DATA_HOME/{{ .inputs.repo_name }}`, else `~/.local/share/{{ .inputs.repo_name }}`. Secret backend state uses
+`$XDG_STATE_HOME/{{ .inputs.repo_name }}` or `~/.local/state/{{ .inputs.repo_name }}`. Absolute operator paths are
+preserved. If you change the database location, update `settings.runtime.backup_database` to match it.
+
+`serve --managed --addr 127.0.0.1:<port>` uses the projected listener address. Auth downgrade config is
+refused even on loopback. Browser login assets remain public; API and MCP calls require verified identity
+and scopes. Set allowed_hosts explicitly before exposing an app beyond local development.
+
+## Verify, back up and recover
+
+A healthy response alone does not prove the expected binary is running. Compare the running executable
+with the fleet-installed link (Linux `/proc/<pid>/exe`; macOS `lsof -p <pid>`), then exercise authenticated
+read/write operations. Check unauthorized requests are refused and identity setup remains offline.
+
+The fleet descriptor preserves the SQLite backup preflight. Retain the database, identity signing key,
+operator config and secret backend state together; losing the signing key invalidates issued identities.
+Review schema changes before deployment: binary rollback does not automatically restore a database.
+Use the fleet-install rollback plan for the previous release; restore a database backup only with the
+operator's explicit decision and the service stopped. Never copy a live SQLite file as a backup.
+
+## Releases
+
+Review the changelog and full CI gate before creating a semver tag. Standalone tags are `vX.Y.Z`;
+monorepo tags are `{{ .inputs.repository_location }}/vX.Y.Z` when the location is not `.`. The generated
+release workflow validates the project prefix and version, builds the selected target, and publishes
+artifacts with SHA256SUMS. Signing can be added when an approved signing facility is available.
+Folio generation and `deploy render` never create tags, releases, installations or live services.

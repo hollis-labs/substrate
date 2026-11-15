@@ -22,16 +22,31 @@ import (
 )
 
 func serveCmd(ctx context.Context, app *module.App) *cobra.Command {
-	return &cobra.Command{
-		Use:   "serve",
-		Short: "Serve the API and the UI",
-		Args:  cobra.NoArgs,
-		RunE:  func(*cobra.Command, []string) error { return serve(ctx, app, nil) },
+	var addr string
+	cmd := &cobra.Command{
+		Use: "serve", Short: "Serve the API and the UI", Args: cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			if addr != "" {
+				cfg, _ := app.Config["httphost"].(map[string]any)
+				if cfg == nil {
+					cfg = map[string]any{}
+					app.Config["httphost"] = cfg
+				}
+				cfg["addr"] = addr
+			}
+			return serve(ctx, app, nil)
+		},
 	}
+	cmd.Flags().StringVar(&addr, "addr", "", "Listener address (overrides httphost.addr)")
+	cmd.Flags().Bool("managed", false, "Supervised run; class 1 auth is always enforced")
+	return cmd
 }
 
 // serve runs the HTTP host until ctx ends. ready, when set, learns the bound address.
 func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
+	if guard := auth.Guard(app); guard == nil || string(guard.Mode()) != "enforce" {
+		return errors.New("class 1 applications require enforced auth")
+	}
 	id := identity.From(app)
 	if id == nil {
 		return errors.New("the identity module must be started")
