@@ -93,7 +93,7 @@ func (s *Service) newInRepository(opts NewOptions) (NewResult, error) {
 		return NewResult{}, err
 	}
 	defer root.Close()
-	if _, err := root.Lstat(location); !os.IsNotExist(err) {
+	if _, err = root.Lstat(location); !os.IsNotExist(err) {
 		return NewResult{}, fmt.Errorf("module target %s must not exist", location)
 	}
 	// Render completely before publishing any file. Staging stays on the same
@@ -135,7 +135,7 @@ func (s *Service) newInRepository(opts NewOptions) (NewResult, error) {
 		if err != nil {
 			return NewResult{}, err
 		}
-		if err := root.MkdirAll(path.Dir(dest), 0o755); err != nil {
+		if err = root.MkdirAll(path.Dir(dest), 0o755); err != nil {
 			return NewResult{}, err
 		}
 		out, err := root.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
