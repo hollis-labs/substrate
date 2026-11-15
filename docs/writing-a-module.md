@@ -72,7 +72,7 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
 
 - `scope` is required. Use `"{app}.<verb>"`, or `"authenticated"` for any verified caller. `"{app}"` expands to
   the app name. An app can replace every scope of your module with the string config `<name>.scope`.
-- `method` may be `*`; a path ending in `/` is a subtree (`/api/plugins/`). Paths must be under `/api/` or
+- `method` may be `*`; a path ending in `/` is a subtree (`/api/plugins/<id>/`). Paths must be under `/api/` or
   `/admin/`.
 - Every declared route needs a handler and every handler a declared route; `AddRoutes` fails otherwise.
 - Errors use `apierr.Write(w, status, code, message, details)`, the flat `{code, message, details?}` body the
