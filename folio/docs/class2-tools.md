@@ -1,7 +1,7 @@
 # Class 2 tool presets
 
 `substrate-cli` and `substrate-service` render a class 2 tool (spec: project/1 class bar, RC1). `substrate-app` and
-`app-dashboard` stay the class 1 presets. Both compose `substrate-tool-baseline`, which composes `go-baseline`.
+`app-dashboard` and `app-chat` are the class 1 presets. The two class 2 presets compose `substrate-tool-baseline`, which composes `go-baseline`.
 
 | | `substrate-cli` | `substrate-service` |
 |---|---|---|
@@ -33,13 +33,16 @@ A target OS/architecture change also requires updating the CI build target befor
 Existing descriptor checks still detect identity/link/health/auth disagreement; runtime ports no longer
 need to match the compiled development default because the supervisor passes the explicit address.
 
-## Decisions (tools #37 review)
+## Auth and host behavior
 
-- **authmode does not converge on `libs/security/auth`.** That library has a different vocabulary (`off`, `permissive`, `enforce`; `permissive` and tailnet binds are allowed) and its env names are `HOLLIS_AUTH[_<APP>]`. project/1 class 2 declares `enforce` or `loopback_open` (loopback only, never a tailnet or other bind) and the descriptor drift test pins the template to those two, with `<APP>_AUTH` / `<APP>_TOKEN`. Taking the library would widen what `loopback_open` accepts and add a module requirement to every rendered tool. Revisit when the library grows a `loopback_open` mode.
-- **The guard covers the whole host**, not only `/api/`: `/mcp` and module routes mounted by httphost are behind it. Only `GET /healthz` is open.
-- **Token supply**: the Cerberus manifest carries comments, not a value (no secrets in files); see the rendered README, Auth.
-- **No `health.version_json` in `deploy.yaml`** until the service's `/healthz` reports a version; with the key set and no version the health check always fails. The README says so.
-- **Actions in the rendered check workflow use the canonical BOM pins**, checked against `platform-pins.yaml`. SHA pinning needs a coordinated BOM change; this preset does not carry its own competing pins.
+Without MCP, class 2 services use the small `internal/authmode` guard. With MCP, the
+full-host Substrate auth middleware validates configured credentials and per-route/tool scopes;
+it does not stack a second static-token gate over the framework verifier. Only health is public.
+The development exception is explicit and unavailable to MCP-enabled HTTP services.
+
+The Cerberus manifest carries references, never token values. `health.version_json` is omitted
+until the service's health endpoint reports a version. Actions use canonical BOM pins; changing
+them to SHA pins is a coordinated BOM change, not an isolated preset override.
 
 ## Embedded schema
 
@@ -48,18 +51,21 @@ Substrate-owned package (FC-8) when it lands.
 
 ## Not yet
 
-The registry registration hook (awaiting the catalog interface), Folio's own `project.yaml` and `folio sync`/`inspect` in CI.
+The registry registration hook (awaiting the catalog interface) and `folio sync`/`inspect` in CI.
+Folio’s own authored descriptor is [project.yaml](../project.yaml); its local CLI does not claim a Substrate runtime.
 
-## Friction notes for the 1.0 cut
+## Observed deployment limits
 
-- `project.yaml` "rendered from" is one-shot: re-render after a descriptor edit is not possible, so a drift test replaces it.
 - `fleet-install` needs `--target` when the host alias is a placeholder; dry-run with a tarball works offline.
-- Restart cost (Substrate manager, fleet-install spec): `via: cerberus` needs `resource`; fleet-install runs it itself only with `run: true` as the local user, else it prints a human request and the deploy stays pending until `--restart-done`. A Cerberus unit without the fleet-install `command[0]` could restart an old copy with health still 200; verify the running executable after a deploy. Verb and resource id on live Cerberus still to be confirmed with the Mig Cerberus Lead.
-- `deploy.yaml` `restart: {via: cerberus, resource: ...}` is accepted by the installed `fleet-install` (it prints a
-  request for a human to run `cerberus resource reload <id> --ack`); the Substrate manager should confirm this is the intended shape.
-- `substrate pins sync --app` is not in tag v0.1.0; the tests use a pseudo-version.
-- Class 2 CI has no lint and no govulncheck of its own (the build workflow's govulncheck is advisory); decide whether the bar is too light.
-- Option B for tools Cerberus should build is not covered: the manifest has no build_strategy.
+- `restart: {via: cerberus, resource: ...}` is accepted by fleet-install. It performs the restart only
+  when `run: true` permits execution as the local user; otherwise it prints the requested Cerberus
+  action and deployment stays pending until `--restart-done`. Verify the running executable after
+  deployment: a successful health check alone does not prove the intended binary was restarted.
+- The generated build target is explicit. Changing runtime target OS/architecture requires updating
+  the CI target before creating a matching artifact; deployment rendering warns instead of editing CI.
+- Class 2 CI does not include its own lint/govulncheck gate; the reusable build's govulncheck is advisory.
+- Cerberus `build_strategy` and `artifact_path` are omitted by design: fleet-install owns binary
+  placement, and Cerberus supervises the installed link. This is the selected Option B contract.
 
 ## Managed and development runs
 

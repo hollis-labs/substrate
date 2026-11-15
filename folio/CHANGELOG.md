@@ -11,7 +11,23 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Class 2 presets** `substrate-cli` and `substrate-service` on the new layer `substrate-tool-baseline`
   (project/1 RC1): `project.yaml`, `deploy.yaml`, a Cerberus manifest for services (Option B), the class 2 CI,
   the loopback-dev auth guard and `internal/descriptor` (schema copy, drift-pair and declared-auth tests).
-  Additive: no existing preset changed. `docs/class2-tools.md`.
+  See `docs/class2-tools.md` for the current contract.
+
+- Fresh **app-chat** composes the shared app backend/frontend with BOM-pinned kit-chat and kit-identity,
+  owner-isolated persisted conversations/messages and an optional assistant service hook. Removed
+  `chat-app` breadcrumbs remain removed and never migrate implicitly.
+- Optional scoped MCP for class 2 CLI/services, including explicit local stdio trust.
+- Class 1 agentic/own-identity contract, runbook, SemVer release workflow, checksum build artifacts
+  and native installed deployment/supervision with XDG paths and enforced managed auth.
+- Explicit monorepo generation with repository-root workflows, and `folio deploy render` to regenerate
+  deployment output from authored descriptor settings without rewriting `project.yaml` or deploying.
+- Folio's own authored project descriptor and refreshed architecture/conversion/install documentation.
+
+### Fixed
+
+- The service token guard handles header presence correctly and uses canonical BOM action pins.
+- Managed runs enforce auth even when a binary was generated with a loopback development default.
+- Public fixture/example hygiene and the owner-reviewed historical exceptions are reconciled.
 
 ## v0.1.0 - 2026-11-12
 

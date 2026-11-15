@@ -1,66 +1,77 @@
 # Architecture: Substrate presets
 
-Folio renders typed presets (YAML manifest plus text/template tree). Presets whose output is a Substrate app
-sit beside the older ones; the engine (`internal/*`, `service/`, `cmd/folio`) changed in one place only: a
-breadcrumb or a command line that names a removed preset fails with `preset_removed` (`service/removed.go`).
+Folio renders typed presets, records a `.folio.yaml` breadcrumb, and leaves the application
+independent of Folio. `project.yaml` is authored project metadata; Folio never rewrites it.
+Existing removed-preset breadcrumbs fail explicitly, rather than silently selecting a new preset.
 
-## Presets
+## Composition
 
+```text
+go-baseline
+  substrate-baseline
+    substrate-app
+    substrate-frontend
+      app-dashboard
+      app-chat (also selects the backend chat extension)
+  substrate-tool-baseline
+    substrate-cli
+    substrate-service
 ```
-go-baseline (layer)                  LICENSE, CHANGELOG, AGENTS.md, lint config, hooks (unchanged)
-  substrate-baseline (layer)         the Go shell of a Substrate app-host; composes go-baseline
-    substrate-app (preset)           backend only, no UI
-    substrate-frontend (layer)       minimal app-shell frontend; composes substrate-baseline with with_frontend=yes
-      app-dashboard 3.0.0 (preset)   the app with a UI (kit-dashboard theme, sign-in, one list surface)
-```
 
-Unchanged and out of scope: `base`, `go-lib`, `go-package`, `nanite-plugin`, `ts-plugin`. Removed: see
-`conversion-notes.md`. There is no chat preset until a `kit-chat` release is pinned in the Substrate BOM.
+Class 1 apps use `app-host` with the agentic profile plus database, identity and CLI modules.
+The shared backend owns boot planning, configuration discovery, the Host/identity/guard handler
+stack, scoped routes, storage, migration wiring and deployment/release templates. Print-only
+commands do not start write-capable modules. Managed serving enforces auth, including on loopback.
+The owner is created offline; there is no open HTTP owner-setup route.
 
-### What `substrate-baseline` renders (modelled on Loom and Mentat)
+The frontend layer supplies React/Vite/Tailwind, app-shell, the shared cookie/CSRF request adapter,
+session handling and a list example. Dashboard uses that example. Chat supplies the conversation UI,
+kit-chat components and kit-identity sign-in/offline-setup screens while retaining the shared host
+and session adapter. Published kit props are presentation contracts, not invented identity endpoints.
 
-- `cmd/<name>/substrate.yaml` (`variant: app-host`, modules `secrets, auth, database, identity, cli`,
-  `auth.mode: enforce`, the identity key file, the app's own block) and its committed generated
-  `substrate_wiring.go`. The wiring is templated (the app block's key order follows the app name) and the
-  integration test proves it byte-identical to `substrate generate` for two app names.
-- `cmd/<name>/config.go`: `plan` decides from the command line before anything boots. Only `serve` and the
-  offline `identity setup` / `identity key create` start every module and create the data directory; help,
-  version, a bare command, an unknown word and a bad flag start nothing that writes. A bare command prints help.
-- `cmd/<name>/serve.go`: the handler stack (Host check, identity middleware, the host with guard, routes and SPA).
-- `internal/api` (routes with scopes; the owner of a row is the verified principal), `internal/service` (the only
-  code that runs SQL), `internal/settings`, `internal/hostguard` (a per-app copy of a check the framework is to own,
-  Substrate pull request 23), `internal/webui` (embeds `all:dist`), `internal/storage` (one goose migration).
-- `.golangci.transport.yml` and `docs/transport-boundary.md`: handlers may not import the storage package, the
-  database module or `database/sql`; a second lint run in `check.yml` enforces it.
-- `.github/workflows/check.yml` (vet, pins check, wiring current, race tests, both lint runs, scan-public) and
-  `build.yml` (the tools reusable `go-app-build.yml`, pinned by commit), `deploy.yaml` (a host-alias placeholder),
-  `docs/identity-bootstrap.md` (interactive owner setup), `.gitignore` with `/dist/`, `scan-public.allow`.
-- `go.mod` carries only the Substrate requirement; `go mod tidy`, `substrate pins sync --app .`, `go mod tidy`
-  complete it. No `go.sum` is rendered.
+Chat adds owner-filtered conversations/messages and scoped read/write routes. Request bodies cannot
+choose a principal or message role. Other owners' conversation IDs return 404. An optional service
+`Responder` receives only the selected owner's history. No provider is configured by default, and the
+UI says so. A failed reply does not undo a saved user message. Concurrent sends may interleave replies;
+applications needing serialized turns must add a queue. The inherited items example remains available.
 
-### What `substrate-frontend` renders
+Class 2 CLI/service presets use minimal profiles by default; `with_mcp=true` selects agentic.
+See [class2-tools.md](./class2-tools.md) for HTTP and explicit local-stdio trust contracts.
+Libraries do not acquire Substrate merely by sharing the Go baseline.
 
-React 19, Vite, Tailwind, app-shell's `ManifestShell` over the manifest `substrate frontend` generates (`predev`,
-`prebuild` and `pretypecheck` run it), an app-owned sign-in screen (identity has no UI kit yet; a copy of Loom's
-with its fixes), one list surface over `GET`/`POST /api/items`, `cmd/<name>/ui/app.json`, the lint configs, a
-`Makefile`. `npm install` once and commit `package-lock.json`: the rendered `check.yml` fails with that
-instruction when the lock is missing. `identity.allowed_origins` for the dev server is documented for a
-development override file only; no shipped file sets it.
+## Boundaries and generated operations
 
-### Inputs and versions
+Transports call `internal/service`; only that layer runs SQL. The generated transport lint forbids
+handlers importing `database/sql`, storage or the database module. The authenticated principal owns
+rows. Identity, scope guards and CSRF checks remain outside the business service.
 
-`repo_name`, `github_owner`, `description`, `go_version` (the portfolio floor, from `platform-pins.yaml`),
-`http_port`, `build_workflow_ref`. Required with NO default: `substrate_version` and the seven `kit_*` versions
-(a stale default is worse than a failed render); the integration tests read them from the framework's
-`bom.yaml`. The Go floor and CI action versions are literals checked by the drift check. The frontend toolchain
-literals are copied from Loom's `frontend/package.json` (Gap 5). Layers receive switches through compose `vars`
-(`with_frontend`), not through `computed`, which does not reach a composed layer's templates.
+Class 1 output includes a full check workflow, pinned reusable build, SemVer release workflow,
+checksum artifacts, runbook, `project.yaml`, fleet deployment and native Cerberus supervision.
+Fleet-install places the binary; Cerberus supervises the installed link with `serve --managed --addr`.
+Configuration, data and secret state use XDG paths; explicit operator paths remain supported.
 
-## Tests
+`settings.runtime` in the descriptor supplies the Folio deployment projection. `folio deploy render`
+previews output by default; `--write` stages and replaces generated files, preserving descriptor bytes
+and refusing authored output conflicts unless explicitly accepted. It never deploys or restarts anything.
+Changing deployment target architecture does not rewrite the CI build target. See class 2 docs for keys.
 
-`integration_substrateapp_test.go`: render trees and refusals (no default for `substrate_version`, bad inputs,
-required kits); `TestSubstrateApp_BuildsAndRuns` and `TestAppDashboard_BuildsAndServesUI` build against the real
-framework (tidy, pins, validate, generate diff, vet, race tests, npm install, typecheck, lint, build, the
-transport-gate controls) and run the binary on a temporary data directory (offline owner, sign-in, write, read,
-refused requests, `SIGTERM`, an empty `HOME` stays empty). They need network, Go and Node and set
-`FOLIO_SUBSTRATE_VERSION`; without it they skip visibly (`FOLIO_REQUIRE_TOOLS=1` makes that a failure, as in CI).
+For an existing monorepo, `--repository-root` and explicit `repository_name` select the boundary and
+repository identity. Folio derives module location/path and creates named workflows at the repository
+root. It refuses collisions and symlink escapes; standalone generation remains supported. `inspect`
+requires that explicit root to read recorded repository workflow files. General sync remains deferred.
+
+## Versions and validation
+
+The selected Substrate version and direct Hollis kit versions are required inputs. Framework integration
+tests read the kits from that version's BOM; frontend toolchain versions remain separately sourced literals.
+Compose vars bind to the first encounter of a layer. App-chat explicitly selects the backend before the
+frontend so both layers see the chat switch without duplicating their files.
+
+Required-tool integration tests render and build real apps, check pins/wiring, run frontend types/lint/build,
+Go vet/race tests and transport lint, and run temporary binaries. Tests exercise offline identity, scoped
+MCP, managed auth, no-checkout operation and UI serving. App-chat adds real two-user API isolation and
+provider success/failure persistence checks. Missing tools are visible skips locally and failures with
+`FOLIO_REQUIRE_TOOLS=1` in the root Folio workflow.
+
+The project/1 shared schema/catalog remains owned by the framework/catalog work. Folio's current embedded
+validation/projection is temporary; it is not the promised shared JSON Schema package or a registry API.

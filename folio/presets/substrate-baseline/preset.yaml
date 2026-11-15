@@ -12,7 +12,7 @@ layer_only: true
 #
 # Versions: the Go floor and CI tool versions come from platform-pins.yaml, as in go-baseline. The
 # Substrate module version has NO default (a stale default is worse than a failed render); the
-# framework does not mirror it into platform-pins.yaml yet (docs/conversion-notes.md, Gap 2).
+# framework does not mirror it into platform-pins.yaml yet (docs/conversion-notes.md, Remaining boundaries).
 #
 # Not rendered: go.sum (run `go mod tidy` once) and any frontend (layer `substrate-frontend`).
 

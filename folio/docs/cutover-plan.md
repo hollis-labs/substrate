@@ -1,96 +1,41 @@
-# Cutover plan: Folio presets on Substrate
+# Cutover and installed CLI verification
 
-Folio is a one-shot command-line tool: no service, no port, no database, no keyring entry, no secret
-(survey in `docs/conversion-notes.md`, #17). The cutover is therefore a release, not a data migration.
-Nothing here touches a live system; the owner merges and a maintainer pushes the tag.
+The preset conversion is code and a local CLI replacement, not a live application migration.
+Chrispian and the driver review and land the slices. No tag, release publication, service cutover,
+Cerberus apply or fleet install is part of this completion assignment.
 
-Status: **code merged on `main` (2026-11-12); release not yet tagged**. Pull requests #17, #22, #21, #24, #25, #28
-and #30 are merged; the release steps in section 4 remain.
+## Preserve existing projects
 
-## 1. Data
+Existing `.folio.yaml` breadcrumbs remain untouched. Removed `chat-app`, `go-service-app`, Chimera
+and pre-3.0 dashboard presets still fail explicitly with `preset_removed`. Fresh chat generation uses
+`app-chat`; there is no implicit migration. General sync remains reserved.
 
-None to migrate. The only state is the optional `~/.folio/presets/local` directory (read by Folio, never
-written) and the `.folio.yaml` breadcrumb inside each project Folio rendered. Existing breadcrumbs keep
-their old preset ids and versions and stay on disk as records; they are not rewritten and nothing syncs
-them (`folio sync` is reserved). What the new `folio` does with them: `folio inspect` of a project whose
-breadcrumb names a removed preset (`go-service-app`, `chat-app`, `app-dashboard-chimera-plugin`,
-`chat-app-chimera-plugin`, `chimera-plugin-fixture`, or `app-dashboard`/`sysop-ui` below 3.0.0) fails with
-`preset_removed` and one sentence naming the preset, its version and `folio/v0.0.1`, the last release that
-has it, writes nothing and never re-renders it onto the new `app-dashboard`; `folio new` and `folio plan`
-of a removed id say the same. To inspect such a project, install that release. Breadcrumbs from the
-unchanged presets (`base`, `go-baseline`, `go-lib`, `go-package`, `nanite-plugin`, `ts-plugin`) inspect
-as before. Projects already generated from the go-webui or Chimera presets are not touched and are not
-migrated by this change.
+The optional user preset directory is read as before. Folio has no database or daemon to migrate.
+Its new own `project.yaml` describes current behavior and does not install a runtime or policy gate.
 
-## 2. Callers and what changes for each
+## Install a reviewed main build
 
-| Caller | Today | After |
-|---|---|---|
-| The owner's `folio` binary (installed with `go install`, dated 29 September) | old presets | reinstall: `go install github.com/hollis-labs/tools/folio/cmd/folio@<tag>`; `folio preset list` shows `substrate-app`, `app-dashboard` 3.0.0 and no Chimera presets |
-| Anyone rendering `app-dashboard` or `chat-app` | go-webui or Chimera scaffold | `app-dashboard` 3.0.0 renders a Substrate app; the inputs changed (`repo_name`, `substrate_version`, kit versions: no defaults); `chat-app` is gone until a `kit-chat` release is pinned in the Substrate BOM |
-| Anyone rendering `go-service-app` | composition root plus transport gate | `substrate-app` (the transport gate is in `substrate-baseline`) |
-| Scripts, units, Tether/Cerberus catalog, fleet-install | none found (the primary host has no folio binary, unit or `~/.folio`; no catalog or installer entry calls `folio`) | no change |
-| `hollis-labs/chimera` | consumed by the old presets | no longer consumed by Folio: its retirement can proceed once Parallax is also off it (program plan) |
+After every completion slice is reviewed and landed, the driver selects the exact clean main SHA
+and records it. Before replacing the executable, record the current PATH resolution, checksum and
+`go version -m` output; copy the existing executable to a recoverable backup with its mode preserved.
+Build `./cmd/folio` from the monorepo's `folio` module into a temporary file alongside the selected
+PATH destination, verify it, then atomically replace the destination. Record the new checksum, source
+SHA, version output and backup location in the task report. This does not create a release tag.
 
-Unchanged presets: `base`, `go-baseline`, `go-lib`, `go-package`, `nanite-plugin`, `ts-plugin`.
+Use the installed executable to list presets and show `app-chat`, `substrate-cli` and `substrate-service`.
+Render a scratch project with current explicit framework/BOM inputs. Verify its descriptor, inspect
+result, deployment preview and the explicit monorepo path/workflow behavior. The required-tool test suite
+already builds and runs generated apps with identity/auth/isolation checks; do not apply a live service
+just to prove the CLI replacement.
 
-## 3. Config and supervision
+For rollback, restore the saved executable atomically and verify PATH resolution and checksum against
+the recorded original. Generated projects are separate files and are not rolled back by replacing Folio.
 
-Nothing to remove: no unit, no descriptor, no environment of the tool itself (only the per-input
-`FOLIO_INPUT_<NAME>` overrides). No Cerberus apply, no hub reload, no gateway catalog change.
+## Release separately
 
-## 4. Release
+Modules use `folio/vX.Y.Z` tags in `hollis-labs/tools`. A future release updates the changelog, runs the
+repository's release dry run, and follows the maintainer's release authorization. Never infer a release
+number from an old cutover note or retag an existing release. The driver owns the final installation
+report; this document does not claim installation has already happened.
 
-1. Done: the owner merged the stack (#22, #17, #21, #24, #25, #28, #30) on 2026-11-12.
-2. In `folio/CHANGELOG.md` turn `## Unreleased` into the release section (`## v0.1.0 - <date>`;
-   pre-1.0, a breaking change takes the minor). `scripts/release` refuses a tag without that heading.
-3. On `main`: `scripts/release folio v0.1.0` (dry run, validates), then `scripts/release --apply folio v0.1.0`
-   (creates the tag locally; the script never pushes).
-4. The maintainer pushes `folio/v0.1.0` and creates the GitHub release. No CI artifact or install step
-   is involved (Folio is installed with `go install`).
-5. The owner reinstalls (section 2) and renders one app with the real versions, then runs it (below).
-
-Before step 3, the evidence the pull requests carry must hold on `main`: `go vet`, `go test -race` with
-`FOLIO_REQUIRE_TOOLS=1` and `FOLIO_SUBSTRATE_VERSION` set, `golangci-lint v2.11.4`, the pins drift check
-and its self-test, `substrate pins check --folio`, and `substrate scan-public` (tree: no finding of
-Folio's; history: inherited findings only).
-
-## 5. Rollback
-
-Reinstall the previous tag: `go install github.com/hollis-labs/tools/folio/cmd/folio@v0.0.1`. There is
-nothing on disk to restore: Folio holds no state, and projects rendered with the new version are
-independent of the binary. A bad tag is superseded by a patch tag, not rewritten.
-
-## 6. Verify
-
-With the installed binary and no state on the machine:
-
-1. `folio preset list`: `substrate-app`, `app-dashboard` 3.0.0 present; no `chimera-*`, `go-service-app`,
-   `chat-app`.
-2. Render `app-dashboard` into a scratch directory with `substrate_version` and the seven `kit_*`
-   versions taken from the framework's `bom.yaml`; follow the rendered README's first build
-   (`go mod tidy`, `substrate pins sync --app .`, `go mod tidy`, `npm install` in `frontend/`, commit the lock).
-3. Create the owner offline (`<name> identity setup`), start with `<name> serve` on a free port and a
-   temporary data directory, sign in, add an item, read it back; an unknown `Host` is refused;
-   `SIGTERM` stops it. The integration tests (`TestSubstrateApp_BuildsAndRuns`,
-   `TestAppDashboard_BuildsAndServesUI`) do this on every run.
-
-## 7. Approvals
-
-The owner merges every pull request in `hollis-labs/tools`. The tag push and the GitHub release are the
-maintainer's. The sub-folio agent does not push tags and does not run anything against a live system.
-
-## 8. Known open items at cutover
-
-- The framework version and the `@hollis-labs` kit versions are mirrored nowhere in Folio
-  (Substrate `pins sync --folio` writes only the Go floor and the CI versions): the integration tests
-  read them from `bom.yaml`, and Folio's own CI carries a hand-maintained `FOLIO_SUBSTRATE_VERSION`.
-- The frontend toolchain versions (react, vite, tailwind, biome, eslint, typescript, base-ui, lucide-react,
-  the design lint config) have no source in the BOM; they are copied from Loom's `package.json`.
-- `kit-chat` is not pinned in the BOM, so there is no chat preset.
-- `internal/hostguard` in the rendered app is a per-app copy of a check the framework will own
-  (Substrate pull request 23); the preset drops it when that lands.
-- Folio's framework tests run in CI through the root workflow `.github/workflows/folio-checks.yml` (merged,
-  green on `main`), with `FOLIO_REQUIRE_TOOLS=1` and a hand-maintained `FOLIO_SUBSTRATE_VERSION`.
-  `folio/.github/workflows/ci.yml` is never executed by GitHub (only the root workflows run); it stays because the
-  drift check reads it, and a follow-up points the drift check at the root workflow and deletes it.
+See [conversion-notes.md](./conversion-notes.md) for remaining framework/catalog boundaries.

@@ -9,8 +9,10 @@ re-rendered later (and, in a future release, synced when the preset evolves).
 
 ## Status
 
-v0.3 — composition slice. Folio ships several bundled presets (Go modules,
-libraries and service apps, a Nanite plugin, a design-kit dashboard app) plus compose-only layers that are not meant to be rendered on their own.
+Folio ships Go libraries, class 1 apps, class 2 tools and services, a Nanite plugin,
+and compose-only layers. Its own runtime remains a local CLI; [project.yaml](./project.yaml)
+records the actual interface and ownership. It has no Substrate runtime or auth/policy gate;
+local operations use the caller’s OS permissions. The generated apps have separate contracts.
 Ask folio rather than this README which presets exist:
 
 ```sh
@@ -23,20 +25,27 @@ Add `--json` to either for machine-readable output. A preset marked `[layer]`
 
 `folio new` / `folio plan` / `folio preset validate` all understand
 `composes:`. Sync, post-render Hadron hooks, federated git-URL preset
-sources, and MCP / HTTP surfaces are deliberately deferred; see
+sources, and Folio’s own MCP / HTTP surfaces are deliberately deferred; see
 [`CHANGELOG.md`](./CHANGELOG.md) for the full deferred list.
 
 ## Substrate apps
 
-`substrate-app` renders a [Substrate](https://github.com/hollis-labs/substrate) `app-host` backend:
-the manifest and its committed generated wiring, boot and serve, its own identity (the owner is
-created offline with `<name> identity setup`, never over HTTP), SQLite through the database module,
-scoped routes, CI, a build workflow and a fleet deploy descriptor. `app-dashboard` (3.0) is that plus
-a minimal app-shell frontend on the BOM-pinned kits. Both need `substrate_version` (and, for the UI,
-the six `kit_*` versions): there is no default, take them from the framework's `bom.yaml`.
-After rendering: `go mod tidy`, `substrate pins sync --app .`, `go mod tidy`, and for the UI
-`npm install` in `frontend/` and commit `package-lock.json`. Folio never installs, builds or runs a
-rendered project.
+`substrate-app`, `app-dashboard` and `app-chat` render class 1 Substrate `app-host`
+apps with the agentic profile, enforced auth, own offline-created identity, SQLite,
+scoped routes and authenticated MCP. Dashboard adds an app-shell list UI; chat adds
+owner-isolated conversations and messages using the published kit-chat and kit-identity.
+Chat starts with no assistant provider connected; its service layer offers a provider hook.
+
+Each app includes a project descriptor, fleet deployment and native Cerberus supervision,
+a runbook, full checks, build artifacts and a SemVer release workflow. Managed runs work
+from installed binaries with XDG configuration/data/state, independent of the checkout.
+Release workflows accept only correctly prefixed SemVer tags whose commit is on main.
+
+`substrate_version` and the applicable `kit_*` versions have no defaults: take them from
+the selected framework’s `bom/bom.yaml`. Chat additionally requires `kit_chat`, `kit_cards`,
+`kit_identity` and `kit_account`. After rendering, follow the generated README: tidy Go,
+sync pins, tidy again; for UI apps install frontend packages and commit the lockfile.
+Folio itself never installs, builds or runs a rendered project. See [architecture](./docs/architecture.md).
 
 ## Class 2 tools
 
@@ -45,7 +54,8 @@ project/1 class model (release candidate 1): `project.yaml` (written once, never
 `deploy.yaml` (fleet-deploy/v1), for a service `<name>.cerberus.yaml` (cerberus-project/v1; fleet-install
 places the binary and Cerberus only supervises it), the class 2 CI (vet, pins check, build, race tests,
 scan-public) and a build workflow on the shared reusable workflow. A service's auth mode is `enforce`
-(bearer token) or, for development, `loopback_open`, which it refuses to start with on a non-loopback bind.
+(bearer token) or, with explicit `serve --dev`, `loopback_open` on a loopback bind. Managed runs
+enforce auth even if the binary was generated with a development default; optional MCP also enforces auth.
 `internal/descriptor` validates `project.yaml` and tests that the three descriptor files agree. Needs
 `substrate_version` (no default). See [`docs/class2-tools.md`](./docs/class2-tools.md).
 
@@ -236,14 +246,14 @@ Chimera dashboard of 2.x (clean break: `project_name`, `gui_host`, `chimera_*`, 
 `go_webui_version` and `base_path` are gone; a Substrate app serves at the root).
 
 `sysop-ui` remains a deprecated alias: `new`, `plan`, `preset show` and `inspect` resolve it to
-`app-dashboard`, and new breadcrumbs record `app-dashboard`. Existing breadcrumbs, whatever preset
-generated them, stay readable by `inspect`, which reports drift against the current templates without
-updating the app or its breadcrumb. `folio sync` remains reserved; nothing migrates an already generated
-app. There is no `chat-app` preset for now: it waits for a pinned `kit-chat` in the Substrate BOM.
+`app-dashboard`, and new breadcrumbs record `app-dashboard`. Supported breadcrumbs remain readable by `inspect`, which reports drift without updating
+the app or its breadcrumb. Removed presets and pre-3.0 dashboard breadcrumbs fail explicitly. `folio sync` remains reserved; nothing migrates an already generated
+app. Removed `chat-app` breadcrumbs still fail with `preset_removed`; fresh chat projects use
+`app-chat`. There is no automatic migration or alias between the two.
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](../LICENSE).
 
 ## Generate a module in an existing repository
 
