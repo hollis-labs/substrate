@@ -10,10 +10,24 @@ Per app, in the manifest config. These combine; the guard accepts a credential a
 |---|---|
 | The app issues its own identity (people sign in here) | select the `identity` module and add an `identity:` block |
 | The app trusts another app's issuer (Tether, another Substrate app) | `auth.jwks_url` (and `auth.issuer`, `auth.audience`) |
+| The app is its own JWT issuer with a rotating key ring and an in-process deny-list (Tether) | `auth.UseKeySource` and `auth.UseDenyList` in Go, before `boot.Start` (see below) |
 | Fixed service keys from config | `auth.api_keys` |
 | Nothing, for local development | `auth.mode: off` (the default); a request with no credential is the unverified operator |
 
 `auth.mode` is the dial for all of them: `off`, `permissive` (log what `enforce` would refuse) or `enforce`.
+
+### An issuer that verifies its own tokens
+
+An app that signs its own JWTs (agent tokens from a rotating Ed25519 key ring) cannot point `auth.jwks_url` at itself: its listener is not up when the auth module starts, and `bootstrap_key_file` cannot follow a rotation. It hands the keys and the deny-list to the auth module in process instead, before `boot.Start`:
+
+```go
+auth.UseKeySource(func(ctx context.Context) ([]byte, error) { return ring.JWKS(), nil }) // every key a live token may use
+auth.UseDenyList(deny)                                                                  // *libauth.DenyList; the app calls deny.Replace
+// after rotating or retiring a key:
+_ = auth.RefreshKeys(ctx, app)
+```
+
+Verification is libs `security/auth`'s JWT verifier, unchanged: EdDSA, `exp`/`nbf` with leeway, `auth.issuer`, `auth.audience` (default the app name), the deny-list (jti, sub, sid). Keys are read on first use, every 30 seconds, on a token with an unknown `kid` (at most once a second), and on `RefreshKeys`. Call `RefreshKeys` after retiring a key, or tokens it signed keep verifying until the next periodic read. A source error makes a token verification `auth_unavailable` (503), never an accept. The source is a second trust root next to the identity module's: a token either one verifies is accepted (`auth.AddVerifier` chains them). Start refuses `UseKeySource` with `auth.jwks_url`, `UseDenyList` with `auth.denylist_url`, and `UseDenyList` without a JWT verifier.
 
 ### Where off and permissive may listen
 
