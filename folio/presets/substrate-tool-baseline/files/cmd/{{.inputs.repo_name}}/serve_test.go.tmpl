@@ -13,6 +13,13 @@ import (
 	"github.com/hollis-labs/substrate/boot"
 )
 
+// mcpStub satisfies the interface httphost reads from the "mcp.mount" value.
+type mcpStub struct{}
+
+func (mcpStub) MCPHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("mcp")) })
+}
+
 func startApp(t *testing.T, addr string) (context.Context, *boot.Running) {
 	t.Helper()
 	cfg := `{"httphost":{"addr":"` + addr + `"},"logging":{"format":"text","level":"error"}}`
@@ -57,6 +64,8 @@ func TestServeReportsModeAndGuards(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = run.Stop(context.Background()) }()
+	// A stand-in for the mcp module's mount: httphost serves it at /mcp, outside /api/.
+	run.App.Set("mcp.mount", mcpStub{})
 	ready := make(chan net.Addr, 1)
 	done := make(chan error, 1)
 	go func() { done <- serve(ctx, run.App, func(a net.Addr) { ready <- a }) }()
@@ -93,6 +102,16 @@ func TestServeReportsModeAndGuards(t *testing.T) {
 	}
 	if code, _ := get("/api/ping", "test-token"); code != 200 {
 		t.Errorf("/api/ping with the token = %d, want 200", code)
+	}
+	// /mcp is mounted by httphost outside /api/; the guard must cover it too.
+	if code, _ := get("/mcp", ""); code != 401 {
+		t.Errorf("/mcp without a token = %d, want 401", code)
+	}
+	if code, _ := get("/mcp", "wrong"); code != 401 {
+		t.Errorf("/mcp with a wrong token = %d, want 401", code)
+	}
+	if code, body := get("/mcp", "test-token"); code != 200 || body != "mcp" {
+		t.Errorf("/mcp with the token = %d %q, want 200 mcp", code, body)
 	}
 	cancel()
 	if err := <-done; err != nil {

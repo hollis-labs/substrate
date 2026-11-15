@@ -57,11 +57,21 @@ func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
 	routes := http.NewServeMux()
-	routes.Handle("/api/", guard(api))
-	handler, err := httphost.Handler(app, httphost.Options{Routes: routes})
+	routes.Handle("/api/", api)
+	inner, err := httphost.Handler(app, httphost.Options{Routes: routes})
 	if err != nil {
 		return err
 	}
+	// The guard wraps the whole host, not just /api/: /mcp and routes that modules mount outside /api/ are
+	// reached through httphost and would otherwise serve without credentials. Only GET /healthz stays open.
+	guarded := guard(inner)
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+			inner.ServeHTTP(w, r)
+			return
+		}
+		guarded.ServeHTTP(w, r)
+	})
 	return httphost.Serve(ctx, app, handler, httphost.ServeOptions{
 		Addr: addr,
 		Ready: func(a net.Addr) {
