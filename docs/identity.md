@@ -38,6 +38,18 @@ config:
 
 With `identity` selected, `enforce` needs no other verifier.
 
+### One mode per listener
+
+`auth.mode` is the app's mode. A process that serves a local socket and a remote listener can give each its own: `httphost.ServeOptions.AuthMode` sets a listener's mode, and the bind is checked against it. Every request on that listener is guarded in that mode: the `/api/` and `/mcp` guards, `auth.Middleware` and MCP tool checks (`mcp.Authorize`). It uses the app's verifiers (`AddVerifier` included), scope table and open paths. Only the mode differs, and it stays fixed when the app's mode is reloaded.
+
+```go
+// The socket keeps the app's mode (permissive); the remote listener enforces.
+go httphost.Serve(ctx, app, h, httphost.ServeOptions{Listener: sock})
+go httphost.Serve(ctx, app, h, httphost.ServeOptions{Addr: remoteAddr, AuthMode: libauth.ModeEnforce})
+```
+
+An app that runs its own `http.Server` uses `auth.WithMode` as the server's base context, or wraps its handler with `auth.MiddlewareMode`. Either way, check the bind with libs `ValidateBind(addr, mode)`.
+
 ## People
 
 1. First run: the owner is created offline, before the service starts (see [Offline bootstrap](#offline-bootstrap)). `GET /api/setup` says `{"setup_required": true, "setup_over_http": false}` until then and `{"setup_required": false, ...}` after. `POST /api/setup` is refused (403 `setup_offline`) unless `identity.setup` is `http`, a local-development opt-in under which `{display_name, username, password}` creates the owner (scope `*`), closes setup for good, and signs in.

@@ -30,6 +30,10 @@
 //
 // After boot.Start, the app registers routes and tools on ScopeTable(app).
 // httphost wraps /api/ with the guard when this module is started.
+//
+// One process can serve listeners in different modes (a permissive local socket next
+// to an enforcing remote listener): httphost.ServeOptions.AuthMode, or WithMode and
+// MiddlewareMode for a server the app runs itself.
 package auth
 
 import (
@@ -53,11 +57,12 @@ var uiJSON []byte
 // UI declares GET /api/me: the caller's own identity, for any verified caller.
 func (*mod) UI() ui.Contribution { return ui.MustParse(uiJSON) }
 
-// me answers who the caller is and which mode the guard is in. A permissive or
-// off-mode caller without a token is reported as unauthenticated, not as an error.
-func me(g *libauth.Guard) http.Handler {
+// me answers who the caller is and which mode the guard is in (its listener's, see
+// WithMode). A permissive or off-mode caller without a token is reported as
+// unauthenticated, not as an error.
+func me(l *listeners) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		out := map[string]any{"mode": string(g.Mode()), "authenticated": false}
+		out := map[string]any{"mode": string(l.GuardFor(r.Context()).Mode()), "authenticated": false}
 		if p, ok := libauth.FromContext(r.Context()); ok {
 			out["authenticated"], out["principal"] = p.Verified, p
 		}
@@ -172,7 +177,9 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 		cancel()
 		return err
 	}
+	l := &listeners{app: app, app0: g, base: gc, byMode: map[libauth.Mode]*libauth.Guard{}}
 	app.Set(GuardKey, g)
+	app.Set(ListenersKey, l)
 	app.Set(ScopeKey, scopes)
 	if ts != nil {
 		app.Set(TokenKey, ts)
@@ -180,7 +187,7 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	if gc.Verifier != nil {
 		app.Set(VerifierKey, gc.Verifier)
 	}
-	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/me": me(g)}); err != nil {
+	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/me": me(l)}); err != nil {
 		cancel()
 		return err
 	}
@@ -247,11 +254,11 @@ func (refuseAll) Verify(context.Context, string) (libauth.Principal, error) {
 
 // AddVerifier makes the guard also accept credentials v resolves. It is how a
 // module that issues credentials (identity) gets them accepted by the app's one
-// guard, in the mode the guard is already in. Call it from the module's Start,
-// after auth has started.
+// guard, in the mode the guard is already in, and by every listener guard (WithMode)
+// in its own mode. Call it from the module's Start, after auth has started.
 func AddVerifier(app *module.App, v libauth.Verifier) error {
-	g := Guard(app)
-	if g == nil {
+	l := listenersOf(app)
+	if l == nil {
 		return fmt.Errorf("auth module is not started")
 	}
 	current, _ := app.Value(VerifierKey)
@@ -260,11 +267,7 @@ func AddVerifier(app *module.App, v libauth.Verifier) error {
 	if _, isRefuse := cur.(refuseAll); cur != nil && !isRefuse {
 		next = libauth.Chain(cur, v)
 	}
-	if err := g.Apply(g.Mode(), next); err != nil {
-		return err
-	}
-	app.Set(VerifierKey, next)
-	return nil
+	return l.setVerifier(next)
 }
 
 // Guard returns the guard published by the auth module, or nil.
@@ -303,10 +306,12 @@ func ValidateBind(app *module.App, addr string) error {
 	return libauth.ValidateBind(addr, g.Mode())
 }
 
-// Middleware is a convenience for apps that mount their own handlers.
+// Middleware is a convenience for apps that mount their own handlers. A request
+// served under WithMode (httphost.ServeOptions.AuthMode) is guarded in its listener's
+// mode, any other in the app's.
 func Middleware(app *module.App, next http.Handler) http.Handler {
-	if g := Guard(app); g != nil {
-		return g.Middleware(next)
+	if l := listenersOf(app); l != nil {
+		return l.Middleware(next)
 	}
 	return next
 }

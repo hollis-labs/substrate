@@ -170,9 +170,22 @@ func (m *mount) MCPHandler() http.Handler {
 				t.Route(method, "/mcp", m.scope)
 			}
 		}
-		h = g.Middleware(h)
+		h = guardMiddleware(m.app, g)(h)
 	}
 	return h
+}
+
+// guardMiddleware is the auth module's per-listener middleware (the guard of the
+// request's listener, else the app's) when published, else g's.
+func guardMiddleware(app *module.App, g *libauth.Guard) func(http.Handler) http.Handler {
+	if v, ok := app.Value("auth.listeners"); ok {
+		if l, ok := v.(interface {
+			Middleware(http.Handler) http.Handler
+		}); ok {
+			return l.Middleware
+		}
+	}
+	return g.Middleware
 }
 
 // Server returns the MCP server published by the mcp module, or nil.
@@ -183,8 +196,17 @@ func Server(app *module.App) *gmcp.Server {
 }
 
 // Authorize checks the caller's principal against tool's scope when the auth
-// module is started (see libs auth.ScopeTable.Tool). Without auth it allows.
+// module is started (see libs auth.ScopeTable.Tool), in the mode of the guard that
+// admitted the request: its listener's (httphost.ServeOptions.AuthMode), else the
+// app's. Without auth it allows.
 func Authorize(ctx context.Context, app *module.App, tool string) error {
+	if v, ok := app.Value("auth.listeners"); ok {
+		if l, ok := v.(interface {
+			GuardFor(context.Context) *libauth.Guard
+		}); ok {
+			return l.GuardFor(ctx).AuthorizeTool(ctx, tool)
+		}
+	}
 	if g := guard(app); g != nil {
 		return g.AuthorizeTool(ctx, tool)
 	}
