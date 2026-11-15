@@ -1,0 +1,19 @@
+# {{ .inputs.repo_name }}
+
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A hollis-labs class 2 Substrate CLI tool.{{ end }}
+
+Class 2 tool (project/1 class model, RC1): `project.yaml` is the descriptor, `deploy.yaml` is read by `fleet-install`.
+
+## Build
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+./{{ .inputs.repo_name }} hello
+```
+
+## Deploy
+
+`fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first.

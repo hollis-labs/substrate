@@ -1,0 +1,11 @@
+# {{ .inputs.repo_name }} on Substrate (class 2). The manifest is the shell: modules and config.
+app: {{ .inputs.repo_name }}
+variant: {{ if eq .inputs.tool_kind "service" }}microservice{{ else }}cli{{ end }}
+profiles: [minimal]
+modules:
+  add: [{{ if eq .inputs.tool_kind "service" }}httphost, {{ end }}cli]
+config:
+  logging: { level: info, format: text }
+{{- if eq .inputs.tool_kind "service" }}
+  httphost: { addr: "127.0.0.1:{{ .inputs.http_port }}" }
+{{- end }}

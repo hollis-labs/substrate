@@ -1,0 +1,84 @@
+{{- if eq .inputs.tool_kind "service" -}}
+package main
+
+import (
+	"context"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/health"
+	"github.com/hollis-labs/substrate/modules/httphost"
+
+	"{{ .computed.module_path }}/internal/authmode"
+)
+
+// modeEnv overrides the compiled default auth mode; tokenEnv carries the bearer token `enforce` requires.
+// Neither is committed: they come from the unit's environment.
+const (
+	modeEnv  = "{{ .computed.env_prefix }}_AUTH"
+	tokenEnv = "{{ .computed.env_prefix }}_TOKEN"
+)
+
+func serveCmd(ctx context.Context, app *module.App) *cobra.Command {
+	return &cobra.Command{
+		Use:   "serve",
+		Short: "Serve the HTTP API",
+		Args:  cobra.NoArgs,
+		RunE:  func(*cobra.Command, []string) error { return serve(ctx, app, nil) },
+	}
+}
+
+// serve runs the HTTP host until ctx ends. ready, when set, learns the bound address.
+func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
+	mode, err := authmode.Resolve(os.Getenv(modeEnv))
+	if err != nil {
+		return err
+	}
+	addr := bindAddr(app)
+	// loopback_open on a non-loopback bind is refused before anything listens.
+	if err := authmode.CheckBind(mode, addr); err != nil {
+		return err
+	}
+	guard, err := authmode.Guard(mode, os.Getenv(tokenEnv))
+	if err != nil {
+		return err
+	}
+	// The active mode is part of /healthz.
+	health.From(app).Add("auth_"+string(mode), func(context.Context) error { return nil })
+
+	api := http.NewServeMux()
+	api.HandleFunc("GET /api/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	routes := http.NewServeMux()
+	routes.Handle("/api/", guard(api))
+	handler, err := httphost.Handler(app, httphost.Options{Routes: routes})
+	if err != nil {
+		return err
+	}
+	return httphost.Serve(ctx, app, handler, httphost.ServeOptions{
+		Addr: addr,
+		Ready: func(a net.Addr) {
+			slog.Info("{{ .inputs.repo_name }} listening", "addr", a.String(), "auth", string(mode))
+			if ready != nil {
+				ready(a)
+			}
+		},
+	})
+}
+
+func bindAddr(app *module.App) string {
+	cfg, _ := app.Config["httphost"].(map[string]any)
+	addr, _ := cfg["addr"].(string)
+	if addr == "" {
+		addr = "127.0.0.1:{{ .inputs.http_port }}"
+	}
+	return addr
+}
+{{- end }}

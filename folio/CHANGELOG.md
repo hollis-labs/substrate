@@ -4,6 +4,15 @@ All notable changes to folio are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project adheres
 to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- **Class 2 presets** `substrate-cli` and `substrate-service` on the new layer `substrate-tool-baseline`
+  (project/1 RC1): `project.yaml`, `deploy.yaml`, a Cerberus manifest for services (Option B), the class 2 CI,
+  the loopback-dev auth guard and `internal/descriptor` (schema copy, drift-pair and declared-auth tests).
+  Additive: no existing preset changed. `docs/class2-tools.md`.
+
 ## v0.1.0 - 2026-11-12
 
 ### Removed (breaking)

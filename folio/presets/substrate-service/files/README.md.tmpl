@@ -1,0 +1,33 @@
+# {{ .inputs.repo_name }}
+
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A hollis-labs class 2 Substrate service.{{ end }}
+
+Class 2 tool (project/1 class model, RC1): `project.yaml` is the descriptor, `deploy.yaml` is read by `fleet-install`.
+
+## Build
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+./{{ .inputs.repo_name }} serve
+```
+
+## Deploy
+
+`fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first.
+
+## Run under Cerberus
+
+Fleet-install places the binary; Cerberus only supervises it (`{{ .inputs.repo_name }}.cerberus.yaml`, no build, no artifact path):
+
+```sh
+cerberus validate {{ .inputs.repo_name }}.cerberus.yaml
+cerberus register {{ .inputs.repo_name }}.cerberus.yaml
+cerberus resource apply {{ .inputs.repo_name }} --ack
+```
+
+## Auth
+
+Default `{{ .inputs.auth }}`. `enforce` needs a bearer token in `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN`. `{{ upper (replace "-" "_" .inputs.repo_name) }}_AUTH=loopback_open` is for development on a loopback bind only; the service refuses to start otherwise. `/healthz` names the active mode.

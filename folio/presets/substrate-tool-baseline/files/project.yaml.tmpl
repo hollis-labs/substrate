@@ -1,0 +1,30 @@
+# project.yaml — the project descriptor (project/1, release candidate 1: fields may change without a version bump
+# until 1.0). Written once by Folio and never overwritten; edit it by hand. `internal/descriptor` validates it
+# and checks that deploy.yaml{{ if eq .inputs.tool_kind "service" }}, {{ .inputs.repo_name }}.cerberus.yaml{{ end }} and the code agree with it.
+schema: project/1
+id: {{ .inputs.repo_name }}
+name: {{ .computed.app_title }}
+description: {{ if .inputs.description }}{{ .inputs.description | quote }}{{ else }}"TODO(author): one line"{{ end }}
+class: 2
+lifecycle: experimental
+visibility: public
+owner: {{ .inputs.owner }}
+org: {{ .inputs.github_owner }}
+repo: https://github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}
+interfaces:
+{{- if eq .inputs.tool_kind "service" }}
+  - type: daemon
+    name: {{ .inputs.repo_name }}
+    auth: {{ .inputs.auth }}
+{{- else }}
+  - type: cli
+    name: {{ .inputs.repo_name }}
+    auth: none
+{{- end }}
+substrate: { variant: {{ if eq .inputs.tool_kind "service" }}microservice{{ else }}cli{{ end }}, profile: minimal, version: {{ .inputs.substrate_version }} }
+deploy:
+  fleet: deploy.yaml
+{{- if eq .inputs.tool_kind "service" }}
+  cerberus: {{ .inputs.repo_name }}.cerberus.yaml
+{{- end }}
+release: { tagging: ci-artifact-only }

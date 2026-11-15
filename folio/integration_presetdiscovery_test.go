@@ -20,16 +20,19 @@ import (
 // preset is added without one, so the render-invariance test below cannot
 // silently skip it.
 var allPresetInputs = map[string]map[string]any{
-	"base":               {"project_name": "smoke", "github_owner": "chrispian", "description": "x"},
-	"go-package":         {"project_name": "smoke", "github_owner": "chrispian", "package_name": "greeter"},
-	"go-baseline":        {"repo_name": "go-smoke"},
-	"go-lib":             {"repo_name": "go-smoke-lib", "package_name": "smoke", "description": "d"},
-	"ts-plugin":          {"plugin_name": "minimal", "description": "d"},
-	"nanite-plugin":      {"plugin_name": "minimal", "github_owner": "hollis-labs", "description": "d"},
-	"substrate-baseline": {"repo_name": "sub-smoke", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
-	"substrate-app":      {"repo_name": "sub-app", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
-	"substrate-frontend": frontendInputs("sub-fe"),
-	"app-dashboard":      frontendInputs("sub-dash"),
+	"base":                    {"project_name": "smoke", "github_owner": "chrispian", "description": "x"},
+	"go-package":              {"project_name": "smoke", "github_owner": "chrispian", "package_name": "greeter"},
+	"go-baseline":             {"repo_name": "go-smoke"},
+	"go-lib":                  {"repo_name": "go-smoke-lib", "package_name": "smoke", "description": "d"},
+	"ts-plugin":               {"plugin_name": "minimal", "description": "d"},
+	"nanite-plugin":           {"plugin_name": "minimal", "github_owner": "hollis-labs", "description": "d"},
+	"substrate-baseline":      {"repo_name": "sub-smoke", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
+	"substrate-app":           {"repo_name": "sub-app", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
+	"substrate-frontend":      frontendInputs("sub-fe"),
+	"substrate-tool-baseline": {"repo_name": "tool-smoke", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
+	"substrate-cli":           {"repo_name": "tool-cli", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
+	"substrate-service":       {"repo_name": "tool-svc", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
+	"app-dashboard":           frontendInputs("sub-dash"),
 }
 
 func frontendInputs(name string) map[string]any {
@@ -75,7 +78,7 @@ func TestPresetDiscovery_ListMatchesEmbeddedPresets(t *testing.T) {
 		if p.Source != "bundled" || p.Version == "" || p.Description == "" || p.Author == "" {
 			t.Errorf("incomplete summary: %+v", p)
 		}
-		if p.LayerOnly != (p.ID == "go-baseline" || p.ID == "substrate-baseline" || p.ID == "substrate-frontend") {
+		if p.LayerOnly != (p.ID == "go-baseline" || p.ID == "substrate-baseline" || p.ID == "substrate-frontend" || p.ID == "substrate-tool-baseline") {
 			t.Errorf("%s LayerOnly = %v", p.ID, p.LayerOnly)
 		}
 	}

@@ -1,0 +1,153 @@
+// Package descriptor reads and validates project.yaml (project/1).
+//
+// TEMPORARY: this is a copy of the project/1 release-candidate-1 rules (spec_project_kind_v1_class_bar_rc1_20261115),
+// embedded by the Folio preset because the Substrate-owned schema, Go types and validation library (FC-8) are not
+// published yet. Replace this package with that library when it lands; the tests in this directory then keep
+// working against its types. RC1: fields may change without a version bump until 1.0.
+package descriptor
+
+import (
+	"fmt"
+	"os"
+	"regexp"
+	"sort"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Project is a parsed project.yaml. Raw keeps the whole document for the checks that need it.
+type Project struct {
+	Schema      string      `yaml:"schema"`
+	ID          string      `yaml:"id"`
+	Name        string      `yaml:"name"`
+	Description string      `yaml:"description"`
+	Class       any         `yaml:"class"`
+	Lifecycle   string      `yaml:"lifecycle"`
+	Visibility  string      `yaml:"visibility"`
+	Owner       string      `yaml:"owner"`
+	Interfaces  []Interface `yaml:"interfaces"`
+	Deploy      Deploy      `yaml:"deploy"`
+}
+
+// Interface is one entry of interfaces.
+type Interface struct {
+	Type string `yaml:"type"`
+	Name string `yaml:"name"`
+	Auth string `yaml:"auth"`
+}
+
+// Deploy names the sibling descriptor files.
+type Deploy struct {
+	Fleet    string `yaml:"fleet"`
+	Cerberus string `yaml:"cerberus"`
+}
+
+var (
+	topLevel = map[string]bool{
+		"schema": true, "id": true, "name": true, "description": true, "class": true, "lifecycle": true,
+		"visibility": true, "owner": true, "operator": true, "org": true, "repo": true, "location": true,
+		"interfaces": true, "substrate": true, "deploy": true, "release": true, "edges": true,
+		"settings": true, "metadata": true,
+	}
+	required   = []string{"schema", "id", "name", "class", "lifecycle", "visibility", "owner", "interfaces"}
+	classes    = []string{"1", "2", "3", "lib"}
+	lifecycles = []string{"experimental", "active", "deprecated", "retired"}
+	visibility = []string{"public", "private"}
+	ifaceTypes = []string{"cli", "api", "mcp", "daemon", "gui", "lib", "plugin"}
+	authModes  = []string{"enforce", "loopback_open", "policy_gated", "none"}
+	slug       = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	ref        = regexp.MustCompile(`^(user|agency|agent|project|tool):[A-Za-z0-9][A-Za-z0-9._-]*$`)
+)
+
+// Load reads and validates path. The returned error lists every problem.
+func Load(path string) (*Project, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return Parse(b)
+}
+
+// Parse validates the document and decodes it.
+func Parse(b []byte) (*Project, error) {
+	var doc map[string]any
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return nil, fmt.Errorf("project.yaml: %w", err)
+	}
+	if errs := Validate(doc); len(errs) > 0 {
+		return nil, fmt.Errorf("project.yaml: %s", strings.Join(errs, "; "))
+	}
+	var p Project
+	if err := yaml.Unmarshal(b, &p); err != nil {
+		return nil, fmt.Errorf("project.yaml: %w", err)
+	}
+	return &p, nil
+}
+
+// Validate returns every violation of project/1 RC1 in doc (empty when valid).
+func Validate(doc map[string]any) []string {
+	var errs []string
+	bad := func(f string, a ...any) { errs = append(errs, fmt.Sprintf(f, a...)) }
+	for k := range doc {
+		if !topLevel[k] {
+			bad("unknown top-level key %q (free-form data belongs in settings or metadata)", k)
+		}
+	}
+	for _, k := range required {
+		if _, ok := doc[k]; !ok {
+			bad("missing required key %q", k)
+		}
+	}
+	if s, ok := doc["schema"]; ok && s != "project/1" {
+		bad("schema must be project/1, got %v", s)
+	}
+	if id, ok := doc["id"].(string); ok && !slug.MatchString(id) {
+		bad("id %q must be a lowercase slug", id)
+	}
+	if c, ok := doc["class"]; ok && !oneOf(fmt.Sprint(c), classes) {
+		bad("class %v must be one of %v", c, classes)
+	}
+	enum := func(key string, allowed []string) {
+		if v, ok := doc[key]; ok {
+			if s, _ := v.(string); !oneOf(s, allowed) {
+				bad("%s %v must be one of %v", key, v, allowed)
+			}
+		}
+	}
+	enum("lifecycle", lifecycles)
+	enum("visibility", visibility)
+	for _, k := range []string{"owner", "operator"} {
+		if v, ok := doc[k]; ok {
+			if s, _ := v.(string); !ref.MatchString(s) {
+				bad("%s %v must be a kind:id ref", k, v)
+			}
+		}
+	}
+	ifaces, _ := doc["interfaces"].([]any)
+	if _, ok := doc["interfaces"]; ok && len(ifaces) == 0 {
+		bad("interfaces must list at least one interface")
+	}
+	for i, raw := range ifaces {
+		m, _ := raw.(map[string]any)
+		if t, _ := m["type"].(string); !oneOf(t, ifaceTypes) {
+			bad("interfaces[%d].type %v must be one of %v", i, m["type"], ifaceTypes)
+		}
+		if a, ok := m["auth"]; ok {
+			if s, _ := a.(string); !oneOf(s, authModes) {
+				bad("interfaces[%d].auth %v must be one of %v", i, a, authModes)
+			}
+		}
+	}
+	sort.Strings(errs)
+	return errs
+}
+
+func oneOf(s string, allowed []string) bool {
+	for _, a := range allowed {
+		if s == a {
+			return true
+		}
+	}
+	return false
+}
