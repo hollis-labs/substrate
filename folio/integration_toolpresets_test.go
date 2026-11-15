@@ -63,7 +63,7 @@ func TestToolPresets_RenderTrees(t *testing.T) {
 				}
 			}
 			check := readText(t, filepath.Join(dir, ".github", "workflows", "check.yml"))
-			for _, s := range []string{"go vet ./...", "pins check --app .", "go build ./...", "go test -race ./...", "scan-public --ref HEAD", "actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09", "actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16"} {
+			for _, s := range []string{"go vet ./...", "pins check --app .", "go build ./...", "go test -race ./...", "scan-public --ref HEAD", "actions/checkout@v5", "actions/setup-go@v6"} {
 				if !strings.Contains(check, s) {
 					t.Errorf("check.yml missing %q", s)
 				}

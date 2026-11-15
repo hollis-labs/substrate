@@ -30,7 +30,7 @@ Cerberus `port`, `url`, `health_check.url` / `deploy.yaml` `health.url` / `subst
 - **The guard covers the whole host**, not only `/api/`: `/mcp` and module routes mounted by httphost are behind it. Only `GET /healthz` is open.
 - **Token supply**: the Cerberus manifest carries comments, not a value (no secrets in files); see the rendered README, Auth.
 - **No `health.version_json` in `deploy.yaml`** until the service's `/healthz` reports a version; with the key set and no version the health check always fails. The README says so.
-- **Actions in the rendered check workflow are pinned by commit** (tag in a comment).
+- **Actions in the rendered check workflow use the canonical BOM pins**, checked against `platform-pins.yaml`. SHA pinning needs a coordinated BOM change; this preset does not carry its own competing pins.
 
 ## Embedded schema
 
