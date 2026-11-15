@@ -91,7 +91,11 @@ func TestSubstrateApp_RendersTree(t *testing.T) {
 		}
 		rel, _ := filepath.Rel(target, path)
 		s := string(b)
-		if strings.Contains(s, "<no value>") || (!strings.HasSuffix(rel, "check.yml") && !strings.HasSuffix(rel, "build.yml") && strings.Contains(s, "{{")) {
+		templateText := s
+		if strings.HasPrefix(filepath.ToSlash(rel), ".github/workflows/") {
+			templateText = regexp.MustCompile(`\$\{\{[^{}]*\}\}`).ReplaceAllString(s, "")
+		}
+		if strings.Contains(templateText, "<no value>") || strings.Contains(templateText, "{{") {
 			t.Errorf("%s has unresolved template text", rel)
 		}
 		for _, banned := range []string{"chimera", "go-webui", "myapp.example.com"} {
