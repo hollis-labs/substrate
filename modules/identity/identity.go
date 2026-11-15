@@ -40,7 +40,8 @@
 //	bcrypt_cost:     password hashing cost. Default 12.
 //	secure_cookies:  "auto" (default: secure when the request arrived over TLS or
 //	                 trusted_proxy is set and says https), "always" or "never".
-//	trusted_proxy:   true to believe a single X-Forwarded-Proto from the proxy.
+//	trusted_proxy:   true to believe a single X-Forwarded-Proto from a local TLS proxy (a loopback
+//	                 peer; package forwarded, the rule httphost.Harden shares).
 //	retired_key_ttl: how long a rotated-out signing key stays published and
 //	                 verifies. Default and minimum "70m" (the longest token life
 //	                 plus ten minutes); a lower value refuses to start.

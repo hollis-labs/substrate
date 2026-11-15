@@ -188,14 +188,10 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 	if o.Harden != nil {
 		return Harden(app, outer, *o.Harden)
 	}
-	if on, limit := hardenConfigured(app); on {
-		// Turned on by config alone: no body limit unless max_body_bytes is configured, so
-		// turning on one check (the access log) changes no other request.
-		ho := HardenOptions{}
-		if !limit {
-			ho.MaxBodyBytes = -1
-		}
-		return Harden(app, outer, ho)
+	if hardenConfigured(app) {
+		// Turned on by config alone: only what is configured runs (no panic guard, no default
+		// body limit), so turning on one key (the access log) changes no other request.
+		return harden(app, outer, HardenOptions{}, false)
 	}
 	return outer, nil
 }

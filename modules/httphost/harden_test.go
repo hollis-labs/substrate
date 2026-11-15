@@ -371,3 +371,49 @@ func TestHandlerAppliesHardenFromConfigOrOptions(t *testing.T) {
 		t.Errorf("Options.Harden CheckHost: %d", w.Code)
 	}
 }
+
+// Turned on by config alone, Harden runs only what is configured: with access_log and nothing
+// else, forwarding headers, a panic and a large body behave as without Harden.
+func TestAccessLogAloneChangesNoRequest(t *testing.T) {
+	run, err := boot.Start(context.Background(), "t", []string{"health", "httphost"}, `{"httphost":{"access_log":true}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	var seen http.Header
+	var read int
+	h, err := httphost.Handler(run.App, httphost.Options{Mounts: []httphost.Mount{
+		{Pattern: "/echo", Open: true, Handler: http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+			seen = r.Header.Clone()
+			b, _ := io.ReadAll(r.Body)
+			read = len(b)
+		})},
+		{Pattern: "/boom", Open: true, Handler: http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom") })},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := hreq("POST", "/echo", "", bytes.NewReader(make([]byte, 9<<20)))
+	r.RemoteAddr = "192.0.2.10:5555"
+	for _, n := range []string{"X-Forwarded-For", "X-Forwarded-Proto", "X-Real-IP", "Forwarded"} {
+		r.Header.Set(n, "v")
+	}
+	serveH(h, r)
+	for _, n := range []string{"X-Forwarded-For", "X-Forwarded-Proto", "X-Real-IP", "Forwarded"} {
+		if seen.Get(n) != "v" {
+			t.Errorf("%s did not reach the handler", n)
+		}
+	}
+	if read != 9<<20 {
+		t.Errorf("read %d bytes of a 9 MiB body", read)
+	}
+	// No panic guard: the panic reaches net/http as it would without Harden.
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("the panic was recovered with only access_log configured")
+			}
+		}()
+		serveH(h, hreq("GET", "/boom", "", nil))
+	}()
+}

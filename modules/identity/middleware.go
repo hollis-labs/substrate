@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/hollis-labs/substrate/forwarded"
 )
 
 // Middleware is the browser half of sign-in. Put it outside the app's handler
@@ -68,9 +70,5 @@ func (s *Service) secureCookie(r *http.Request) bool {
 	if r.TLS != nil {
 		return true
 	}
-	if s.cfg.trustedProxy {
-		vals := r.Header.Values("X-Forwarded-Proto")
-		return len(vals) == 1 && strings.EqualFold(vals[0], "https")
-	}
-	return false
+	return s.cfg.trustedProxy && forwarded.HTTPS(r)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/hollis-labs/libs/security/redact"
 
 	"github.com/hollis-labs/substrate/apierr"
+	"github.com/hollis-labs/substrate/forwarded"
 	"github.com/hollis-labs/substrate/module"
 )
 
@@ -43,10 +44,12 @@ type HardenOptions struct {
 	CheckOrigin    bool
 	AllowedOrigins []string
 	// TrustedProxy makes Scheme believe X-Forwarded-Proto from a local TLS proxy: exactly one
-	// value, from a loopback peer. It is the identity module's switch (one definition, not two),
+	// value, from a loopback peer (package forwarded, the rule identity uses too). It is the
+	// identity module's switch,
 	// and under Harden an X-Forwarded-Proto that does not meet the rule is removed before the
 	// handler, identity included, sees it. Forwarded, X-Forwarded-For, X-Forwarded-Host and
-	// X-Real-IP are always removed. [identity.trusted_proxy]
+	// X-Real-IP are always removed (when Handler turned Harden on from config alone, only with a
+	// Host check or identity.trusted_proxy). [identity.trusted_proxy]
 	TrustedProxy bool
 	// MaxBodyBytes bounds a request body: a declared Content-Length above it is refused 413
 	// body_too_large before the handler runs, and reading past it fails in the handler. Zero is
@@ -72,14 +75,24 @@ type HardenOptions struct {
 // Harden wraps h in the request hardening chain, outermost first: the access log, panic
 // recovery (a panicking handler answers 500 internal with a ref instead of dropping the
 // connection; the panic is reported to Logger, redacted), the forwarding headers, the Host
-// check, the Origin check and the body limit. Panic recovery and the forwarding-header rule are
-// always on; the rest follow o and, when app is not nil, the config keys (see HardenOptions). It
+// check, the Origin check and the body limit. Called in code, panic recovery and the
+// forwarding-header rule are always on; the rest follow o and, when app is not nil, the config
+// keys (see HardenOptions). When Handler turns it on from config alone, only what is configured
+// runs (no panic guard, no default limit), so a key changes nothing beyond itself. It
 // serves httphost.Handler's result (Handler applies it itself when Options.Harden is set or an
 // httphost hardening key is configured) or an app's own handler. A bad allowed_hosts entry is an
 // error naming it.
 //
 // A raw handler's clients see Harden's refusals in the flat shape unless ErrorBody is set.
 func Harden(app *module.App, h http.Handler, o HardenOptions) (http.Handler, error) {
+	return harden(app, h, o, true)
+}
+
+// harden builds the chain. explicit is false when Handler turned Harden on only because a
+// config key is set: then only what is configured runs, so turning on one key (the access log)
+// changes no request: no panic guard, no default body limit, and the forwarding-header rule only
+// with a Host check or identity.trusted_proxy.
+func harden(app *module.App, h http.Handler, o HardenOptions, explicit bool) (http.Handler, error) {
 	o, err := hardenConfig(app, o)
 	if err != nil {
 		return nil, err
@@ -101,7 +114,7 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) (http.Handler, err
 	if len(o.AllowedOrigins) > 0 {
 		o.CheckOrigin = true
 	}
-	if o.MaxBodyBytes == 0 {
+	if o.MaxBodyBytes == 0 && explicit {
 		o.MaxBodyBytes = DefaultMaxBodyBytes
 	}
 	if o.Logger == nil {
@@ -147,14 +160,14 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) (http.Handler, err
 			inner.ServeHTTP(w, r)
 		})
 	}
-	{
+	if explicit || o.CheckHost || o.TrustedProxy {
 		inner, trusted := next, o.TrustedProxy
 		next = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			r = r.Clone(r.Context())
 			for _, name := range []string{"Forwarded", "X-Forwarded-For", "X-Forwarded-Host", "X-Real-IP"} {
 				r.Header.Del(name)
 			}
-			https := trusted && forwardedHTTPS(r)
+			https := trusted && forwarded.HTTPS(r)
 			if !https {
 				r.Header.Del("X-Forwarded-Proto")
 			}
@@ -168,9 +181,11 @@ func Harden(app *module.App, h http.Handler, o HardenOptions) (http.Handler, err
 			logger.Error("panic recovered", "ref", rec.Ref, "where", rec.Where, "value", rec.Value, "stack", rec.Stack)
 		}),
 	})
-	next = httpguard.Handler(next, httpguard.WithGuard(guard), httpguard.WithResponder(func(w http.ResponseWriter, r *http.Request, pe *panics.Error) {
-		o.ErrorBody(w, r, http.StatusInternalServerError, "internal", pe.Error())
-	}))
+	if explicit {
+		next = httpguard.Handler(next, httpguard.WithGuard(guard), httpguard.WithResponder(func(w http.ResponseWriter, r *http.Request, pe *panics.Error) {
+			o.ErrorBody(w, r, http.StatusInternalServerError, "internal", pe.Error())
+		}))
+	}
 	if o.AccessLog {
 		next = accessLog(logger, next)
 	}
@@ -189,21 +204,6 @@ func Scheme(r *http.Request) string {
 		return "https"
 	}
 	return "http"
-}
-
-// forwardedHTTPS is the trusted-proxy rule: exactly one X-Forwarded-Proto, "https", from a
-// loopback peer.
-func forwardedHTTPS(r *http.Request) bool {
-	vals := r.Header.Values("X-Forwarded-Proto")
-	if len(vals) != 1 || !strings.EqualFold(strings.TrimSpace(vals[0]), "https") {
-		return false
-	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return false
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 // unixConn reports whether the request was accepted on a unix-socket listener, from the
@@ -295,17 +295,15 @@ func hardenConfig(app *module.App, o HardenOptions) (HardenOptions, error) {
 	return o, nil
 }
 
-// hardenConfigured reports whether any hardening key is set under httphost:, and whether
-// max_body_bytes is one of them.
-func hardenConfigured(app *module.App) (on, limit bool) {
+// hardenConfigured reports whether any hardening key is set under httphost:.
+func hardenConfigured(app *module.App) bool {
 	cfg, _ := app.Config["httphost"].(map[string]any)
 	for _, k := range hardenKeys {
 		if _, ok := cfg[k]; ok {
-			on = true
+			return true
 		}
 	}
-	_, limit = cfg["max_body_bytes"]
-	return on, limit
+	return false
 }
 
 func strList(cfg map[string]any, key string) ([]string, error) {
