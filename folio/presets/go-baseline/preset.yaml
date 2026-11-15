@@ -16,6 +16,16 @@ layer_only: true
 # Renders no telemetry: that is an application concern.
 
 inputs:
+  - name: repository_name
+    type: string
+    default: ""
+    pattern: "^([a-z][a-z0-9-]*)?$"
+    description: Physical GitHub repository; defaults to the project name for standalone generation
+  - name: repository_location
+    type: string
+    default: "."
+    pattern: "^(\\.|[a-zA-Z0-9_-]+(/[a-zA-Z0-9_-]+)*)$"
+    description: Module location derived from --repository-root and the target directory
   - name: repo_name
     type: string
     required: true
@@ -73,7 +83,9 @@ inputs:
     description: Body of AGENTS.md `## Boundaries`
 
 computed:
-  module_path: "github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}"
+  repository_slug: "{{ default .inputs.repo_name .inputs.repository_name }}"
+  module_path: 'github.com/{{ .inputs.github_owner }}/{{ default .inputs.repo_name .inputs.repository_name }}{{ if ne .inputs.repository_location "." }}/{{ .inputs.repository_location }}{{ end }}'
+  workflow_directory: '{{ if ne .inputs.repository_location "." }}{{ .inputs.repository_location }}/{{ end }}'
   year: "{{ .now.Year }}"
 
 files:

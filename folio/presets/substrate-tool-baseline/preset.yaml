@@ -106,7 +106,6 @@ inputs:
     description: Commit of hollis-labs/tools whose reusable go-app-build.yml the build workflow calls (pinned by commit)
 
 computed:
-  module_path: "github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}"
   env_prefix: '{{ upper (replace "-" "_" .inputs.repo_name) }}'
   app_title: '{{ pascalCase .inputs.repo_name }}'
 

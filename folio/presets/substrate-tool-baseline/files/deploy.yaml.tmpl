@@ -5,7 +5,7 @@
 # Replace the host alias below with the fleet inventory name of the machine that runs it.
 schema: fleet-deploy/v1
 app: {{ .inputs.repo_name }}
-repo: {{ .inputs.github_owner }}/{{ .inputs.repo_name }}
+repo: {{ .inputs.github_owner }}/{{ .computed.repository_slug }}
 artifact: {name: "{{ .inputs.repo_name }}-{sha12}", tarball: "{{ .inputs.repo_name }}_{version}_{os}_{arch}.tar.gz", sums: SHA256SUMS}
 targets:
   - id: {{ .inputs.repo_name }}-{{ .inputs.target_os }}-{{ .inputs.target_arch }}

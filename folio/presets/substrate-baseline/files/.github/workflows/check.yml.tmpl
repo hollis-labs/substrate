@@ -1,4 +1,4 @@
-name: check
+name: {{ .inputs.repo_name }} check
 on:
   push:
     branches: [main]
@@ -6,11 +6,14 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: check-{{ "${{" }} github.ref }}
+  group: {{ .inputs.repo_name }}-check-{{ "${{" }} github.ref }}
   cancel-in-progress: true
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: {{ .inputs.repository_location }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -19,18 +22,19 @@ jobs:
       # present, wins (setup-go v6+ only).
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: {{ .computed.workflow_directory }}go.mod
+          cache-dependency-path: {{ .computed.workflow_directory }}go.sum
 {{- if .inputs.with_frontend }}
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
       - name: Frontend lock file is committed
-        working-directory: frontend
+        working-directory: {{ .computed.workflow_directory }}frontend
         run: |
           test -f package-lock.json || { echo "frontend/package-lock.json is missing: run npm install in frontend/ and commit package-lock.json" >&2; exit 1; }
       # The UI is built first: internal/webui embeds the frontend output and the Go tests need it.
       - name: Frontend (install, typecheck, lint, build)
-        working-directory: frontend
+        working-directory: {{ .computed.workflow_directory }}frontend
         run: |
           npm ci
           npm run typecheck
@@ -48,10 +52,12 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4
+          working-directory: {{ .inputs.repository_location }}
       # The second lint run: transports call the service layer, not the store (docs/transport-boundary.md).
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4
+          working-directory: {{ .inputs.repository_location }}
           args: --config .golangci.transport.yml
       - name: hygiene (secrets, hosts, private paths)
         run: go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD

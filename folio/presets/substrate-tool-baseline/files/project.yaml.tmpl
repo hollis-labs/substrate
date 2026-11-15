@@ -13,7 +13,8 @@ lifecycle: experimental
 visibility: public
 owner: {{ .inputs.owner }}
 org: {{ .inputs.github_owner }}
-repo: https://github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}
+repo: https://github.com/{{ .inputs.github_owner }}/{{ .computed.repository_slug }}
+location: {{ .inputs.repository_location }}
 interfaces:
 {{- if eq .inputs.tool_kind "service" }}
   - type: daemon

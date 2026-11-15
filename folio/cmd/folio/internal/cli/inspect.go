@@ -14,6 +14,7 @@ import (
 
 func inspectCmd(bundledFS fs.FS, version string) *cobra.Command {
 	var asJSON bool
+	var repositoryRoot string
 	cmd := &cobra.Command{
 		Use:   "inspect <target-dir>",
 		Short: "Report how a project has drifted from its preset (read-only)",
@@ -38,7 +39,7 @@ for it.`,
 				BundledRoot:  "presets",
 				FolioVersion: version,
 			})
-			res, err := svc.Inspect(service.InspectOptions{TargetDir: args[0]})
+			res, err := svc.Inspect(service.InspectOptions{TargetDir: args[0], RepositoryRoot: repositoryRoot})
 			if err != nil {
 				return err
 			}
@@ -49,6 +50,7 @@ for it.`,
 			return nil
 		},
 	}
+	cmd.Flags().StringVar(&repositoryRoot, "repository-root", "", "Selected repository root for tracked workflows outside the module")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit the report as JSON")
 	return cmd
 }

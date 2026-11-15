@@ -1,4 +1,4 @@
-name: check
+name: {{ .inputs.repo_name }} check
 
 on:
   push:
@@ -11,6 +11,9 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: {{ .inputs.repository_location }}
     steps:
       - uses: actions/checkout@v5
 
@@ -19,7 +22,8 @@ jobs:
       # v6+ only — v5 ignores it and would install the `go` line).
       - uses: actions/setup-go@v6
         with:
-          go-version-file: go.mod
+          go-version-file: {{ .computed.workflow_directory }}go.mod
+          cache-dependency-path: {{ .computed.workflow_directory }}go.sum
 
       - name: modules
         run: |
@@ -54,6 +58,7 @@ jobs:
       - uses: golangci/golangci-lint-action@v7
         with:
           version: v2.11.4
+          working-directory: {{ .inputs.repository_location }}
 
       - name: go test -race
         run: go test -race -count=1 ./...

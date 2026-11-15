@@ -1,4 +1,4 @@
-name: build
+name: {{ .inputs.repo_name }} build
 # Release recipe (class 2: tags optional): publishes the release tarballs and SHA256SUMS as workflow
 # artifacts (no tag, no release, no install) that `fleet-install` reads; deploy.yaml rides inside the
 # selected target tarball. Signing is a later step.
@@ -11,6 +11,7 @@ jobs:
   build:
     uses: hollis-labs/tools/.github/workflows/go-app-build.yml@{{ .inputs.build_workflow_ref }}
     with:
+      working_directory: {{ .inputs.repository_location }}
       app: {{ .inputs.repo_name }}
       targets: '["{{ .inputs.target_os }}/{{ .inputs.target_arch }}"]'
       main_pkg: ./cmd/{{ .inputs.repo_name }}

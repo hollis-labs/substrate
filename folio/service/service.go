@@ -92,6 +92,10 @@ func (s *Service) engine() materialize.Engine {
 
 // NewOptions parameterises a Service.New (project generation) call.
 type NewOptions struct {
+	// RepositoryRoot explicitly selects an existing repository for a new module.
+	RepositoryRoot     string
+	repositoryPrepared bool
+	renderTarget       string
 	// PresetID is the id declared in preset.yaml — e.g., "base".
 	PresetID string
 	// TargetDir is the directory the project gets written into. v0
@@ -165,6 +169,14 @@ type LoadedPreset struct {
 // (composes: declared), each layer renders in apply order; same-path
 // writes overwrite earlier layers silently (last-writer-wins).
 func (s *Service) New(opts NewOptions) (NewResult, error) {
+	if !opts.repositoryPrepared && opts.RepositoryRoot == "" {
+		if location, _ := opts.Inputs["repository_location"].(string); location != "" && location != "." {
+			return NewResult{}, fmt.Errorf("repository_location is derived from --repository-root; select that root explicitly")
+		}
+	}
+	if opts.RepositoryRoot != "" && !opts.repositoryPrepared {
+		return s.newInRepository(opts)
+	}
 	loaded, callerCtx, warnings, err := s.prepareRender(opts)
 	if err != nil {
 		return NewResult{}, err
@@ -304,6 +316,14 @@ func (s *Service) New(opts NewOptions) (NewResult, error) {
 // happen before committing. For composing presets, layers iterate in
 // apply order with last-writer-wins on path collisions.
 func (s *Service) Plan(opts NewOptions) (PlanResult, error) {
+	if !opts.repositoryPrepared && opts.RepositoryRoot == "" {
+		if location, _ := opts.Inputs["repository_location"].(string); location != "" && location != "." {
+			return PlanResult{}, fmt.Errorf("repository_location is derived from --repository-root; select that root explicitly")
+		}
+	}
+	if opts.RepositoryRoot != "" && !opts.repositoryPrepared {
+		return s.planInRepository(opts)
+	}
 	loaded, callerCtx, warnings, err := s.prepareRender(opts)
 	if err != nil {
 		return PlanResult{}, err
@@ -499,7 +519,11 @@ func (s *Service) prepareRenderAt(opts NewOptions, now time.Time, folioVersion s
 	if opts.TargetDir == "" {
 		return nil, render.Context{}, nil, newErr(ErrInputInvalid, "target directory is required", nil)
 	}
-	abs, err := filepath.Abs(opts.TargetDir)
+	renderTarget := opts.TargetDir
+	if opts.renderTarget != "" {
+		renderTarget = opts.renderTarget
+	}
+	abs, err := filepath.Abs(renderTarget)
 	if err != nil {
 		return nil, render.Context{}, nil, newErr(ErrInputInvalid, fmt.Sprintf("resolve target %s", opts.TargetDir), err)
 	}

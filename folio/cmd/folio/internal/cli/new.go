@@ -46,6 +46,7 @@ func planCmd(bundledFS fs.FS, version string) *cobra.Command {
 }
 
 func addGenerateFlags(cmd *cobra.Command) {
+	cmd.Flags().String("repository-root", "", "Existing repository root; place this module’s workflows at the root")
 	cmd.Flags().StringArray("input", nil, "Supply an input value (repeatable): --input key=value")
 	cmd.Flags().String("inputs-file", "", "Path to a YAML or JSON file of inputs")
 	cmd.Flags().Bool("non-interactive", false, "Fail on missing required inputs instead of prompting")
@@ -166,10 +167,12 @@ func runGenerate(cmd *cobra.Command, args []string, bundledFS fs.FS, version str
 		return err
 	}
 
+	repositoryRoot, _ := cmd.Flags().GetString("repository-root")
 	opts := service.NewOptions{
-		PresetID:  presetID,
-		TargetDir: targetDir,
-		Inputs:    inputs,
+		RepositoryRoot: repositoryRoot,
+		PresetID:       presetID,
+		TargetDir:      targetDir,
+		Inputs:         inputs,
 	}
 
 	if planOnly {
@@ -197,6 +200,9 @@ func runGenerate(cmd *cobra.Command, args []string, bundledFS fs.FS, version str
 	ghOpts, err := resolveGitHubOptions(cmd, inputs, targetDir)
 	if err != nil {
 		return err
+	}
+	if ghOpts.Enabled && repositoryRoot != "" {
+		return fmt.Errorf("--create-github-repo cannot be combined with --repository-root")
 	}
 	if ghOpts.Enabled {
 		if preErr := gh.Preflight(cmd.Context(), gh.ExecRunner{}); preErr != nil {

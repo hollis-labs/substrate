@@ -15,6 +15,8 @@ import (
 
 // InspectOptions parameterises Service.Inspect.
 type InspectOptions struct {
+	// RepositoryRoot authorizes reading tracked workflows outside the module.
+	RepositoryRoot string
 	// TargetDir is a project previously written by New; it must hold a
 	// .folio.yaml.
 	TargetDir string
@@ -157,6 +159,21 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 	if err != nil {
 		return InspectResult{}, newErr(ErrReadFailed, "resolve "+opts.TargetDir, err)
 	}
+	var repository *os.Root
+	if opts.RepositoryRoot != "" {
+		_, rootPath, location, err := repositoryOptions(NewOptions{RepositoryRoot: opts.RepositoryRoot, TargetDir: opts.TargetDir})
+		if err != nil {
+			return InspectResult{}, err
+		}
+		if location != m.RepositoryLocation {
+			return InspectResult{}, fmt.Errorf("repository location does not match manifest")
+		}
+		repository, err = os.OpenRoot(rootPath)
+		if err != nil {
+			return InspectResult{}, err
+		}
+		defer repository.Close()
+	}
 	for path, rec := range m.Files {
 		if !fs.ValidPath(path) || path == "." {
 			warnings = append(warnings, fmt.Sprintf("%s records %q, which is not a relative path inside the project; skipped", manifest.ManifestFilename, path))
@@ -168,17 +185,31 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 			files = append(files, FileDrift{Path: path, Preset: rec.Preset, Status: DriftRemovedUpstream})
 			continue
 		}
-		full := filepath.Join(opts.TargetDir, filepath.FromSlash(path))
-		if resolved, rerr := filepath.EvalSymlinks(full); rerr == nil && !within(realTarget, resolved) {
-			warnings = append(warnings, fmt.Sprintf("%s is a symlink that leaves the project; skipped", path))
-			continue
+		var onDisk []byte
+		var readErr error
+		if rec.RepositoryPath != "" {
+			name, _ := m.Inputs["repo_name"].(string)
+			if repository == nil {
+				warnings = append(warnings, fmt.Sprintf("%s is a repository workflow; pass --repository-root to inspect it", rec.RepositoryPath))
+				continue
+			}
+			if expected := workflowDestination(path, name); expected == "" || expected != rec.RepositoryPath || !fs.ValidPath(rec.RepositoryPath) {
+				return InspectResult{}, fmt.Errorf("invalid repository workflow destination %q", rec.RepositoryPath)
+			}
+			onDisk, readErr = repository.ReadFile(rec.RepositoryPath)
+		} else {
+			full := filepath.Join(opts.TargetDir, filepath.FromSlash(path))
+			if resolved, rerr := filepath.EvalSymlinks(full); rerr == nil && !within(realTarget, resolved) {
+				warnings = append(warnings, fmt.Sprintf("%s is a symlink that leaves the project; skipped", path))
+				continue
+			}
+			onDisk, readErr = os.ReadFile(full)
 		}
-		onDisk, err := os.ReadFile(full)
-		if errors.Is(err, fs.ErrNotExist) {
+		if errors.Is(readErr, fs.ErrNotExist) {
 			files = append(files, FileDrift{Path: path, Preset: rec.Preset, Status: DriftMissingLocally})
 			continue
-		} else if err != nil {
-			return InspectResult{}, newErr(ErrReadFailed, "read "+path, err)
+		} else if readErr != nil {
+			return InspectResult{}, newErr(ErrReadFailed, "read "+path, readErr)
 		}
 		unstable := !bytes.Equal(rf.File.Content, again[path].File.Content)
 		locallyChanged := manifest.Digest(onDisk) != rec.DigestAtGen

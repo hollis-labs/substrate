@@ -244,3 +244,27 @@ app. There is no `chat-app` preset for now: it waits for a pinned `kit-chat` in 
 ## License
 
 MIT — see [LICENSE](./LICENSE).
+
+## Generate a module in an existing repository
+
+Use an explicit repository boundary; the module's parent directory must already exist:
+
+```sh
+folio plan substrate-service ./tools/example --repository-root ./tools \
+  --input repo_name=example --input substrate_version=<current-version> --non-interactive
+folio new substrate-service ./tools/example --repository-root ./tools \
+  --input repo_name=example --input substrate_version=<current-version> --non-interactive --yes
+folio inspect ./tools/example --repository-root ./tools
+```
+
+`repo_name` names the project/binary. `repository_name` names the physical GitHub repository
+(default: the selected root's basename); the target's relative path supplies `repository_location`.
+For this example the module is `github.com/hollis-labs/tools/example`, and the descriptor records
+repository `hollis-labs/tools` and location `example`. Libraries use the same repository option
+without adopting Substrate.
+
+Checks and reusable builds are written to the selected root's `.github/workflows/example-*.yml`,
+with the module working directory and dependency-cache path. An existing workflow or module path
+is refused; other modules and authored workflows are preserved. The manifest records each workflow's
+repository destination. Inspection reads those files only when you explicitly supply the root.
+Plan output uses paths relative to that root. This is new-project generation; sync remains deferred.

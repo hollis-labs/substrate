@@ -17,15 +17,16 @@ const ManifestFilename = ".folio.yaml"
 // marshaling — relying on struct-field order rather than map iteration is
 // what makes Write idempotent.
 type Manifest struct {
-	FolioVersion string                `yaml:"folio_version"`
-	GeneratedAt  time.Time             `yaml:"generated_at"`
-	Generator    string                `yaml:"generator"`
-	Presets      []PresetRef           `yaml:"presets"`
-	Inputs       map[string]any        `yaml:"inputs,omitempty"`
-	Computed     map[string]any        `yaml:"computed,omitempty"`
-	Files        map[string]FileRecord `yaml:"files,omitempty"`
-	PostRender   *PostRenderRecord     `yaml:"post_render,omitempty"`
-	SyncHistory  []SyncEvent           `yaml:"sync_history,omitempty"`
+	RepositoryLocation string                `yaml:"repository_location,omitempty"`
+	FolioVersion       string                `yaml:"folio_version"`
+	GeneratedAt        time.Time             `yaml:"generated_at"`
+	Generator          string                `yaml:"generator"`
+	Presets            []PresetRef           `yaml:"presets"`
+	Inputs             map[string]any        `yaml:"inputs,omitempty"`
+	Computed           map[string]any        `yaml:"computed,omitempty"`
+	Files              map[string]FileRecord `yaml:"files,omitempty"`
+	PostRender         *PostRenderRecord     `yaml:"post_render,omitempty"`
+	SyncHistory        []SyncEvent           `yaml:"sync_history,omitempty"`
 }
 
 // PresetRef identifies one preset that contributed to the render. The
@@ -47,6 +48,7 @@ type PresetRef struct {
 // DigestAtGen is `sha256:<hex>` of the rendered content AFTER LF newline
 // normalisation, matching the contract described in design doc §5.
 type FileRecord struct {
+	RepositoryPath  string `yaml:"repository_path,omitempty"`
 	Preset          string `yaml:"preset,omitempty"`
 	DigestAtGen     string `yaml:"digest_at_gen"`
 	ModifiedLocally bool   `yaml:"modified_locally,omitempty"`
