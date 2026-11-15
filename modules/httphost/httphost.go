@@ -23,6 +23,12 @@
 // The guard, the scope table and every other refusal by the framework for that path still
 // answer in the flat shape, so a client sees the upstream dialect for upstream errors and the
 // framework shape for framework refusals. Do not use it for an app's own API.
+//
+// # Hardening
+//
+// Harden adds a Host check, an Origin check on writes, a body limit, panic recovery and a
+// credential-free access log, to Handler's result or to an app's own handler. It is opt-in:
+// Handler applies it when Options.Harden is set or a hardening key is configured under httphost:.
 package httphost
 
 import (
@@ -74,6 +80,10 @@ type Options struct {
 	// equal to a mount's path makes that mount raw. Refused otherwise, naming the prefix.
 	// The guard and the framework's own refusals stay flat.
 	RawPrefixes []string
+	// Harden, when set, wraps the handler in Harden with these options. Handler also applies
+	// Harden (with zero options) when a hardening key is configured under httphost:. Nil and no
+	// key (the default) leaves the handler as before.
+	Harden *HardenOptions
 }
 
 // Mount is an app handler at a net/http mux pattern ("/a2a/" or "GET /.well-known/agent.json").
@@ -175,6 +185,12 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	outer.Handle("/", h.Handler())
+	if o.Harden != nil {
+		return Harden(app, outer, *o.Harden), nil
+	}
+	if hardenConfigured(app) {
+		return Harden(app, outer, HardenOptions{}), nil
+	}
 	return outer, nil
 }
 

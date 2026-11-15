@@ -207,7 +207,11 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 6. Keep stored secrets behind the `secrets` module's resolver. Never return a secret, a secret reference, a hash or a
    session value from any API.
 7. DNS rebinding and proxies: serve on loopback, check the `Host` header against loopback plus a configured list, and
-   set identity's `trusted_proxy` only for a local TLS proxy that overwrites `X-Forwarded-Proto`.
+   set identity's `trusted_proxy` only for a local TLS proxy that overwrites `X-Forwarded-Proto`. `httphost.Harden`
+   does the Host check (`httphost: {allowed_hosts: [...]}` or `check_host: true` for loopback only), an Origin check on
+   writes, a body limit, panic recovery and a credential-free access log; `Handler` applies it when one of those keys
+   is configured or `Options.Harden` is set, and a custom handler wraps itself with `httphost.Harden(app, h, opts)`.
+   Its `trust_forwarded_proto` (read through `httphost.Scheme(r)`) is separate from identity's `trusted_proxy`.
 8. Strict-mode proofs (passkeys, signed approvals) are not part of this path. Do not port them; record the follow-up.
 9. Local trust for a stdio MCP process (owner decision 14): enforced identity stays on HTTP; a stdio process the
    user launched locally against the app's own data file may run without a token. The app opts in in Go, at the
