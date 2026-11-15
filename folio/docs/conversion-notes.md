@@ -18,7 +18,7 @@ to the runtime class bar, not a claim that Folio already implements its generate
 
 ## Version evidence
 
-The framework-required CI pin is `v0.1.1-0.20261115140033-66978e9d84cd`. Its BOM includes
+The framework-required CI pin is `v0.1.1-0.20261115173848-45b018004dd2`. Its BOM includes
 kit-chat 0.8.0, kit-identity 0.1.4, app-shell 0.11.0, design-app-runtime 0.6.0,
 design-bindings 0.3.0 and kit-cards 0.3.0. These are validation evidence, not defaults
 or a second source of pins: generation requires the selected framework and kit inputs.
@@ -32,8 +32,10 @@ The earlier missing-chat-kit and unpublished-app-shell blockers are resolved.
   source is framework work; Folio does not invent one.
 - No framework-owned CI template package exists here. Folio's templates and pinned reusable build
   remain its implementation, validated by generated-app tests.
-- Shared project/1 JSON Schema/Go validation and registry/canonical tool registration belong to FC-8.
-  The current descriptor validator/projection is temporary. No registry endpoint or hook is fabricated.
+- Shared project/1 JSON Schema/Go validation now comes from Substrate `kinds`. New class 2 output
+  requires the version above or a compatible successor. Folio's runtime projection and conformance
+  checks remain local; structural parsing is not operational certification. Registry registration
+  remains separate, and no registry endpoint or hook is fabricated.
 - The nested historical `folio/.github/workflows/ci.yml` is still read by the pins drift checker;
   GitHub executes the repository-root `folio-checks.yml`. Consolidating that drift-check source is separate.
 - Chat starts without an assistant provider. The service hook is real, but production provider policy,
