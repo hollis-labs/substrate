@@ -1,0 +1,341 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "tool/1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^tool:(mcp|cli|builtin|skill|plugin)/"
+    },
+    "source": {
+      "enum": [
+        "mcp",
+        "cli",
+        "builtin",
+        "skill",
+        "plugin"
+      ]
+    },
+    "origin": {
+      "type": "string",
+      "minLength": 1
+    },
+    "lifecycle": {
+      "enum": [
+        "active",
+        "deprecated",
+        "removed"
+      ]
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^(user|agency|agent|project|tool):[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "definition": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "input_schema": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_schema": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "title": {
+                  "type": "string"
+                },
+                "readOnlyHint": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "destructiveHint": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "idempotentHint": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "openWorldHint": {
+                  "anyOf": [
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "icons": {
+          "anyOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "meta": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_ref": {
+          "type": "string",
+          "minLength": 1
+        },
+        "seen_via": {
+          "enum": [
+            "gateway-list",
+            "plugin-manifest",
+            "annotation-table",
+            "harness-log",
+            "cli-probe"
+          ]
+        },
+        "cli": {
+          "type": "object",
+          "properties": {
+            "signature": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$"
+            },
+            "help_text_digest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "known_flags": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          },
+          "required": [
+            "signature",
+            "help_text_digest",
+            "known_flags"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "aliases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "system": {
+            "type": "string",
+            "minLength": 1
+          },
+          "alias": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "system",
+          "alias"
+        ],
+        "additionalProperties": false
+      },
+      "uniqueItems": true
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "source",
+    "lifecycle",
+    "definition"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "cli"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "definition": {
+            "required": [
+              "cli"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "input_schema"
+                  ]
+                },
+                {
+                  "required": [
+                    "output_schema"
+                  ]
+                },
+                {
+                  "required": [
+                    "annotations"
+                  ]
+                },
+                {
+                  "required": [
+                    "description"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        "not": {
+          "required": [
+            "origin"
+          ]
+        }
+      },
+      "else": {
+        "required": [
+          "origin"
+        ],
+        "properties": {
+          "definition": {
+            "not": {
+              "required": [
+                "cli"
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "mcp"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "definition": {
+            "required": [
+              "input_schema"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]{1,128}$"
+              },
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "object"
+                  }
+                },
+                "required": [
+                  "type"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

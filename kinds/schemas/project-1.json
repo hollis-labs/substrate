@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "project/1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string"
+    },
+    "class": {
+      "enum": [
+        1,
+        2,
+        3,
+        "lib"
+      ]
+    },
+    "lifecycle": {
+      "enum": [
+        "experimental",
+        "active",
+        "deprecated",
+        "retired"
+      ]
+    },
+    "visibility": {
+      "enum": [
+        "public",
+        "private"
+      ]
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^(user|agency|agent|project|tool):[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "operator": {
+      "type": "string",
+      "pattern": "^(user|agency|agent|project|tool):[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "org": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repo": {
+      "type": "string",
+      "minLength": 1
+    },
+    "location": {
+      "type": "string",
+      "minLength": 1
+    },
+    "interfaces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "cli",
+              "api",
+              "mcp",
+              "daemon",
+              "gui",
+              "lib",
+              "plugin"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "auth": {
+            "enum": [
+              "enforce",
+              "loopback_open",
+              "policy_gated",
+              "none"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "substrate": {
+      "type": "object",
+      "properties": {
+        "variant": {
+          "enum": [
+            "service",
+            "app-host",
+            "headless",
+            "cli",
+            "microservice"
+          ]
+        },
+        "profile": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "variant",
+        "profile",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "deploy": {
+      "type": "object",
+      "properties": {
+        "fleet": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cerberus": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "release": {
+      "type": "object",
+      "properties": {
+        "tagging": {
+          "enum": [
+            "semver",
+            "ci-artifact-only"
+          ]
+        }
+      },
+      "required": [
+        "tagging"
+      ],
+      "additionalProperties": false
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "enum": [
+              "owned_by",
+              "operated_by",
+              "responsible_for",
+              "answers_to",
+              "consumes",
+              "part_of",
+              "supersedes"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^(user|agency|agent|project|tool):[A-Za-z0-9][A-Za-z0-9._/-]*$"
+          }
+        },
+        "required": [
+          "type",
+          "to"
+        ],
+        "additionalProperties": false
+      },
+      "uniqueItems": true
+    },
+    "settings": {
+      "type": "object"
+    },
+    "metadata": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "name",
+    "class",
+    "lifecycle",
+    "visibility",
+    "owner",
+    "interfaces"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "class": {
+            "const": "lib"
+          }
+        },
+        "required": [
+          "class"
+        ]
+      },
+      "then": {
+        "properties": {
+          "interfaces": {
+            "items": {
+              "properties": {
+                "type": {
+                  "const": "lib"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

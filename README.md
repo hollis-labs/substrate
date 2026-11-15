@@ -39,6 +39,10 @@ go run ./cmd/substrate build    -f examples/hello-app-host/substrate.yaml
 
 Modules wrap and pin [`libs`](https://github.com/hollis-labs/libs); they do not copy it.
 
+[`kinds`](kinds/README.md) supplies shared operational schemas, types and
+validation for project descriptors, tool definitions and typed edges. It is a
+pure package; services own the records, storage and review policy.
+
 ## Development
 
 ```sh

@@ -1,0 +1,120 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "side_effect": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "read",
+          "write",
+          "destructive",
+          "external_comms"
+        ]
+      },
+      "uniqueItems": true,
+      "minItems": 1
+    },
+    "reversibility": {
+      "enum": [
+        "reversible",
+        "compensable",
+        "irreversible"
+      ]
+    },
+    "idempotent": {
+      "type": "boolean"
+    },
+    "data_sensitivity": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "egress": {
+      "enum": [
+        "none",
+        "internal",
+        "external"
+      ]
+    },
+    "secret_access": {
+      "enum": [
+        "none",
+        "reads",
+        "writes"
+      ]
+    },
+    "scopes": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "approval_tier": {
+      "enum": [
+        "ground",
+        "elevated",
+        "critical"
+      ]
+    },
+    "cost_tier": {
+      "enum": [
+        "free",
+        "low",
+        "high"
+      ]
+    },
+    "input_dependent": {
+      "type": "boolean"
+    },
+    "rule_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "arg_rules": {
+      "type": "string",
+      "minLength": 1
+    },
+    "flag_patterns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "minLength": 1
+          },
+          "side_effect": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "read",
+                "write",
+                "destructive",
+                "external_comms"
+              ]
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "pattern",
+          "side_effect",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [],
+  "additionalProperties": false
+}
