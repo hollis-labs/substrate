@@ -2,6 +2,7 @@ package pluginhost_test
 
 import (
 	"context"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -63,20 +64,32 @@ func TestStartsPluginReportsHealthAndStopsIt(t *testing.T) {
 }
 
 func TestRoutesMountedUnderAPI(t *testing.T) {
+	pluginhost.UseSpecs(helloSpec(t))
 	defer pluginhost.UseSpecs()
 	run, err := boot.Start(context.Background(), "t", []string{"health", "httphost", "pluginhost"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = run.Stop(context.Background()) })
-	h, err := httphost.Handler(run.App, httphost.Options{})
+	app := http.NewServeMux()
+	app.HandleFunc("/api/plugins/console/", func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("app-console")) })
+	h, err := httphost.Handler(run.App, httphost.Options{Routes: app})
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest("GET", "/api/plugins/nope/x", nil))
-	if w.Code != 404 || w.Body.String() == "" {
-		t.Fatalf("unknown plugin: %d %q", w.Code, w.Body)
+	get := func(path string) *httptest.ResponseRecorder {
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, httptest.NewRequest("GET", path, nil))
+		return w
+	}
+	// A registered id is forwarded to its plugin (the hello plugin serves no
+	// such route, so it answers, but not with the app's body).
+	if w := get("/api/plugins/hello/x"); w.Body.String() == "app-console" {
+		t.Fatalf("registered plugin id reached the app handler: %d %q", w.Code, w.Body)
+	}
+	// An id no plugin registered belongs to the app.
+	if w := get("/api/plugins/console/v1/x"); w.Code != 200 || w.Body.String() != "app-console" {
+		t.Fatalf("app route under /api/plugins/: %d %q", w.Code, w.Body)
 	}
 }
 
@@ -89,11 +102,12 @@ func TestBadSpecFailsStart(t *testing.T) {
 }
 
 func TestPluginRoutesAreScopedAndTheAppCanBeFiner(t *testing.T) {
+	pluginhost.UseSpecs(helloSpec(t))
 	defer pluginhost.UseSpecs()
 	broad, narrow := "broad-key", "narrow-key"
 	cfg := `{"auth":{"mode":"enforce","api_keys":[` +
 		`{"id":"svc/b","hash":"` + libauth.HashKey(broad) + `","scopes":["t.plugins"]},` +
-		`{"id":"svc/n","hash":"` + libauth.HashKey(narrow) + `","scopes":["t.foo"]}]}}`
+		`{"id":"svc/n","hash":"` + libauth.HashKey(narrow) + `","scopes":["t.hello"]}]}}`
 	run, err := boot.Start(context.Background(), "t", []string{"health", "auth", "httphost", "pluginhost"}, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +115,7 @@ func TestPluginRoutesAreScopedAndTheAppCanBeFiner(t *testing.T) {
 	t.Cleanup(func() { _ = run.Stop(context.Background()) })
 	// The app maps a finer scope for one plugin before the host builds its
 	// handler; it is consulted before the module's broad "<app>.plugins".
-	auth.ScopeTable(run.App).Route("*", "/api/plugins/foo/*", "t.foo")
+	auth.ScopeTable(run.App).Route("*", "/api/plugins/hello/*", "t.hello")
 	h, err := httphost.Handler(run.App, httphost.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -119,11 +133,9 @@ func TestPluginRoutesAreScopedAndTheAppCanBeFiner(t *testing.T) {
 		name, path, key string
 		want            int
 	}{
-		{"no token", "/api/plugins/foo/x", "", 401},
-		{"broad scope reaches any plugin", "/api/plugins/bar/x", broad, 404}, // admitted; no such plugin
-		{"finer app scope reaches its plugin", "/api/plugins/foo/x", narrow, 404},
-		{"finer scope does not reach others", "/api/plugins/bar/x", narrow, 403},
-		{"broad scope no longer reaches the finer plugin", "/api/plugins/foo/x", broad, 403},
+		{"no token", "/api/plugins/hello/x", "", 401},
+		{"finer app scope reaches its plugin", "/api/plugins/hello/x", narrow, 502}, // admitted and forwarded; the plugin has no such route,
+		{"broad scope no longer reaches the finer plugin", "/api/plugins/hello/x", broad, 403},
 	} {
 		if got := status(c.path, c.key); got != c.want {
 			t.Errorf("%s: got %d want %d", c.name, got, c.want)

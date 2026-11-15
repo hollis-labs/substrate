@@ -8,8 +8,10 @@
 //
 //	pluginhost.UseSpecs(spec1, spec2)
 //
-// The forwarding routes (/api/plugins/{id}/..., any method) are declared in
-// ui.json and mounted by httphost under /api/, so the auth guard covers them.
+// The forwarding routes (/api/plugins/{id}/..., any method) are declared one per
+// registered Spec and mounted by httphost under /api/, so the auth guard covers
+// them. Other paths under /api/plugins/ are not claimed: an app may serve its
+// own handlers there through httphost.Options.Routes.
 // Their scope is "<app>.plugins" (config pluginhost.scope replaces it). An app
 // that wants finer scopes per plugin maps its own routes on auth.ScopeTable
 // after boot.Start; those are consulted first.
@@ -17,7 +19,6 @@ package pluginhost
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"net/http"
 	"sync"
@@ -30,11 +31,31 @@ import (
 	"github.com/hollis-labs/substrate/ui"
 )
 
-//go:embed ui.json
-var uiJSON []byte
+// UI declares one forwarding route per registered Spec, "* /api/plugins/<id>/".
+// The module does not claim the rest of /api/plugins/, so an app can serve its
+// own handlers under the ids it does not register as plugins.
+func (*mod) UI() ui.Contribution { return routesFor(registered()) }
 
-// UI declares the plugin forwarding routes.
-func (*mod) UI() ui.Contribution { return ui.MustParse(uiJSON) }
+func registered() []libhost.Spec {
+	mu.Lock()
+	defer mu.Unlock()
+	return append([]libhost.Spec(nil), specs...)
+}
+
+func routesFor(list []libhost.Spec) ui.Contribution {
+	c := ui.Contribution{Module: "pluginhost"}
+	seen := map[string]bool{}
+	for _, s := range list {
+		if seen[s.ID] {
+			continue
+		}
+		seen[s.ID] = true
+		c.Routes = append(c.Routes, ui.Route{Method: "*", Path: routePath(s.ID), Scope: "{app}.plugins"})
+	}
+	return c
+}
+
+func routePath(id string) string { return "/api/plugins/" + id + "/" }
 
 // InventoryKey is where the *plugins.Inventory is published.
 const InventoryKey = "pluginhost.inventory"
@@ -59,17 +80,18 @@ type mod struct{ inv *plugins.Inventory }
 func (*mod) Name() string { return "pluginhost" }
 
 func (m *mod) Start(ctx context.Context, app *module.App) error {
-	mu.Lock()
-	list := append([]libhost.Spec(nil), specs...)
-	mu.Unlock()
-
+	list := registered()
 	inv := plugins.NewInventory(list)
 	if err := inv.Start(ctx); err != nil {
 		return fmt.Errorf("start plugins: %w", err)
 	}
 	m.inv = inv
 	app.Set(InventoryKey, inv)
-	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"* /api/plugins/": inv.APIRoutes()}); err != nil {
+	handlers := map[string]http.Handler{}
+	for _, sp := range list {
+		handlers["* "+routePath(sp.ID)] = inv.APIRoutes()
+	}
+	if err := module.AddRoutes(app, routesFor(list), handlers); err != nil {
 		_ = inv.Stop(ctx)
 		m.inv = nil
 		return err
