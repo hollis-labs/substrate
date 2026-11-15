@@ -25,18 +25,33 @@ const (
 )
 
 func serveCmd(ctx context.Context, app *module.App) *cobra.Command {
-	return &cobra.Command{
+	var dev, managed bool
+	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "Serve the HTTP API",
 		Args:  cobra.NoArgs,
-		RunE:  func(*cobra.Command, []string) error { return serve(ctx, app, nil) },
+		RunE:  func(*cobra.Command, []string) error { return serveWith(ctx, app, nil, dev, managed) },
 	}
+	cmd.Flags().BoolVar(&dev, "dev", false, "Allow loopback_open for a local development run")
+	cmd.Flags().BoolVar(&managed, "managed", false, "Require enforced auth for a supervised run")
+	return cmd
 }
 
 // serve runs the HTTP host until ctx ends. ready, when set, learns the bound address.
 func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
-	mode, err := authmode.Resolve(os.Getenv(modeEnv))
+	return serveWith(ctx, app, ready, false, false)
+}
+
+func serveWith(ctx context.Context, app *module.App, ready func(net.Addr), dev, managed bool) error {
+	override := os.Getenv(modeEnv)
+	if managed && override == "" {
+		override = string(authmode.Enforce)
+	}
+	mode, err := authmode.Resolve(override)
 	if err != nil {
+		return err
+	}
+	if err := authmode.CheckRun(mode, dev, managed); err != nil {
 		return err
 	}
 	addr := bindAddr(app)

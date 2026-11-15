@@ -17,3 +17,10 @@ go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
 ## Deploy
 
 `fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first.
+
+## Installed configuration
+
+The binary reads `$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml` when present (fallback
+`~/.config/{{ .inputs.repo_name }}/config.yaml`). `SUBSTRATE_CONFIG` explicitly selects another file.
+Config discovery creates nothing and does not read from the checkout. Store credentials in an
+operator-owned environment file or secret provider outside the repository.

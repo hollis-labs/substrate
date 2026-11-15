@@ -22,13 +22,14 @@ resources:
       command:
         - ~/.local/bin/{{ .inputs.repo_name }}
         - serve
+        - --managed
       mode: os_service
       # enforce needs {{ .computed.env_prefix }}_TOKEN at start, and the token is never committed. Supply it with a
       # Cerberus secret reference or an owner-only env file outside this repository (README, Auth), e.g.:
       #   env_file: /absolute/path/to/{{ .inputs.repo_name }}.env
       port: {{ .inputs.http_port }}
       run_from: workspace
-      supervisor: systemd_user
+      supervisor: auto
       url: http://127.0.0.1:{{ .inputs.http_port }}/healthz
       health_check:
         url: http://127.0.0.1:{{ .inputs.http_port }}/healthz

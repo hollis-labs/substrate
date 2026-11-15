@@ -35,6 +35,18 @@ func Resolve(override string) (Mode, error) {
 	return "", fmt.Errorf("authmode: unknown mode %q (enforce, loopback_open)", override)
 }
 
+// CheckRun requires an explicit development run for loopback_open. A supervisor
+// must pass managed, which refuses a dev override even when the listener is loopback.
+func CheckRun(mode Mode, dev, managed bool) error {
+	if managed && dev {
+		return fmt.Errorf("authmode: --managed and --dev cannot be combined")
+	}
+	if mode == LoopbackOpen && (!dev || managed) {
+		return fmt.Errorf("authmode: loopback_open requires --dev and cannot run with --managed")
+	}
+	return nil
+}
+
 // CheckBind refuses loopback_open unless addr is a loopback address. A wildcard, an empty host or any other
 // address is refused; so is a name other than localhost (it could resolve anywhere).
 func CheckBind(mode Mode, addr string) error {

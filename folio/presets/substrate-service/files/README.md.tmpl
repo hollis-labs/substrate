@@ -16,7 +16,7 @@ go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
 
 ## Deploy
 
-`fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first.
+`fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first. Render with `target_os=darwin target_arch=arm64` for an Apple Silicon Mac (defaults: linux/amd64); Cerberus `supervisor: auto` selects the native supervisor. The installed PATH binary runs independently of the source checkout; keep operator config/credentials outside the repository.
 
 ## Run under Cerberus
 
@@ -30,7 +30,7 @@ cerberus resource apply {{ .inputs.repo_name }} --ack
 
 ## Auth
 
-Default `{{ .inputs.auth }}`. `enforce` needs a bearer token in `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN`. `{{ upper (replace "-" "_" .inputs.repo_name) }}_AUTH=loopback_open` is for development on a loopback bind only; the service refuses to start otherwise. `/healthz` names the active mode.
+Default `{{ .inputs.auth }}`. `enforce` needs a bearer token in `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN`. `{{ upper (replace "-" "_" .inputs.repo_name) }}_AUTH=loopback_open` requires `serve --dev` on a loopback bind; the service refuses to start otherwise. `/healthz` names the active mode. The generated Cerberus command uses `serve --managed`, which defaults to enforce and refuses an explicit loopback_open override or `--dev`, even on loopback.
 
 The token never goes in a file of this repository. Under Cerberus an `enforce` service exits at start without it, so before `cerberus resource apply` put `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN` where the unit reads it: a Cerberus secret reference in the manifest's `config.env`, or an owner-only env file named by `config.env_file` (an absolute path outside this repository). The commented lines in `{{ .inputs.repo_name }}.cerberus.yaml` show where.
 
@@ -39,3 +39,10 @@ The token never goes in a file of this repository. Under Cerberus an `enforce` s
 `deploy.yaml` restarts through Cerberus (`restart: {via: cerberus, resource: {{ .inputs.repo_name }}}`). fleet-install runs that restart itself only when the step has `run: true` and the deploy is run by the local user on that host; otherwise it prints a request for a human to approve and the deploy stays pending until `--restart-done`.
 
 Health 200 is not proof of the new build: the manifest must keep `command[0]` on the fleet-installed path, otherwise Cerberus can restart an older copy. After a deploy check that the running executable is the new version (`readlink /proc/<pid>/exe`). deploy.yaml has no `health.version_json`: this service's `/healthz` does not report a version, so the check would always fail; add the key once the service exposes one.
+
+## Installed configuration
+
+The binary reads `$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml` when present (fallback
+`~/.config/{{ .inputs.repo_name }}/config.yaml`). `SUBSTRATE_CONFIG` explicitly selects another file.
+Config discovery creates nothing and does not read from the checkout. Store credentials in an
+operator-owned environment file or secret provider outside the repository.

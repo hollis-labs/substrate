@@ -80,6 +80,16 @@ inputs:
     default: "user:owner"
     pattern: "^(user|agency|agent):[a-z0-9][a-z0-9._-]*$"
     description: "project.yaml owner ref (a placeholder: set your own, as user:<id>, agency:<id> or agent:<id>)"
+  - name: target_os
+    type: string
+    default: linux
+    pattern: "^(linux|darwin)$"
+    description: Operating system of the fleet deployment target
+  - name: target_arch
+    type: string
+    default: amd64
+    pattern: "^(amd64|arm64)$"
+    description: Architecture of the fleet deployment target
   - name: deploy_host
     type: string
     default: fleet-host

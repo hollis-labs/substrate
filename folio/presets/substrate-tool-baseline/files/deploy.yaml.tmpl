@@ -8,8 +8,8 @@ app: {{ .inputs.repo_name }}
 repo: {{ .inputs.github_owner }}/{{ .inputs.repo_name }}
 artifact: {name: "{{ .inputs.repo_name }}-{sha12}", tarball: "{{ .inputs.repo_name }}_{version}_{os}_{arch}.tar.gz", sums: SHA256SUMS}
 targets:
-  - id: {{ .inputs.repo_name }}-linux
-    when: {os: linux, arch: amd64}
+  - id: {{ .inputs.repo_name }}-{{ .inputs.target_os }}-{{ .inputs.target_arch }}
+    when: {os: {{ .inputs.target_os }}, arch: {{ .inputs.target_arch }}}
     hosts: [{{ .inputs.deploy_host }}]
     binary: {{ .inputs.repo_name }}
     install_root: ~/.local/share/fleet/releases/{{ .inputs.repo_name }}

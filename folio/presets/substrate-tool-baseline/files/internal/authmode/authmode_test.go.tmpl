@@ -94,4 +94,12 @@ func TestGuardUnknownMode(t *testing.T) {
 		t.Error("an unknown mode was accepted")
 	}
 }
+func TestDevelopmentRunMode(t *testing.T) {
+	if err := CheckRun(LoopbackOpen, true, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := CheckRun(Enforce, false, true); err != nil {
+		t.Fatal(err)
+	}
+}
 {{- end }}

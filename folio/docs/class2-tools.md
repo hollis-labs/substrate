@@ -12,7 +12,7 @@
 | auth guard | n/a | `internal/authmode` |
 
 Inputs: `repo_name`, `substrate_version` (no default; from the Substrate BOM), `description`; service also `http_port`,
-`auth`; both `owner` (default the placeholder `user:owner`; set your own), `deploy_host`, `build_workflow_ref`. `go_version` comes from
+`auth`; deploy target inputs `target_os` (linux/darwin) and `target_arch` (amd64/arm64); both `owner` (default the placeholder `user:owner`; set your own), `deploy_host`, `build_workflow_ref`. `go_version` comes from
 `platform-pins.yaml` through go-baseline.
 
 ## Single source
@@ -51,3 +51,15 @@ The optional `mcp` subcommand, the registry registration hook, Folio's own `proj
 - `substrate pins sync --app` is not in tag v0.1.0; the tests use a pseudo-version.
 - Class 2 CI has no lint and no govulncheck of its own (the build workflow's govulncheck is advisory); decide whether the bar is too light.
 - Option B for tools Cerberus should build is not covered: the manifest has no build_strategy.
+
+## Managed and development runs
+
+`serve --managed` is the generated Cerberus invocation. It defaults to enforced auth regardless of the
+compiled development default, requires a configured token, and refuses an explicit `loopback_open`
+override. `loopback_open` requires `serve --dev`; combining `--dev` and `--managed` is refused.
+Cerberus uses `supervisor: auto` for Linux and macOS. Set `target_os` and `target_arch` when rendering
+the fleet target (defaults linux/amd64). Fleet-install owns the PATH binary; neither supervision nor
+runtime operation needs the checkout. These are startup rules, not a way to detect arbitrary supervisors.
+
+Installed tools discover optional `$XDG_CONFIG_HOME/<app>/config.yaml` (fallback
+`~/.config/<app>/config.yaml`); `SUBSTRATE_CONFIG` takes precedence. Discovery is read-only.

@@ -27,6 +27,11 @@ func main() {
 }
 
 func run(ctx context.Context) error {
+	restore, err := useConfigFile()
+	if err != nil {
+		return err
+	}
+	defer restore()
 	started, err := boot.Start(ctx, substrateApp, substrateModules, substrateConfigJSON)
 	if err != nil {
 		return err

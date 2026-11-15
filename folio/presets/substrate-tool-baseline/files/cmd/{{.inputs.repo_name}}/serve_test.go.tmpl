@@ -39,7 +39,7 @@ func TestLoopbackOpenRefusesNonLoopback(t *testing.T) {
 	t.Setenv(modeEnv, "loopback_open")
 	for _, addr := range []string{"0.0.0.0:0", ":0", "192.0.2.1:0", "[::]:0"} {
 		ctx, run := startApp(t, addr)
-		err := serve(ctx, run.App, nil)
+		err := serveWith(ctx, run.App, nil, true, false)
 		if err == nil || !strings.Contains(err.Error(), "loopback_open") {
 			t.Errorf("addr %s: want a loopback_open refusal, got %v", addr, err)
 		}
@@ -52,6 +52,29 @@ func TestEnforceNeedsToken(t *testing.T) {
 	ctx, run := startApp(t, "127.0.0.1:0")
 	if err := serve(ctx, run.App, nil); err == nil {
 		t.Fatal("enforce without a token must not start")
+	}
+}
+
+func TestManagedAndNonDevelopmentRunsRefuseLoopbackOpen(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	for _, flags := range [][]string{nil, {"--managed"}, {"--managed", "--dev"}} {
+		cmd := serveCmd(ctx, run.App)
+		cmd.SetArgs(flags)
+		if err := cmd.Execute(); err == nil || (!strings.Contains(err.Error(), "loopback_open") && !strings.Contains(err.Error(), "cannot be combined")) {
+			t.Fatalf("flags %v: want auth refusal before listening, got %v", flags, err)
+		}
+	}
+}
+
+func TestManagedRunRequiresCredentials(t *testing.T) {
+	t.Setenv(modeEnv, "")
+	t.Setenv(tokenEnv, "")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	cmd := serveCmd(ctx, run.App)
+	cmd.SetArgs([]string{"--managed"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "bearer token") {
+		t.Fatalf("managed run without credentials: %v", err)
 	}
 }
 
@@ -118,6 +141,35 @@ func TestServeReportsModeAndGuards(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Errorf("serve after cancel: %v", err)
+	}
+}
+func TestDevelopmentLoopbackServesWithoutToken(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	t.Setenv(tokenEnv, "")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ready := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() { done <- serveWith(ctx, run.App, func(a net.Addr) { ready <- a }, true, false) }()
+	select {
+	case a := <-ready:
+		resp, err := http.Get("http://" + a.String() + "/api/ping")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("dev request: %d", resp.StatusCode)
+		}
+	case err := <-done:
+		t.Fatalf("dev service returned early: %v", err)
+	case <-ctx.Done():
+		t.Fatal("dev service did not start")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }
 {{- end }}
