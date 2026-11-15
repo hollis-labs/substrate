@@ -148,3 +148,25 @@ func TestLocalScopesWithoutAScopeRefuseAToolMappedToIt(t *testing.T) {
 		t.Fatalf("LocalScopes with t.admin was refused: %q err=%v", out, isErr)
 	}
 }
+
+// In enforce mode the local principal must hold the mcp scope, like a token and like /mcp over
+// HTTP; without it ServeStdio refuses to start rather than exposing every unscoped tool.
+func TestLocalTrustNeedsTheMCPScopeInEnforce(t *testing.T) {
+	app := stdioApp(t, authCfg("enforce")) // mcp scope defaults to "t.mcp"
+	err := mcp.ServeStdio(context.Background(), app, mcp.StdioOptions{In: io.NopCloser(strings.NewReader("")), Out: nopWriteCloser{io.Discard}, LocalTrust: true, LocalScopes: []string{"t.read"}, Notice: io.Discard})
+	if err == nil || !strings.Contains(err.Error(), `"t.mcp"`) {
+		t.Fatalf("LocalScopes without t.mcp: %v, want a refusal naming the scope", err)
+	}
+	for _, scopes := range [][]string{nil, {"*"}, {"t.*"}, {"t.mcp"}} {
+		cs, _ := connectWith(t, app, mcp.StdioOptions{LocalTrust: true, LocalScopes: scopes, Notice: io.Discard})
+		if out, isErr := callTool(t, cs, "ping"); isErr || !strings.Contains(out, "pong") {
+			t.Errorf("LocalScopes %v: ping %q err=%v", scopes, out, isErr)
+		}
+	}
+	// Permissive mode does not gate, as for a token.
+	perm := stdioApp(t, authCfg("permissive"))
+	cs, _ := connectWith(t, perm, mcp.StdioOptions{LocalTrust: true, LocalScopes: []string{"t.read"}, Notice: io.Discard})
+	if out, isErr := callTool(t, cs, "ping"); isErr || !strings.Contains(out, "pong") {
+		t.Errorf("permissive: ping %q err=%v", out, isErr)
+	}
+}

@@ -10,10 +10,24 @@ Per app, in the manifest config. These combine; the guard accepts a credential a
 |---|---|
 | The app issues its own identity (people sign in here) | select the `identity` module and add an `identity:` block |
 | The app trusts another app's issuer (Tether, another Substrate app) | `auth.jwks_url` (and `auth.issuer`, `auth.audience`) |
+| The app is its own JWT issuer with a rotating key ring and an in-process deny-list (Tether) | `auth.UseKeySource` and `auth.UseDenyList` in Go, before `boot.Start` (see below) |
 | Fixed service keys from config | `auth.api_keys` |
 | Nothing, for local development | `auth.mode: off` (the default); a request with no credential is the unverified operator |
 
 `auth.mode` is the dial for all of them: `off`, `permissive` (log what `enforce` would refuse) or `enforce`.
+
+### An issuer that verifies its own tokens
+
+An app that signs its own JWTs (agent tokens from a rotating Ed25519 key ring) cannot point `auth.jwks_url` at itself: its listener is not up when the auth module starts, and `bootstrap_key_file` cannot follow a rotation. It hands the keys and the deny-list to the auth module in process instead, before `boot.Start`:
+
+```go
+auth.UseKeySource(func(ctx context.Context) ([]byte, error) { return ring.JWKS(), nil }) // every key a live token may use
+auth.UseDenyList(deny)                                                                  // *libauth.DenyList; the app calls deny.Replace
+// after rotating or retiring a key:
+_ = auth.RefreshKeys(ctx, app)
+```
+
+Verification is libs `security/auth`'s JWT verifier, unchanged: EdDSA, `exp`/`nbf` with leeway, `auth.issuer`, `auth.audience` (default the app name), the deny-list (jti, sub, sid). Keys are read on first use, every 30 seconds, on a token with an unknown `kid` (at most once a second), and on `RefreshKeys`. Call `RefreshKeys` after retiring a key, or tokens it signed keep verifying until the next periodic read. A source error makes a token verification `auth_unavailable` (503), never an accept. The source is a second trust root next to the identity module's: a token either one verifies is accepted (`auth.AddVerifier` chains them). Start refuses `UseKeySource` with `auth.jwks_url`, `UseDenyList` with `auth.denylist_url`, and `UseDenyList` without a JWT verifier.
 
 ### Where off and permissive may listen
 
@@ -66,8 +80,25 @@ An unknown id returns `identity.ErrNotFound`. A disabled account is returned wit
 A tool or another app holds an **API key** or a **short-lived token**.
 
 - An administrator creates a key: `POST /api/identity/keys` `{name, scopes, audiences?, ttl_hours?}`. The key (`key_…`) is shown once; only its hash is stored. `GET /api/identity/keys` lists, `DELETE /api/identity/keys/{id}` revokes. A key authenticates directly as a bearer.
+- **Revoking and expiry.** `DELETE /api/identity/keys/{id}` calls `identity.From(app).RevokeKey(ctx, id)`, the one path (an app that mints a key per child with `Service.CreateKey` calls it directly when the child stops or the key is renewed; it needs no HTTP request). It is idempotent: revoking a key that is already revoked is nil in Go and 204 over HTTP, and an id that never existed is `identity.ErrNotFound` (404). Credentials are read from the database on every verification, so a revoked key is refused by the very next request (bearer on HTTP) and the very next `mcp.ServeStdio` start (token file) with nothing to wait out. An **expired** key (`ExpiresAt` set by `ttl_hours` or `KeyInput.TTL`) is refused the same way: the expiry is compared on each verification, so it needs no sweep. The module's hourly sweep never touches API keys; an expired key stays stored (and listed) until an administrator revokes it. What a revoke does and does not end is set out under "What a revoke ends" below.
 - `POST /api/token` trades any credential the caller holds (a session, a key, a token) for an EdDSA JWT: `{scopes?, audience?, ttl_seconds?}` returns `{token, expires_at, ttl_seconds, scopes, audience}`. Scopes can only narrow. A token for another **audience** is allowed only if the key lists that audience (or the caller is an administrator). Tokens last 15 minutes by default and at most an hour.
 - The reply has the shape Tether's mint endpoint has, so a client app configures it as its own token source: `auth.mint_url: https://issuer/api/token`, `auth.mint_credential_file: <file holding the key>`, and `auth.mint_body: {audience: "the-callee"}`. The auth module refreshes the token and attaches it to outbound calls (`auth.HTTPClient`).
+
+### What a revoke ends
+
+A revoke takes effect at once for what is looked up in the database, and not at all for what has already been verified.
+
+Ends immediately:
+
+- Key lookups over HTTP: the key is refused on the very next request.
+- New stdio processes: a `mcp.ServeStdio` start with that key's token file is refused.
+
+Does not end:
+
+- Tokens already minted from the key. An EdDSA token keeps verifying until its own `exp`: `token_ttl` (15 minutes by default, at most 1 hour).
+- Stdio processes already running. `mcp.ServeStdio` verifies its token once at start and keeps serving under that principal until it exits.
+
+An app that needs to cut a running child short stops the process; revoking its key is not enough. For a child that must stop with its key, revoke the key and stop the child.
 
 ## App A calls app B
 
@@ -122,7 +153,7 @@ printf '%s\n' "$OWNER_PASSWORD" | <app> identity setup --username owner --displa
 - The password is never an argument or an environment variable. With no terminal on stdin the first line of stdin is the password; with one, it is prompted twice. Nothing the commands print includes it (also on errors).
 - `identity key create` needs an owner (run setup first). Any scope may be granted, including `*`; the key is recorded as created by `local:operator` and shows in `GET /api/identity/keys`. Exactly one of `--out PATH` (the file is claimed with `O_EXCL` at mode 0600 before the key exists, so a taken path costs nothing; stdout then carries only the credential id) or `--stdout` (the key and a newline, the only output; notes go to stderr, never the key). `--ttl` is optional (default: no expiry), `--audience` and `--scope` repeat.
 - Scripting: no prompt when stdin is not a terminal; any failure is a non-zero exit and a one-line message on stderr. A repeat `setup` on an instance that already has an owner exits non-zero, so a first-run script that must be idempotent tests `GET /api/setup` (or the message) first.
-- Go: the same operations are `Service.SetupOwner(ctx, OwnerInput)` and `Service.CreateKey(ctx, KeyInput)` for an app with its own provisioning flow. `cli.AddCommand(app, cmd)` adds a command to the root whichever of the two modules starts first.
+- Go: the same operations are `Service.SetupOwner(ctx, OwnerInput)` and `Service.CreateKey(ctx, KeyInput)` for an app with its own provisioning flow; `Service.OwnerExists(ctx)`, `Service.ListKeys(ctx)` and `Service.RevokeKey(ctx, id)` are the checks and the key list an offline command needs (the routes call them), so no app reads the identity tables. `cli.AddCommand(app, cmd)` adds a command to the root whichever of the two modules starts first.
 
 **Same boot as the server.** The commands run inside the app's normal boot (`boot.StartWith` with the app's hooks, the `SUBSTRATE_CONFIG` merge), so the database, `key_file` and secrets directory are the ones the service reads. They work on a database just created by the app's migrate step that no server has opened: identity creates its own tables on start. Starting the module also creates the signing key at `key_file` if it is absent (the same file the server will use, so this is harmless on one host; a later change guards against a second issuer).
 

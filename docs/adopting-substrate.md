@@ -248,7 +248,8 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    call site: `mcp.ServeStdio(ctx, app, mcp.StdioOptions{LocalTrust: true})`. There is no config key and the
    default is off, so a manifest or override file cannot enable it. With no token configured the tools run under
    `local:operator` (kind `operator`, verified by filesystem trust, scopes `*`; narrow with `LocalScopes`, and
-   per-tool `mcp.Authorize` then refuses what the list lacks). A token that is given is verified as always and a
+   per-tool `mcp.Authorize` then refuses what the list lacks; in enforce mode the list must cover `mcp.scope`, as a
+   token must, or `ServeStdio` refuses to start). A token that is given is verified as always and a
    bad one is an error, never a fallback. The trust statement, verbatim: the process runs as a user who can open
    the data file; the module cannot tell who launched it and checks nothing about the file or the parent. A
    child launched by a gateway (Tether) on the same host as the same user counts as local. A gateway that serves
@@ -258,7 +259,12 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    key a cache on a verified principal see the local principal as verified.
 
    **An app with a scope that must never be held by an agent on the same host (Tangent has one: approving a human-in-the-loop item) MUST pass `LocalScopes` that leave it out: under `LocalTrust` the default scopes are `*`, and local trust is the trust of anyone who can run the binary as that user, which on our hosts includes agents.**
-10. One issuer per database. The identity module creates its signing key at start only when the database holds no
+10. An app that issues its own JWTs from a rotating key ring (agent tokens) verifies them through the auth module,
+    not a second private verifier: `auth.UseKeySource` (the ring's public keys as JWKS, read in process) and
+    `auth.UseDenyList` (its in-process `*libauth.DenyList`) before `boot.Start`, and `auth.RefreshKeys(ctx, app)`
+    after a rotation. Do not point `auth.jwks_url` at the app itself. They combine with the identity module's tokens;
+    see `docs/identity.md`, An issuer that verifies its own tokens.
+11. One issuer per database. The identity module creates its signing key at start only when the database holds no
     users or API keys; with identity rows and no key file at `identity.key_file` it refuses to start and names the
     path. A child process pointed at the service's database (an explicit `-db`) must point `key_file` at the
     service's key. `identity.allow_new_signing_key: true` is the deliberate override for a lost key.

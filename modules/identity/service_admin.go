@@ -70,9 +70,9 @@ func (s *Service) CreateKey(ctx context.Context, in KeyInput) (string, Credentia
 	if in.TTL < 0 {
 		return "", Credential{}, errors.New("ttl must not be negative")
 	}
-	if n, err := s.db.userCount(ctx); err != nil {
+	if ok, err := s.OwnerExists(ctx); err != nil {
 		return "", Credential{}, err
-	} else if n == 0 {
+	} else if !ok {
 		return "", Credential{}, ErrNoOwner
 	}
 	by := in.CreatedBy
@@ -89,4 +89,48 @@ func (s *Service) CreateKey(ctx context.Context, in KeyInput) (string, Credentia
 		return "", Credential{}, err
 	}
 	return keyPrefix + secret, c, nil
+}
+
+// RevokeKey, ListKeys, OwnerExists, CreateKey and SetupOwner are the in-process API: they take
+// no principal and check no scope (the caller already holds the database). The HTTP routes keep
+// the admin guard; never wire one of these to an unguarded route.
+//
+// RevokeKey revokes the API key with the given id (the Credential.ID CreateKey
+// returned, or the id in GET /api/identity/keys). It is the one path: the
+// DELETE /api/identity/keys/{id} handler calls it.
+//
+// The effect is immediate for the key itself: credentials are read from the
+// database on every verification, so the next request or the next stdio start
+// that presents the key is refused with no cache to wait out. Revoking an
+// already revoked key is not an error (nil), so a caller that revokes when a
+// child stops and again when its key is renewed need not track which came first.
+// An id that never existed is ErrNotFound. Ending the key does not end what it
+// already produced: an EdDSA token minted from it by POST /api/token keeps
+// verifying until its own expiry (15 minutes by default, at most an hour), and a
+// running mcp.ServeStdio process verified its token file once at start and keeps
+// serving under that principal until it exits.
+func (s *Service) RevokeKey(ctx context.Context, id string) error {
+	if strings.TrimSpace(id) == "" {
+		return ErrNotFound
+	}
+	return s.db.revokeCredential(ctx, id, time.Now())
+}
+
+// ListKeys returns the API keys that are not revoked, oldest first, with no secret (the
+// database holds only hashes): the list GET /api/identity/keys serves, which calls it. An
+// expired key is still listed until it is revoked; ExpiresAt says so. Never nil.
+func (s *Service) ListKeys(ctx context.Context) ([]Credential, error) {
+	keys, err := s.db.listCredentials(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return orEmpty(keys), nil
+}
+
+// OwnerExists reports whether the first owner has been created (any user exists), the check
+// GET /api/setup answers as setup_required and CreateKey makes before minting. For an offline
+// command that must refuse before setup.
+func (s *Service) OwnerExists(ctx context.Context) (bool, error) {
+	n, err := s.db.userCount(ctx)
+	return n > 0, err
 }
