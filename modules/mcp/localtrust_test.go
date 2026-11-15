@@ -153,7 +153,7 @@ func TestLocalScopesWithoutAScopeRefuseAToolMappedToIt(t *testing.T) {
 // HTTP; without it ServeStdio refuses to start rather than exposing every unscoped tool.
 func TestLocalTrustNeedsTheMCPScopeInEnforce(t *testing.T) {
 	app := stdioApp(t, authCfg("enforce")) // mcp scope defaults to "t.mcp"
-	err := mcp.ServeStdio(context.Background(), app, mcp.StdioOptions{LocalTrust: true, LocalScopes: []string{"t.read"}, Notice: io.Discard})
+	err := mcp.ServeStdio(context.Background(), app, mcp.StdioOptions{In: io.NopCloser(strings.NewReader("")), Out: nopWriteCloser{io.Discard}, LocalTrust: true, LocalScopes: []string{"t.read"}, Notice: io.Discard})
 	if err == nil || !strings.Contains(err.Error(), `"t.mcp"`) {
 		t.Fatalf("LocalScopes without t.mcp: %v, want a refusal naming the scope", err)
 	}
