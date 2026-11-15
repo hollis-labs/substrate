@@ -23,7 +23,7 @@ func TestDeploymentRegeneratesFromAuthoredDescriptor(t *testing.T) {
 	}
 	data = []byte(strings.Replace(string(data), "http_port: 8080", "http_port: 18245", 1))
 	data = append(data, []byte("  unrelated_owner: {feature: retained} # authored extension\n")...)
-	if err := os.WriteFile(file, data, 0o644); err != nil {
+	if err = os.WriteFile(file, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	svc := newGoLibService(t)
@@ -45,7 +45,7 @@ func TestDeploymentRegeneratesFromAuthoredDescriptor(t *testing.T) {
 	}
 	for _, f := range plan.Files {
 		if strings.HasSuffix(f.Path, ".cerberus.yaml") {
-			if err := yaml.Unmarshal(f.Content, &supervision); err != nil {
+			if err = yaml.Unmarshal(f.Content, &supervision); err != nil {
 				t.Fatal(err)
 			}
 		}

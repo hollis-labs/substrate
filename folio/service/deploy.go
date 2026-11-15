@@ -27,8 +27,9 @@ type DeployFile struct {
 	Content      []byte
 }
 type DeployResult struct {
-	Files   []DeployFile
-	Written bool
+	Warnings []string
+	Files    []DeployFile
+	Written  bool
 }
 
 // RenderDeploy only renders local files. It never installs a binary, starts a
@@ -56,11 +57,17 @@ func (s *Service) RenderDeploy(opts DeployOptions) (DeployResult, error) {
 		return result, fmt.Errorf("deployment rendering requires the project's .folio.yaml: %w", err)
 	}
 	var m manifest.Manifest
-	if err := yaml.Unmarshal(rawManifest, &m); err != nil {
+	if err = yaml.Unmarshal(rawManifest, &m); err != nil {
 		return result, err
 	}
 	if name, _ := m.Inputs["repo_name"].(string); name != projection.Project.ID {
 		return result, fmt.Errorf("project id is immutable; descriptor id differs from generated project")
+	}
+	selected := projection.Runtime.OS + "/" + projection.Runtime.Arch
+	builtOS, _ := m.Inputs["target_os"].(string)
+	builtArch, _ := m.Inputs["target_arch"].(string)
+	if builtOS+"/"+builtArch != selected {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("runtime selects %s; recorded build target is %s/%s. Update the CI build targets and produce a matching artifact before installation. This render does not modify CI.", selected, builtOS, builtArch))
 	}
 	before := map[string][]byte{}
 	conflict := false
@@ -110,9 +117,9 @@ func (s *Service) RenderDeploy(opts DeployOptions) (DeployResult, error) {
 			m.Files = map[string]manifest.FileRecord{}
 		}
 		m.Files[f.Path] = rec
-		temp, err := stageDeploy(root, f.Path, f.Content)
-		if err != nil {
-			return result, err
+		temp, stageErr := stageDeploy(root, f.Path, f.Content)
+		if stageErr != nil {
+			return result, stageErr
 		}
 		staged[f.Path] = temp
 	}

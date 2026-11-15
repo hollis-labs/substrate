@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+
 	"github.com/hollis-labs/tools/folio/service"
 	"github.com/spf13/cobra"
 )
@@ -17,6 +18,9 @@ func deployCmd() *cobra.Command {
 			return fmt.Errorf("--overwrite requires --write after reviewing a plan")
 		}
 		result, err := service.New(service.Options{}).RenderDeploy(service.DeployOptions{TargetDir: args[0], Write: write, Overwrite: overwrite})
+		for _, warning := range result.Warnings {
+			fmt.Fprintln(cmd.OutOrStdout(), "warning: "+warning)
+		}
 		for _, f := range result.Files {
 			fmt.Fprintf(cmd.OutOrStdout(), "%s %s\n", f.Status, f.Path)
 			if !write {

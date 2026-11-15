@@ -74,7 +74,7 @@ func Render(data []byte) (*Result, error) {
 	}
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
-	if err := dec.Decode(&r); err != nil {
+	if err = dec.Decode(&r); err != nil {
 		return nil, fmt.Errorf("settings.runtime: %w", err)
 	}
 	if p.Schema != "project/1" || !slug.MatchString(p.ID) || strings.TrimSpace(p.Name) == "" {
