@@ -101,9 +101,16 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		api.Handle("/api/", o.Routes)
 	}
 	// When the auth module is started, its guard wraps /api/ (never /healthz or
-	// the SPA). Read by key so httphost does not import auth.
+	// the SPA): the guard of the request's listener (ServeOptions.AuthMode), else the
+	// app's. Read by key so httphost does not import auth.
 	guard := func(h http.Handler) http.Handler { return h }
-	if v, ok := app.Value("auth.guard"); ok {
+	if v, ok := app.Value("auth.listeners"); ok {
+		if g, ok := v.(interface {
+			Middleware(http.Handler) http.Handler
+		}); ok {
+			guard = g.Middleware
+		}
+	} else if v, ok := app.Value("auth.guard"); ok {
 		if g, ok := v.(interface {
 			Middleware(http.Handler) http.Handler
 		}); ok {
@@ -316,6 +323,13 @@ type ServeOptions struct {
 	// accepted it, never wrapped, so a type assertion (*net.UnixConn, *net.TCPConn) holds;
 	// apps rely on that to tell a local socket caller from a remote one.
 	ConnContext func(ctx context.Context, c net.Conn) context.Context
+	// AuthMode, if set, is this listener's auth mode instead of the app's: the bind is
+	// checked against it and every request served here is guarded in it (the /api/ and
+	// /mcp guards, auth.Middleware, MCP tool checks), sharing the app's verifiers, scope
+	// table and open paths. So one process can serve a permissive local socket and an
+	// enforcing remote listener. It needs the auth module; enforce needs a verifier.
+	// Empty (the default) is the app's mode, as before.
+	AuthMode libauth.Mode
 }
 
 // Serve listens, serves h and shuts down gracefully when ctx ends, so every app
@@ -349,13 +363,40 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 	if o.Listener == nil && strings.HasPrefix(addr, "unix:") {
 		return fmt.Errorf("httphost: addr %q: Serve listens on TCP only; create the unix socket and pass it as ServeOptions.Listener", addr)
 	}
-	if v, ok := app.Value("auth.guard"); ok {
+	refuse := func(err error) error {
+		if o.Listener != nil {
+			_ = o.Listener.Close()
+		}
+		return fmt.Errorf("httphost: %w", err)
+	}
+	// parent is the parent of every request context; with AuthMode it carries the
+	// listener's guard.
+	parent := context.WithoutCancel(ctx)
+	if o.AuthMode != "" {
+		v, _ := app.Value("auth.listeners")
+		l, ok := v.(interface {
+			WithMode(context.Context, libauth.Mode) (context.Context, error)
+		})
+		if !ok {
+			return refuse(fmt.Errorf("auth mode %q for %s needs the auth module", o.AuthMode, addr))
+		}
+		mode, err := libauth.ParseMode(string(o.AuthMode))
+		if err != nil {
+			return refuse(err)
+		}
+		if err := libauth.ValidateBind(addr, mode); err != nil {
+			return refuse(err)
+		}
+		if parent, err = l.WithMode(parent, mode); err != nil {
+			return refuse(err)
+		}
+		if mode != libauth.ModeEnforce {
+			slog.Warn("auth is not enforcing", "auth", string(mode), "addr", addr)
+		}
+	} else if v, ok := app.Value("auth.guard"); ok {
 		if g, ok := v.(interface{ Mode() libauth.Mode }); ok {
 			if err := libauth.ValidateBind(addr, g.Mode()); err != nil {
-				if o.Listener != nil {
-					_ = o.Listener.Close()
-				}
-				return fmt.Errorf("httphost: %w", err)
+				return refuse(err)
 			}
 			// The auth module stays quiet at Start so a short-lived command
 			// prints nothing; a listener is where the warning belongs.
@@ -379,7 +420,7 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 	// period has run out, just before the server closes connections, so an ordinary
 	// request that uses r.Context() for its own work is not aborted by a graceful stop.
 	stopping := make(chan struct{})
-	base, baseCancel := context.WithCancel(context.WithValue(context.WithoutCancel(ctx), stoppingKey{}, (<-chan struct{})(stopping)))
+	base, baseCancel := context.WithCancel(context.WithValue(parent, stoppingKey{}, (<-chan struct{})(stopping)))
 	defer baseCancel()
 	// active counts handlers still running. http.Server.Shutdown does not wait for a
 	// hijacked connection's handler (a WebSocket) and cannot end a stream; Serve waits
