@@ -312,7 +312,9 @@ type ServeOptions struct {
 	Listener net.Listener
 	// ConnContext, if set, is called for each new connection after Serve's own and may return
 	// a derived context (http.Server.ConnContext). Derive from the ctx it is given: that one
-	// carries Stopping and PeerCredentials.
+	// carries Stopping and PeerCredentials. c is the connection exactly as the listener
+	// accepted it, never wrapped, so a type assertion (*net.UnixConn, *net.TCPConn) holds;
+	// apps rely on that to tell a local socket caller from a remote one.
 	ConnContext func(ctx context.Context, c net.Conn) context.Context
 }
 
@@ -343,6 +345,9 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 	}
 	if addr == "" {
 		addr = "127.0.0.1:8080"
+	}
+	if o.Listener == nil && strings.HasPrefix(addr, "unix:") {
+		return fmt.Errorf("httphost: addr %q: Serve listens on TCP only; create the unix socket and pass it as ServeOptions.Listener", addr)
 	}
 	if v, ok := app.Value("auth.guard"); ok {
 		if g, ok := v.(interface{ Mode() libauth.Mode }); ok {
