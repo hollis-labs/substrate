@@ -12,6 +12,8 @@ minor releases may break APIs.
 
 ### Fixed
 
+- `mcp`: stdio under `StdioOptions.LocalTrust` now applies the mcp endpoint scope gate in enforce mode, as a token and `/mcp` over HTTP already did. `ServeStdio` refuses to start, naming the scope, when `LocalScopes` does not cover `mcp.scope` (the scope itself, `<app>.*` or `*`); before, a local principal without it reached every tool that had no per-tool scope. Default `LocalScopes` (`*`) and permissive/off modes are unchanged. An app that narrows `LocalScopes` must list the mcp scope (Cerberus already does). (CW-20261115-0043, part b)
+
 - `config`: follow-ups to the numeric override conversion. A nested map with a non-string key (`{1: a}`) in the override file is now refused with an error naming the key path (it used to pass through unconverted). The doc comment no longer claims big integers are "never rounded": a YAML integer beyond 64 bits is decoded by yaml.v3 as a float64 and cannot be told from a float, so it arrives rounded; only 64-bit integers above 2^53 are refused. The queue override tests no longer hang on failure (the release cleanup now runs before the queue stops) and the `poll_ms` test now fails when the conversion is removed (the queue starts empty so the worker sleeps a poll interval first). Removed dead `int` cases in `database` (`sqlite.read_pool`) and `events` (`retention_records`): every number arrives as `float64`.
 
 ### Changed
