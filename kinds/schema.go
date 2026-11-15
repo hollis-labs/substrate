@@ -26,6 +26,22 @@ const (
 
 var ErrUnknownSchema = errors.New("unknown kind schema")
 
+// ValidateJSONValue checks JSON syntax, duplicate keys, Unicode and the same
+// finite binary64/safe-integer numeric domain used by kind payloads and hashes.
+// Services use it for envelopes and extensible metadata before native decoding
+// can erase unsafe numeric lexemes. It imposes no object shape or kind schema.
+func ValidateJSONValue(data []byte) error {
+	if !json.Valid(data) {
+		return fmt.Errorf("invalid JSON")
+	}
+	// The canonicalizer accepts arrays/objects at the root; a one-element
+	// array admits scalar values using the identical nested-value policy.
+	wrapped := append([]byte{'['}, data...)
+	wrapped = append(wrapped, ']')
+	_, err := canonicalJSON(wrapped)
+	return err
+}
+
 //go:embed schemas/*.json
 var schemas embed.FS
 
