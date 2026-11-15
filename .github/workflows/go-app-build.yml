@@ -5,6 +5,7 @@ on:
   workflow_call:
     inputs:
       app:           { type: string,  required: true,  description: "artifact/tarball name, e.g. basalisk" }
+      version:       { type: string, required: false, default: "", description: "explicit v-prefixed SemVer for release builds; empty preserves git-derived version" }
       main_pkg:      { type: string,  required: true,  description: "go package to build, e.g. ./cmd/basalisk" }
       binary:        { type: string,  required: false, default: "" , description: "file name inside the tarball (default: app)" }
       targets:       { type: string,  required: false, default: '["linux/amd64","darwin/arm64"]' }
@@ -72,9 +73,23 @@ jobs:
         with: { node-version: "${{ inputs.node_version }}" }
       - id: ver
         shell: bash
+        env:
+          VERSION_OVERRIDE: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          v=$(git describe --tags --match 'v*' --dirty=-dirty 2>/dev/null || echo "v0.0.0-$(git rev-list --count HEAD)-g$(git rev-parse --short=7 HEAD)")
+          if [ -n "$VERSION_OVERRIDE" ]; then
+            v=$(python3 - "$VERSION_OVERRIDE" <<'PYVERSION'
+          import re, sys
+          version = sys.argv[1]
+          match = re.fullmatch(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?", version)
+          if not match or (match[4] and any(part.isdigit() and len(part) > 1 and part.startswith("0") for part in match[4].split("."))):
+              raise SystemExit("version override must be v-prefixed SemVer (for example v1.2.3 or v1.2.3-rc.1+build.2)")
+          print(version)
+          PYVERSION
+            )
+          else
+            v=$(git describe --tags --match 'v*' --dirty=-dirty 2>/dev/null || echo "v0.0.0-$(git rev-list --count HEAD)-g$(git rev-parse --short=7 HEAD)")
+          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
           echo "artifact=${{ inputs.app }}-${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
       - if: ${{ inputs.ui_cmd != '' }}
