@@ -122,14 +122,16 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   are refused (nothing is queued or spooled), and the module reconnects by itself with backoff. A missing secret file or an
   unset variable is an outage; a secret file that cannot be read (permission, a directory, empty) fails `Start` and names the
   path. A store whose error will not fix itself (a rejected login, a missing database, a schema that is behind) shows as
-  `failed`. Producers that must not block (events, telemetry) batch in memory with a bound and drop the oldest, counting
+  `failed` (an optional store; a required one fails `Start`). Producers that must not block (events, telemetry) batch in memory with a bound and drop the oldest, counting
   drops; they do not persist locally. Each named store has its own version table (`goose_db_version_<name>`), so two stores
   can share one database.
   Migrations: a Postgres named store defaults to `schema_mode: verify`, which never reads `migrate_dsn_*`, so the running app
   needs no schema-owner secret and does not migrate a shared server. The deploy step migrates with the schema-owner role:
   `<app> db migrate --store data` (the database module adds the `db` verb when the app has named stores and the cli module is
-  selected; it is `database.MigrateNamed(ctx, app, name)` underneath) with `migrate_dsn_file` or `migrate_dsn_env` set. If the
-  app starts while the schema is behind, the store is `failed` and recovers by itself once the deploy step has migrated it.
+  selected; it is `database.MigrateNamed(ctx, app, name)` underneath) with `migrate_dsn_file` or `migrate_dsn_env` set. If an
+  optional store's schema is behind at start, the store is `failed` and recovers by itself once the deploy step has migrated
+  it. A required store with the schema behind fails `Start` (it is required), which is why `db migrate` does not open the
+  named stores at boot: run it before the app starts, including on a store's first deploy.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
   (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with

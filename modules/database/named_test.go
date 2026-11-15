@@ -171,8 +171,8 @@ func TestRequiredNamedStoreFailsStart(t *testing.T) {
 	// required defaults to true
 	_, err := boot.Start(context.Background(), "t", []string{"health", "database"},
 		cfgJSON(t, map[string]any{"data": sqliteStore(filepath.Join(blocker, "data.db"), nil)}))
-	if err == nil || !strings.Contains(err.Error(), "store data") {
-		t.Fatalf("Start = %v, want a failure naming store data", err)
+	if err == nil || !strings.Contains(err.Error(), "stores.data") {
+		t.Fatalf("Start = %v, want a failure naming stores.data", err)
 	}
 }
 

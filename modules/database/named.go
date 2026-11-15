@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"math/rand/v2"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -85,7 +86,9 @@ import (
 // MigrateNamed underneath) with migrate_dsn_file or migrate_dsn_env naming the
 // schema-owner role; the runtime role never needs DDL rights. If the app starts
 // while the schema is behind, the store is failed (health degraded, data endpoints
-// 503) and recovers by itself after the deploy step has migrated it.
+// 503) and, for an optional store, recovers by itself after the deploy step has migrated it. A required store
+// whose schema is behind fails Start (it is required); the deploy step runs before it, and `db migrate` does not
+// open the stores at boot, so it works for exactly that case.
 
 // NamedKeyPrefix is the key prefix under which a named store's *Handle is
 // published ("database.store.<name>").
@@ -548,6 +551,7 @@ func (m *mod) startNamed(ctx context.Context, app *module.App, defaultPath strin
 	}
 
 	cli.AddCommand(app, dbCommand(app)) // `<app> db migrate --store <name>`; queued and unused without the cli module
+	deploy := deployStep()
 	for _, h := range handles {
 		app.Set(NamedKeyPrefix+h.name, h)
 		m.named = append(m.named, h)
@@ -566,13 +570,21 @@ func (m *mod) startNamed(ctx context.Context, app *module.App, defaultPath strin
 		}
 	}
 
+	// The deploy step (`<app> db migrate ...`) exists to bring a store's schema up to date, so it must not need the
+	// stores to be usable: a required store whose schema is behind would fail this boot and the verb could never run.
+	// The handles are built and validated above; nothing is opened and no loop starts. MigrateNamed opens its own
+	// connection with the migration credential.
+	if deploy {
+		return nil
+	}
+
 	// Required stores open now, one after the other, and fail Start.
 	for _, h := range handles {
 		if !h.required {
 			continue
 		}
 		if err := h.attempt(ctx); err != nil {
-			return fmt.Errorf("database: store %s: %w", h.name, err)
+			return fmt.Errorf("database: stores.%s: %w", h.name, err)
 		}
 		h.markFirst()
 		h.startLoop(ctx)
@@ -954,7 +966,12 @@ func (e *permanentError) Unwrap() error { return e.error }
 // migrateError is a failed or refused schema step.
 type migrateError struct{ err error }
 
-func (e *migrateError) Error() string { return "migrate: " + e.err.Error() }
+func (e *migrateError) Error() string {
+	if msg := e.err.Error(); strings.HasPrefix(msg, "migrate:") {
+		return msg // the migrate package already says so; do not print it twice
+	}
+	return "migrate: " + e.err.Error()
+}
 func (e *migrateError) Unwrap() error { return e.err }
 
 // reAuth matches the Postgres errors that need a human: invalid authorization
@@ -1019,4 +1036,23 @@ func redactError(err error) string {
 		s = s[:240] + "..."
 	}
 	return s
+}
+
+// argsForDeployStep is the process arguments the deploy-step check reads; tests replace it.
+var argsForDeployStep = func() []string { return os.Args[1:] }
+
+// deployStep reports whether this process was started as `<app> db migrate ...`: the first two arguments that are
+// not flags are "db" and "migrate". It is how Start knows not to open the named stores for the verb that migrates them.
+func deployStep() bool {
+	var words []string
+	for _, a := range argsForDeployStep() {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		words = append(words, a)
+		if len(words) == 2 {
+			break
+		}
+	}
+	return len(words) == 2 && words[0] == "db" && words[1] == "migrate"
 }
