@@ -33,6 +33,7 @@ var allPresetInputs = map[string]map[string]any{
 	"substrate-cli":           {"repo_name": "tool-cli", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
 	"substrate-service":       {"repo_name": "tool-svc", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
 	"app-dashboard":           frontendInputs("sub-dash"),
+	"app-chat":                chatInputs("sub-chat"),
 }
 
 func frontendInputs(name string) map[string]any {
@@ -41,6 +42,15 @@ func frontendInputs(name string) map[string]any {
 		"kit_app_shell": "0.1.0", "kit_design_app_runtime": "0.5.0", "kit_design_bindings": "0.2.0",
 		"kit_design_components": "0.5.1", "kit_design_tokens": "0.5.0", "kit_dashboard": "0.6.0", "kit_plugin_host_ui": "0.3.0",
 	}
+}
+
+// Render-only fixture; build tests source real versions from the selected framework BOM.
+func chatInputs(name string) map[string]any {
+	inputs := frontendInputs(name)
+	for _, key := range []string{"kit_chat", "kit_cards", "kit_identity", "kit_account"} {
+		inputs[key] = "0.1.0"
+	}
+	return inputs
 }
 
 func bundledIDs(t *testing.T) []string {
