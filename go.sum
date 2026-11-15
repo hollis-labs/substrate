@@ -23,8 +23,8 @@ github.com/hollis-labs/libs/app/app-host v0.1.0 h1:GE3sYmU+b7T3fnO549184XImzpT42
 github.com/hollis-labs/libs/app/app-host v0.1.0/go.mod h1:ATsdWo+B84KIvibQ1kEm2E6es18I8okxJB47R28uHFs=
 github.com/hollis-labs/libs/core/panics v0.1.0 h1:mWJ9yPTRCBsLFprCNGIJrroehfh/g3UaDmLEH6gncB8=
 github.com/hollis-labs/libs/core/panics v0.1.0/go.mod h1:KugNEagpx3eqC72FOyQrrTcIzGD+hJb+EXkSV6jP4jU=
-github.com/hollis-labs/libs/core/store v0.1.0 h1:kcTrDBmi7ciKaSNCkWjrE+Uff6r10ZkJWg2+ot5gpSk=
-github.com/hollis-labs/libs/core/store v0.1.0/go.mod h1:aKsmHWniP1YHsQQdK/JHmLXV2JGBu/gJy8/JRlCeMhU=
+github.com/hollis-labs/libs/core/store v0.1.1-0.20261115085916-827fe3c708f1 h1:ye61BMYGVgEhsDu+eLSPIgIrSRHsT6vqz3jOmXUP94U=
+github.com/hollis-labs/libs/core/store v0.1.1-0.20261115085916-827fe3c708f1/go.mod h1:aKsmHWniP1YHsQQdK/JHmLXV2JGBu/gJy8/JRlCeMhU=
 github.com/hollis-labs/libs/core/util v0.6.0 h1:uqVSuuRtKAzwDcMf5ekFlBUO9g6aZzAAp81dRadac4U=
 github.com/hollis-labs/libs/core/util v0.6.0/go.mod h1:CpS3EUj+MHivKVnGWJj8Vtq1+J3TN1uPyPCbLzhQLh0=
 github.com/hollis-labs/libs/mcp/plugin-mcp v0.6.0 h1:wS9KsD0Jk4QD+SEepirMGZJwUtXpL5hMjPL/wYdEk20=
