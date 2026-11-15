@@ -36,7 +36,7 @@ Exit status is 0 when every pair passes, 1 when a pair fails, 2 for a usage or c
 - `mock`: a `connect-matrix mock-issuer` instance. Its service tokens are Ed25519 JWTs with `kind=service` and an `exp` ten years out (the go-auth verifier requires `exp`, so "no expiry" is a distant one), revoked through its deny-list. State is in memory.
 - `http`: a real issuer. `mint_url` receives `POST {"name","audience","scopes","kind":"service"}` and answers `{"token","id"}`; `revoke_url` receives `POST {"id"}`; both send `Authorization: Bearer <contents of credential_file>`. These shapes are a placeholder until Tether's service-token issuing command exists; only the issuer adapter changes then, not the pair definitions.
 
-- `cli`: the Tether operator CLI on the same machine (`tether service-token issue --json` / `revoke JTI`). Set `issuer.command` and `issuer.global_args` (for example `["--catalog", "/var/lib/fabric/tether/catalog"]`). The token is read from stdout and never reported. Run the harness on the host that has the CLI (agent-os); the issuer principal is `msg://service/<caller>/dev`.
+- `cli`: the Tether operator CLI on the same machine (`tether service-token issue --json` / `revoke JTI`). Set `issuer.command` and `issuer.global_args` (for example `["--catalog", "/var/lib/fabric/tether/catalog"]`). The token is read from stdout and never reported. Run the harness on the host that has the CLI (the Tether host); the issuer principal is `msg://service/<caller>/dev`.
 
 ## Matrix mode
 
@@ -49,7 +49,7 @@ Exit status is 0 when every pair passes, 1 when a pair fails, 2 for a usage or c
 | `not-enforced` | the target admitted the token but also admits a bogus bearer (`posture: auto`, the default in matrix mode) or is declared `permissive`; rejection checks are skipped, nothing is enforced |
 | `n-a` | same app, or the target has `"na": "reason"` (no usable read endpoint) |
 
-The JSON report carries `status` per pair and a `summary` count. A target may set `probe.host` (Host header), a harmless `write_probe` (checked as `write_accepted`), and `other_audience` (a real audience the issuer knows; its scopes are rewritten to that audience). `examples/agent-os.json` is the live agent-os matrix.
+The JSON report carries `status` per pair and a `summary` count. A target may set `probe.host` (Host header), a harmless `write_probe` (checked as `write_accepted`), and `other_audience` (a real audience the issuer knows; its scopes are rewritten to that audience). `examples/local-matrix.json` is an example matrix.
 
 ## Config
 
