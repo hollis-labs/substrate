@@ -161,7 +161,7 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 	}
 	var repository *os.Root
 	if opts.RepositoryRoot != "" {
-		_, rootPath, location, err := repositoryOptions(NewOptions{RepositoryRoot: opts.RepositoryRoot, TargetDir: opts.TargetDir})
+		_, rootPath, location, err := repositoryOptions(NewOptions{RepositoryRoot: opts.RepositoryRoot, TargetDir: opts.TargetDir, Inputs: m.Inputs})
 		if err != nil {
 			return InspectResult{}, err
 		}
