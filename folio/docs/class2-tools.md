@@ -1,7 +1,7 @@
 # Class 2 tool presets
 
 `substrate-cli` and `substrate-service` render a class 2 tool (spec: project/1 class bar, RC1). `substrate-app` and
-`app-dashboard` and `app-chat` are the class 1 presets. Both compose `substrate-tool-baseline`, which composes `go-baseline`.
+`app-dashboard` and `app-chat` are the class 1 presets. The two class 2 presets compose `substrate-tool-baseline`, which composes `go-baseline`.
 
 | | `substrate-cli` | `substrate-service` |
 |---|---|---|
@@ -54,15 +54,18 @@ Substrate-owned package (FC-8) when it lands.
 The registry registration hook (awaiting the catalog interface) and `folio sync`/`inspect` in CI.
 Folio’s own authored descriptor is [project.yaml](../project.yaml); its local CLI does not claim a Substrate runtime.
 
-## Friction notes for the 1.0 cut
+## Observed deployment limits
 
 - `fleet-install` needs `--target` when the host alias is a placeholder; dry-run with a tarball works offline.
-- Restart cost (Substrate manager, fleet-install spec): `via: cerberus` needs `resource`; fleet-install runs it itself only with `run: true` as the local user, else it prints a human request and the deploy stays pending until `--restart-done`. A Cerberus unit without the fleet-install `command[0]` could restart an old copy with health still 200; verify the running executable after a deploy. Verb and resource id on live Cerberus still to be confirmed with the Mig Cerberus Lead.
-- `deploy.yaml` `restart: {via: cerberus, resource: ...}` is accepted by the installed `fleet-install` (it prints a
-  request for a human to run `cerberus resource reload <id> --ack`); the Substrate manager should confirm this is the intended shape.
-- `substrate pins sync --app` is not in tag v0.1.0; the tests use a pseudo-version.
-- Class 2 CI has no lint and no govulncheck of its own (the build workflow's govulncheck is advisory); decide whether the bar is too light.
-- Option B for tools Cerberus should build is not covered: the manifest has no build_strategy.
+- `restart: {via: cerberus, resource: ...}` is accepted by fleet-install. It performs the restart only
+  when `run: true` permits execution as the local user; otherwise it prints the requested Cerberus
+  action and deployment stays pending until `--restart-done`. Verify the running executable after
+  deployment: a successful health check alone does not prove the intended binary was restarted.
+- The generated build target is explicit. Changing runtime target OS/architecture requires updating
+  the CI target before creating a matching artifact; deployment rendering warns instead of editing CI.
+- Class 2 CI does not include its own lint/govulncheck gate; the reusable build's govulncheck is advisory.
+- Cerberus `build_strategy` and `artifact_path` are omitted by design: fleet-install owns binary
+  placement, and Cerberus supervises the installed link. This is the selected Option B contract.
 
 ## Managed and development runs
 
