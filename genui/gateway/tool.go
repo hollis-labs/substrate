@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"time"
@@ -46,17 +45,8 @@ func (t *ShowPatternTool) Handle(ctx context.Context, raw json.RawMessage) (genu
 	if err != nil || !validScope(scope) {
 		return genui.Envelope{}, ErrForbidden
 	}
-	if len(raw) > genui.MaxActionBytes {
-		return genui.Envelope{}, ErrInvalid
-	}
-	canonical, err := genui.CanonicalJSON(raw)
+	q, err := decodeShow(raw)
 	if err != nil {
-		return genui.Envelope{}, ErrInvalid
-	}
-	var q ShowRequest
-	d := json.NewDecoder(bytes.NewReader(canonical))
-	d.DisallowUnknownFields()
-	if d.Decode(&q) != nil {
 		return genui.Envelope{}, ErrInvalid
 	}
 	return t.service.Show(ctx, scope, q)

@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -112,15 +111,8 @@ func (h *HTTP) show(w http.ResponseWriter, r *http.Request, scope Scope) {
 		writeError(w, err)
 		return
 	}
-	b, err = genui.CanonicalJSON(b)
+	q, err := decodeShow(b)
 	if err != nil {
-		writeError(w, ErrInvalid)
-		return
-	}
-	var q ShowRequest
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if d.Decode(&q) != nil {
 		writeError(w, ErrInvalid)
 		return
 	}

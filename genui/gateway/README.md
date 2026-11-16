@@ -77,6 +77,9 @@ choice/input/form draft with proof removed and the stored native response. Both
 messages use the fresh requested transport invocation ID. A UI may display a
 response without the request, but cannot infer a choice or confirm/resubmit.
 An unavailable/unknown response authorizes only another read, not execution.
+Show field names are case-sensitive in both raw adapters, matching the declared
+schema. Recovery action and invocation IDs retain the contract's 256 Unicode
+code-point bound; malformed UTF-8 is refused before lookup or JSON encoding.
 
 Handlers require a verified principal, explicit scope and current canonical
 host mapping even if an outer guard is permissive/off or a module route-scope

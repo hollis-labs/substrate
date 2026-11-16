@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/hollis-labs/substrate/genui"
 )
@@ -86,6 +87,11 @@ func (s *Service) Show(ctx context.Context, scope Scope, q ShowRequest) (genui.E
 
 func validateSurface(v Surface, scope Scope) (Surface, error) {
 	if v.Scope != scope || v.Generation == "" || len(v.Generation) > 256 || v.ExpiresAt.IsZero() {
+		return Surface{}, ErrUnavailable
+	}
+	// Apply the shared typed preflight before encoding can replace malformed
+	// host-provided strings or map keys.
+	if _, err := genui.Choices(v.Envelope); err != nil {
 		return Surface{}, ErrUnavailable
 	}
 	b, err := json.Marshal(v.Envelope)
@@ -201,6 +207,9 @@ func conflict(id string, r Record) genui.Response {
 	return response(id, o)
 }
 func validOutcome(o genui.Outcome) (genui.Outcome, error) {
+	if err := genui.ValidateOutcome(o); err != nil {
+		return genui.Outcome{}, err
+	}
 	b, err := json.Marshal(o)
 	if err != nil {
 		return genui.Outcome{}, err
@@ -482,7 +491,7 @@ func (s *Service) Recover(ctx context.Context, scope Scope, actionID, invocation
 	if !validScope(scope) {
 		return Recovery{}, ErrForbidden
 	}
-	if actionID == "" || len(actionID) > 256 {
+	if !validWireID(actionID) || !validWireID(invocation) {
 		return Recovery{}, ErrInvalid
 	}
 	r, err := s.ports.Journal.Load(ctx, Key{scope, actionID})
@@ -512,4 +521,10 @@ func (s *Service) Recover(ctx context.Context, scope Scope, actionID, invocation
 		out.Response = response(invocation, o)
 	}
 	return out, nil
+}
+
+// Contract IDs are bounded by Unicode code points, not their UTF-8 byte count.
+// Validate original bytes before an ID reaches JSON encoding or a store lookup.
+func validWireID(id string) bool {
+	return id != "" && utf8.ValidString(id) && utf8.RuneCountInString(id) <= 256
 }
