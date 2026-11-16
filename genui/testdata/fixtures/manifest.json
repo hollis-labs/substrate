@@ -1,0 +1,260 @@
+{
+  "contract_version": "1",
+  "fixtures": [
+    {
+      "name": "approval",
+      "schema": "envelope/1",
+      "file": "approval.json",
+      "valid": true
+    },
+    {
+      "name": "form",
+      "schema": "envelope/1",
+      "file": "form.json",
+      "valid": true
+    },
+    {
+      "name": "list_detail",
+      "schema": "envelope/1",
+      "file": "list_detail.json",
+      "valid": true
+    },
+    {
+      "name": "call",
+      "schema": "call/1",
+      "file": "call.json",
+      "valid": true
+    },
+    {
+      "name": "step_up_retry",
+      "schema": "call/1",
+      "file": "step_up_retry.json",
+      "valid": true
+    },
+    {
+      "name": "outcome_ok",
+      "schema": "outcome/1",
+      "file": "outcome_ok.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "outcome_accepted",
+      "schema": "outcome/1",
+      "file": "outcome_accepted.json",
+      "valid": true,
+      "terminal": false
+    },
+    {
+      "name": "outcome_needs_confirmation",
+      "schema": "outcome/1",
+      "file": "outcome_needs_confirmation.json",
+      "valid": true,
+      "terminal": false
+    },
+    {
+      "name": "outcome_refused",
+      "schema": "outcome/1",
+      "file": "outcome_refused.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "outcome_conflict",
+      "schema": "outcome/1",
+      "file": "outcome_conflict.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "outcome_stale",
+      "schema": "outcome/1",
+      "file": "outcome_stale.json",
+      "valid": true,
+      "terminal": false
+    },
+    {
+      "name": "outcome_canceled",
+      "schema": "outcome/1",
+      "file": "outcome_canceled.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "outcome_expired",
+      "schema": "outcome/1",
+      "file": "outcome_expired.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "outcome_superseded",
+      "schema": "outcome/1",
+      "file": "outcome_superseded.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "outcome_failed",
+      "schema": "outcome/1",
+      "file": "outcome_failed.json",
+      "valid": true,
+      "terminal": true
+    },
+    {
+      "name": "response",
+      "schema": "response/1",
+      "file": "response.json",
+      "valid": true
+    },
+    {
+      "name": "response_unknown",
+      "schema": "response-read/1",
+      "file": "response_unknown.json",
+      "valid": true,
+      "known": false,
+      "terminal": false
+    },
+    {
+      "name": "response_protocol_error",
+      "schema": "response-read/1",
+      "file": "response_protocol_error.json",
+      "valid": true,
+      "known": false,
+      "terminal": false
+    },
+    {
+      "name": "flat_args",
+      "schema": "call/1",
+      "file": "flat_args.json",
+      "valid": false
+    },
+    {
+      "name": "old_key",
+      "schema": "call/1",
+      "file": "old_key.json",
+      "valid": false
+    },
+    {
+      "name": "rpc_metadata",
+      "schema": "call/1",
+      "file": "rpc_metadata.json",
+      "valid": false
+    },
+    {
+      "name": "host_generation",
+      "schema": "call/1",
+      "file": "host_generation.json",
+      "valid": false
+    },
+    {
+      "name": "missing_root",
+      "schema": "envelope/1",
+      "file": "missing_root.json",
+      "valid": false
+    },
+    {
+      "name": "wrong_root",
+      "schema": "envelope/1",
+      "file": "wrong_root.json",
+      "valid": false
+    },
+    {
+      "name": "pattern_mismatch",
+      "schema": "envelope/1",
+      "file": "pattern_mismatch.json",
+      "valid": false
+    },
+    {
+      "name": "surface_mismatch",
+      "schema": "envelope/1",
+      "file": "surface_mismatch.json",
+      "valid": false
+    },
+    {
+      "name": "unknown_component",
+      "schema": "envelope/1",
+      "file": "unknown_component.json",
+      "valid": false
+    },
+    {
+      "name": "extra_extension",
+      "schema": "envelope/1",
+      "file": "extra_extension.json",
+      "valid": false
+    },
+    {
+      "name": "draft_unknown_field",
+      "schema": "envelope/1",
+      "file": "draft_unknown_field.json",
+      "valid": false
+    },
+    {
+      "name": "list_unknown_selection",
+      "schema": "envelope/1",
+      "file": "list_unknown_selection.json",
+      "valid": false
+    },
+    {
+      "name": "partial",
+      "schema": "outcome/1",
+      "file": "partial.json",
+      "valid": false
+    },
+    {
+      "name": "known_malformed",
+      "schema": "response-read/1",
+      "file": "known_malformed.json",
+      "valid": false
+    },
+    {
+      "name": "response_both",
+      "schema": "response/1",
+      "file": "response_both.json",
+      "valid": false
+    },
+    {
+      "name": "duplicate_key",
+      "schema": "outcome/1",
+      "file": "duplicate_key.json",
+      "valid": false
+    },
+    {
+      "name": "unsafe_integer",
+      "schema": "outcome/1",
+      "file": "unsafe_integer.json",
+      "valid": false
+    },
+    {
+      "name": "fraction",
+      "schema": "outcome/1",
+      "file": "fraction.json",
+      "valid": false
+    },
+    {
+      "name": "exponent",
+      "schema": "outcome/1",
+      "file": "exponent.json",
+      "valid": false
+    },
+    {
+      "name": "negative_zero",
+      "schema": "outcome/1",
+      "file": "negative_zero.json",
+      "valid": false
+    },
+    {
+      "name": "unpaired_surrogate",
+      "schema": "outcome/1",
+      "file": "unpaired_surrogate.json",
+      "valid": false
+    },
+    {
+      "name": "safe_integer_boundary",
+      "schema": "outcome/1",
+      "file": "safe_integer_boundary.json",
+      "valid": true,
+      "terminal": true
+    }
+  ]
+}
