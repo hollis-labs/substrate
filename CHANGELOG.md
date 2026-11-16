@@ -17,8 +17,7 @@ minor releases may break APIs.
   execution ports. Durable claims survive uncertain results and restart;
   recovery preserves the selected choice and complete form input without
   confirmation secrets. No default authority, listener or production store is
-  installed. The frontend package is declared but remains unavailable to
-  generation until a genuine release is pinned in the BOM.
+  installed. Frontend generation uses the published package pinned in the BOM.
 
 - `httphost.ServeOptions.Listener` (CW-20261115-0003): serve a `net.Listener` the app created (a unix socket, a socket-activated descriptor) instead of listening on `Addr`. Serve keeps `Stopping`, handler tracking and the graceful drain over it, runs the auth bind check on `Listener.Addr()` (a unix address as `unix:<path>`) and closes it on every return, a refused bind included. In `off` and `permissive` a unix listener must be a socket file that other users cannot write to: an abstract socket (`@name`) or an `o+w` socket file is refused (file permissions are its only protection). `httphost.ListenUnix(path, perm)` creates one safely: bound in a private directory next to `path`, chmodded there and linked into place, so the socket is never reachable with the umask's permissions; a stale socket is replaced only if nothing answers on it; it is removed on close. `httphost.ServeOptions.ConnContext` (CW-20261115-0004) is passed to `http.Server.ConnContext` after Serve's own and receives the connection exactly as `Accept` returned it, never wrapped, so a `*net.UnixConn` assertion holds. `httphost.PeerCredentials(r)` returns the uid, gid and pid of a unix-socket peer (Linux `SO_PEERCRED`, darwin `LOCAL_PEERCRED`/`LOCAL_PEERPID`; `ok` is false on TCP, on a wrapped conn, in httptest and on other platforms). A `unix:` address in `ServeOptions.Addr` or config `httphost.addr` without a `Listener` is refused with an error naming `ServeOptions.Listener` (it failed before with a TCP lookup error). `golang.org/x/sys` becomes a direct, pinned dependency (same version). Additive; nothing changes for callers that set none of these.
 
@@ -32,6 +31,11 @@ minor releases may break APIs.
 - `config`: follow-ups to the numeric override conversion. A nested map with a non-string key (`{1: a}`) in the override file is now refused with an error naming the key path (it used to pass through unconverted). The doc comment no longer claims big integers are "never rounded": a YAML integer beyond 64 bits is decoded by yaml.v3 as a float64 and cannot be told from a float, so it arrives rounded; only 64-bit integers above 2^53 are refused. The queue override tests no longer hang on failure (the release cleanup now runs before the queue stops) and the `poll_ms` test now fails when the conversion is removed (the queue starts empty so the worker sleeps a poll interval first). Removed dead `int` cases in `database` (`sqlite.read_pool`) and `events` (`retention_records`): every number arrives as `float64`.
 
 ### Changed
+
+- BOM kits: pin the published `@hollis-labs/genui` 0.1.0 renderer. Selecting the
+  optional `genui` module can now generate its frontend dependency normally;
+  missing package pins still fail closed. Existing kit versions, Go dependencies,
+  host-owned authority requirements and module defaults are unchanged.
 
 - BOM app libraries: add the merged Tradecraft SDK (`agent/sdk` at `c76ea978573d`)
   and Gatecrasher coordinator (`mesh/gatecrasher` at `4cb9c2a6b9b7`) pseudo-versions;

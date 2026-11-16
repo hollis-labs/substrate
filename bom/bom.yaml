@@ -64,6 +64,7 @@ kits:                     # npm packages (public registry, @hollis-labs); exact 
   "@hollis-labs/kit-dashboard": 0.6.2  # adds the --dash-search-min-height token; renders as 0.6.1 by default
   "@hollis-labs/plugin-host-ui": 0.3.0
   "@hollis-labs/plugin-registry": 0.2.0
+  "@hollis-labs/genui": 0.1.0          # reviewed declarative surfaces and host-owned action transport
 kit_exceptions:           # known incoherences between pinned kits that this repo does not control; reported, not hidden
   "@hollis-labs/kit-settings>@hollis-labs/design-tokens": kit-settings 0.2.0 still depends on design-tokens ^0.4; needs a release on 0.5 (kit-admin and plugin-host-ui need kit-settings ^0.2)
   "@hollis-labs/kit-settings>@hollis-labs/design-components": kit-settings 0.2.0 still depends on design-components ^0.4; needs a release on 0.5
