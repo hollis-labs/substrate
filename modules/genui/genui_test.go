@@ -90,7 +90,7 @@ func TestModuleRequiresHostAndMountsScopedHandlersOnly(t *testing.T) {
 	}
 }
 
-func TestOptionalSelectionAndHonestUnpublishedPackageFence(t *testing.T) {
+func TestOptionalSelectionAndPublishedPackageFence(t *testing.T) {
 	b, err := bom.Load("../../bom/bom.yaml")
 	if err != nil {
 		t.Fatal(err)
@@ -112,9 +112,23 @@ func TestOptionalSelectionAndHonestUnpublishedPackageFence(t *testing.T) {
 		}
 		return nil, false, nil
 	}
+	with, err := frontend.Build(m, b, ui.Default, load)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, kit := range with.Kits {
+		if kit.Name == "@hollis-labs/genui" {
+			found = kit.Version == b.Kits[kit.Name]
+		}
+	}
+	if !found {
+		t.Fatal("selected module did not use its BOM package version")
+	}
+	delete(b.Kits, "@hollis-labs/genui")
 	_, err = frontend.Build(m, b, ui.Default, load)
 	if err == nil || !strings.Contains(err.Error(), "@hollis-labs/genui is not pinned") {
-		t.Fatal("unpublished package fabricated", err)
+		t.Fatal("missing package pin did not refuse", err)
 	}
 	m.Modules.Add = nil
 	without, err := frontend.Build(m, b, ui.Default, load)
