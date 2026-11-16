@@ -196,8 +196,20 @@ func validateTyped(v reflect.Value, depth int) error {
 	case reflect.Struct:
 		for i := 0; i < v.NumField(); i++ {
 			field := v.Type().Field(i)
-			if field.PkgPath != "" || strings.Split(field.Tag.Get("json"), ",")[0] == "-" {
+			if strings.Split(field.Tag.Get("json"), ",")[0] == "-" {
 				continue
+			}
+			if field.PkgPath != "" {
+				// encoding/json promotes exported descendants of an unexported
+				// anonymous struct (including a pointer to one). Other private
+				// fields are not serialized and must not affect validation.
+				t := field.Type
+				if t.Kind() == reflect.Pointer {
+					t = t.Elem()
+				}
+				if !field.Anonymous || t.Kind() != reflect.Struct {
+					continue
+				}
 			}
 			if !utf8.ValidString(field.Tag.Get("json")) {
 				return fmt.Errorf("invalid UTF-8 in JSON field tag")

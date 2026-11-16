@@ -130,3 +130,58 @@ func TestTypedInputsDoNotBypassPreflight(t *testing.T) {
 		t.Fatal("cyclic input accepted")
 	}
 }
+
+type privateTypedEmbedded struct {
+	Value   string `json:"value"`
+	ignored string
+}
+type privateTypedString string
+
+func TestTypedJSONVisibleAnonymousFields(t *testing.T) {
+	bad := string([]byte{0xff})
+	for name, value := range map[string]any{
+		"promoted value":   struct{ privateTypedEmbedded }{privateTypedEmbedded{Value: bad}},
+		"promoted pointer": struct{ *privateTypedEmbedded }{&privateTypedEmbedded{Value: bad}},
+		"named anonymous": struct {
+			privateTypedEmbedded `json:"named"`
+		}{privateTypedEmbedded{Value: bad}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := typedFixture[ApprovalProps](t, "approval")
+			p.Choices[0].CallFunction.Args.Input = map[string]any{"nested": value}
+			if _, err := NewSurface("surface_valid", PatternApproval, p, DataModel{}); err == nil {
+				t.Fatal("malformed JSON-visible promoted field accepted")
+			}
+		})
+	}
+	good := "valid_\ufffd_é_😀"
+	for name, value := range map[string]any{
+		"valid promoted with private garbage": struct{ privateTypedEmbedded }{privateTypedEmbedded{Value: good, ignored: bad}},
+		"valid promoted pointer":              struct{ *privateTypedEmbedded }{&privateTypedEmbedded{Value: good, ignored: bad}},
+		"nil embedded pointer":                struct{ *privateTypedEmbedded }{},
+		"private named struct": struct {
+			hidden privateTypedEmbedded
+			Value  string `json:"value"`
+		}{hidden: privateTypedEmbedded{Value: bad}, Value: good},
+		"ignored anonymous": struct {
+			privateTypedEmbedded `json:"-"`
+			Value                string `json:"value"`
+		}{privateTypedEmbedded: privateTypedEmbedded{Value: bad}, Value: good},
+		"private scalar anonymous": struct {
+			privateTypedString
+			Value string `json:"value"`
+		}{privateTypedString: privateTypedString(bad), Value: good},
+	} {
+		t.Run(name, func(t *testing.T) {
+			p := typedFixture[ApprovalProps](t, "approval")
+			p.Choices[0].CallFunction.Args.Input = map[string]any{"nested": value}
+			e, err := NewSurface("surface_valid", PatternApproval, p, DataModel{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Choices(e); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
