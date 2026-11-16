@@ -269,10 +269,6 @@ func TestPresetListShow_NoLongerStubs(t *testing.T) {
 			t.Errorf("%v: %v", args, err)
 		}
 	}
-	// sync stays reserved; inspect is real (see inspect_test.go).
-	if _, _, err := runCLI(t, "sync"); err == nil || !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("sync should remain a stub, got %v", err)
-	}
 }
 
 func asServiceErr(err error, target **service.Error) bool {

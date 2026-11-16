@@ -78,7 +78,7 @@ func TestRun_Plan_NoWrites(t *testing.T) {
 	}
 }
 
-func TestRun_StubCommand(t *testing.T) {
+func TestRun_SyncNeedsATarget(t *testing.T) {
 	bfs := loadBundledFS(t)
 	root := cli.NewRootCmd(bfs, "0.1.0-test")
 	root.SetArgs([]string{"sync"})
@@ -88,8 +88,8 @@ func TestRun_StubCommand(t *testing.T) {
 	root.SilenceErrors = true
 	root.SilenceUsage = true
 	err := root.Execute()
-	if err == nil || !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("expected not-yet-implemented error, got: %v", err)
+	if err == nil || strings.Contains(err.Error(), "not yet implemented") {
+		t.Errorf("expected a usage error from sync without a target, got: %v", err)
 	}
 }
 

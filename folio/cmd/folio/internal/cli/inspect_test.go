@@ -32,10 +32,6 @@ func TestFolioInspect_NoLongerStub(t *testing.T) {
 	if strings.Contains(out, "not yet implemented") {
 		t.Fatalf("inspect is still a stub: %s", out)
 	}
-	// sync stays reserved
-	if _, _, err := runCLI(t, "sync"); err == nil || !strings.Contains(err.Error(), "not yet implemented") {
-		t.Errorf("sync must stay a stub, got %v", err)
-	}
 }
 
 func TestFolioInspect_TableOutput(t *testing.T) {

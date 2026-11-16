@@ -79,25 +79,45 @@ type InspectResult struct {
 // Not replayed: .target, the absolute directory of the render. A template that
 // prints it reports drift when the project has moved.
 func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
+	d, err := s.drift(opts, nil)
+	if err != nil {
+		return InspectResult{}, err
+	}
+	return d.InspectResult, nil
+}
+
+// driftState is Inspect's report with what it was computed from, for Sync to act on.
+type driftState struct {
+	InspectResult
+	manifest manifest.Manifest
+	layers   []layer
+	rendered map[string]renderedFile
+	// realTarget is the project directory with symlinks resolved.
+	realTarget string
+}
+
+// drift re-renders the recorded root preset (with extra inputs laid over the recorded
+// ones) and classifies every tracked and newly rendered file. It writes nothing.
+func (s *Service) drift(opts InspectOptions, extra map[string]any) (*driftState, error) {
 	if opts.TargetDir == "" {
-		return InspectResult{}, newErr(ErrInputInvalid, "target directory is required", nil)
+		return nil, newErr(ErrInputInvalid, "target directory is required", nil)
 	}
 	m, err := manifest.Read(opts.TargetDir)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return InspectResult{}, newErr(ErrManifestNotFound,
+			return nil, newErr(ErrManifestNotFound,
 				fmt.Sprintf("%s has no %s: not a folio project", opts.TargetDir, manifest.ManifestFilename), nil)
 		}
-		return InspectResult{}, newErr(ErrManifestInvalid, "read "+manifest.ManifestFilename, err)
+		return nil, newErr(ErrManifestInvalid, "read "+manifest.ManifestFilename, err)
 	}
 	if len(m.Presets) == 0 {
-		return InspectResult{}, newErr(ErrManifestInvalid, manifest.ManifestFilename+" records no presets", nil)
+		return nil, newErr(ErrManifestInvalid, manifest.ManifestFilename+" records no presets", nil)
 	}
 	// A breadcrumb that names a removed preset fails here, before anything is rendered: a removed preset is
 	// never replaced by the current preset of the same name.
 	for _, ref := range m.Presets {
 		if removedPreset(ref.ID, ref.Version) {
-			return InspectResult{}, errPresetRemoved(ref.ID, ref.Version)
+			return nil, errPresetRemoved(ref.ID, ref.Version)
 		}
 	}
 	root := m.Presets[len(m.Presets)-1]
@@ -111,22 +131,32 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 		folioVersion = v
 	}
 
+	inputs := m.Inputs
+	if len(extra) > 0 {
+		inputs = map[string]any{}
+		for k, v := range m.Inputs {
+			inputs[k] = v
+		}
+		for k, v := range extra {
+			inputs[k] = v
+		}
+	}
 	loaded, callerCtx, warnings, err := s.prepareRenderAt(NewOptions{
 		PresetID:  root.ID,
 		TargetDir: opts.TargetDir,
-		Inputs:    m.Inputs,
+		Inputs:    inputs,
 	}, now, folioVersion)
 	if err != nil {
-		return InspectResult{}, err
+		return nil, err
 	}
 	layers, composeWarnings, err := s.composedLayers(loaded, callerCtx)
 	if err != nil {
 		var se *Error
 		if errors.As(err, &se) && (se.Code == ErrInputMissing || se.Code == ErrInputInvalid) {
-			return InspectResult{}, newErr(ErrDriftUnverifiable,
+			return nil, newErr(ErrDriftUnverifiable,
 				fmt.Sprintf("cannot verify: the current preset %q no longer accepts the inputs recorded in %s", root.ID, manifest.ManifestFilename), err)
 		}
-		return InspectResult{}, err
+		return nil, err
 	}
 	warnings = append(warnings, composeWarnings...)
 
@@ -142,11 +172,11 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 
 	rendered, _, err := s.renderAllLayers(layers)
 	if err != nil {
-		return InspectResult{}, err
+		return nil, err
 	}
 	again, _, err := s.renderAllLayers(layers)
 	if err != nil {
-		return InspectResult{}, err
+		return nil, err
 	}
 
 	seen := map[string]bool{}
@@ -157,20 +187,20 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 	// their choosing.
 	realTarget, err := filepath.EvalSymlinks(opts.TargetDir)
 	if err != nil {
-		return InspectResult{}, newErr(ErrReadFailed, "resolve "+opts.TargetDir, err)
+		return nil, newErr(ErrReadFailed, "resolve "+opts.TargetDir, err)
 	}
 	var repository *os.Root
 	if opts.RepositoryRoot != "" {
 		_, rootPath, location, err := repositoryOptions(NewOptions{RepositoryRoot: opts.RepositoryRoot, TargetDir: opts.TargetDir, Inputs: m.Inputs})
 		if err != nil {
-			return InspectResult{}, err
+			return nil, err
 		}
 		if location != m.RepositoryLocation {
-			return InspectResult{}, fmt.Errorf("repository location does not match manifest")
+			return nil, fmt.Errorf("repository location does not match manifest")
 		}
 		repository, err = os.OpenRoot(rootPath)
 		if err != nil {
-			return InspectResult{}, err
+			return nil, err
 		}
 		defer repository.Close()
 	}
@@ -194,7 +224,7 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 				continue
 			}
 			if expected := workflowDestination(path, name); expected == "" || expected != rec.RepositoryPath || !fs.ValidPath(rec.RepositoryPath) {
-				return InspectResult{}, fmt.Errorf("invalid repository workflow destination %q", rec.RepositoryPath)
+				return nil, fmt.Errorf("invalid repository workflow destination %q", rec.RepositoryPath)
 			}
 			onDisk, readErr = repository.ReadFile(rec.RepositoryPath)
 		} else {
@@ -209,7 +239,7 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 			files = append(files, FileDrift{Path: path, Preset: rec.Preset, Status: DriftMissingLocally})
 			continue
 		} else if readErr != nil {
-			return InspectResult{}, newErr(ErrReadFailed, "read "+path, readErr)
+			return nil, newErr(ErrReadFailed, "read "+path, readErr)
 		}
 		unstable := !bytes.Equal(rf.File.Content, again[path].File.Content)
 		locallyChanged := manifest.Digest(onDisk) != rec.DigestAtGen
@@ -236,7 +266,13 @@ func (s *Service) Inspect(opts InspectOptions) (InspectResult, error) {
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	sort.Strings(warnings)
 
-	return InspectResult{RootPreset: root.ID, RootVersion: root.Version, Files: files, Warnings: warnings}, nil
+	return &driftState{
+		InspectResult: InspectResult{RootPreset: root.ID, RootVersion: root.Version, Files: files, Warnings: warnings},
+		manifest:      m,
+		layers:        layers,
+		rendered:      rendered,
+		realTarget:    realTarget,
+	}, nil
 }
 
 // within reports whether path is dir or lies beneath it. Both are already

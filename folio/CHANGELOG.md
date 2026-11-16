@@ -8,6 +8,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`folio sync <dir>`** is real (it was a stub that exited 1). It applies `inspect`'s classification
+  against the preset version folio has now: preset-updated and new files are written and recorded,
+  local edits are kept, conflicts are left and reported (`--theirs-to .folio-new` writes the new
+  rendering beside each), and a path under a `skip` sync rule is never written, so authored work
+  survives regeneration. `overwrite` rules take the preset's copy on a conflict. `--plan` writes
+  nothing; `--input` supplies inputs a newer preset version requires; `.folio.yaml` gets the new
+  versions, inputs, digests and a `sync_history` entry. No three-way merge yet.
+
 - **Class 2 presets** `substrate-cli` and `substrate-service` on the new layer `substrate-tool-baseline`
   (project/1 RC1): `project.yaml`, `deploy.yaml`, a Cerberus manifest for services (Option B), the class 2 CI,
   the loopback-dev auth guard and `internal/descriptor` (shared structural parsing, drift-pair and declared-auth tests).
