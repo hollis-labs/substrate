@@ -9,7 +9,7 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Added
 
 - **app-ade** preset: a Substrate app where a person and an agent work over the same surface, on the
-  ADE packages (`@hollis-labs/ade-core`, `ade-agent`, `ade-react`) and `go/agenthost`, all exact
+  ADE packages (`@hollis-labs/ade-core`, `ade-agent`, `ade-react`) and `github.com/hollis-labs/libs/agent/host`, all exact
   inputs with no default. It mounts the agent host at `/api/agent` behind the app's guard (owner from
   the verified principal, model from the app's `agent` settings block; none set: the panel says no
   model is connected), and renders a workspace page and a starter notes board. Sync rules mark the

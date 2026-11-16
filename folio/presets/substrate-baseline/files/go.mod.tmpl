@@ -6,7 +6,7 @@ toolchain go{{ .inputs.go_toolchain }}
 {{ end }}
 require github.com/hollis-labs/substrate {{ .inputs.substrate_version }}
 {{ if .inputs.with_ade }}
-require github.com/hollis-labs/ade/go/agenthost {{ .inputs.ade_agenthost }}
+require github.com/hollis-labs/libs/agent/host {{ .inputs.ade_agenthost }}
 {{ end }}
 // go.sum and the rest of the requirements are not rendered. Once, after generating:
 //   go mod tidy

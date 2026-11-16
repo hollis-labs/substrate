@@ -10,7 +10,7 @@ license: MIT
 # The domain is the person's: frontend/src/domain/**, the agent's prompt (cmd/<repo>/prompt.go) and
 # README.md start as a small notes board and are never written again (sync policy skip).
 #
-# Versions: the ADE packages and go/agenthost are inputs with no default, like the kits.
+# Versions: the ADE packages and the agent host (libs agent/host) are inputs with no default, like the kits.
 
 composes:
   - id: substrate-baseline
@@ -46,7 +46,7 @@ inputs:
     type: string
     required: true
     pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
-    description: The github.com/hollis-labs/ade/go/agenthost version for the go.mod require line. No default.
+    description: The github.com/hollis-labs/libs/agent/host version for the go.mod require line. No default.
   - name: ade_core
     type: string
     required: true

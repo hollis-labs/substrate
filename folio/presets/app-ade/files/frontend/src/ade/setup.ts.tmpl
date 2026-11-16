@@ -11,17 +11,6 @@ const GUIDE_KEY = "{{ .inputs.repo_name }}.guide"
 
 export const hub = createHub()
 
-/** The app's requests carry X-Requested-With, which the backend requires on cookie writes. */
-const sameOrigin: typeof fetch = (input, init) =>
-  fetch(input, {
-    credentials: "same-origin",
-    ...init,
-    headers: {
-      ...(init?.headers as Record<string, string> | undefined),
-      "X-Requested-With": "XMLHttpRequest",
-    },
-  })
-
 /** What the model is shown with each message: the domain's view of things, and the guide. */
 function context() {
   const guide = hub.guideState()
@@ -41,7 +30,8 @@ function context() {
 export const session = createAgentSession({
   tools: () => adeTools(hub),
   context,
-  fetch: sameOrigin,
+  // The backend requires X-Requested-With on cookie writes.
+  headers: { "X-Requested-With": "XMLHttpRequest" },
 })
 
 function readGuide(): GuideState | null {

@@ -3,7 +3,7 @@
 `app-ade` renders a class 1 Substrate app where a person and an agent work over the same surface,
 built on the ADE packages: `@hollis-labs/ade-core` (the hub and the agent's tools),
 `@hollis-labs/ade-agent` (the page's side of the conversation), `@hollis-labs/ade-react` (the
-workspace's components) and `github.com/hollis-labs/ade/go/agenthost` (the server's side).
+workspace's components) and `github.com/hollis-labs/libs/agent/host` (the server's side, in the libs repository).
 
 ## What is whose
 
@@ -66,11 +66,8 @@ notes-app:
   agent: { model: <model or alias>, base_url: <Anthropic-compatible base URL>, key_file: <path> }
 ```
 
-## Before the ADE packages are published
+## Testing the generated app
 
-Until the ADE packages and `go/agenthost` resolve from their registries, a generated app cannot
-install them. For a local proof only, in the generated copy (never in the preset): point the three
-`@hollis-labs/ade-*` dependencies at `npm pack` tarballs of the ADE repository's packages, and add
-`replace github.com/hollis-labs/ade/go/agenthost => <path to the ADE checkout>/go/agenthost` to its
-`go.mod`. `TestAppADE_BuildsAndRuns` stays skipped until `FOLIO_ADE_AGENTHOST` and
-`FOLIO_ADE_PACKAGES` name versions that resolve.
+`TestAppADE_BuildsAndRuns` generates an app, builds it against the released packages and serves
+it. It runs when `FOLIO_SUBSTRATE_VERSION`, `FOLIO_ADE_AGENTHOST` (the `agent/host` version) and
+`FOLIO_ADE_PACKAGES` (the `@hollis-labs/ade-*` version) are set and resolve.

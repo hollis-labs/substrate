@@ -1,7 +1,7 @@
 package main
 
 // The agent host: the server's side of the conversation between the workspace page and the model
-// (github.com/hollis-labs/ade/go/agenthost). The page declares its tools with each message and runs
+// (github.com/hollis-labs/libs/agent/host). The page declares its tools with each message and runs
 // them itself; the host runs the model, keeps one thread per signed-in person, and relays each tool
 // call to the page and its answer back.
 //
@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hollis-labs/ade/go/agenthost"
+	agenthost "github.com/hollis-labs/libs/agent/host"
 	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"{{ .computed.module_path }}/internal/api"

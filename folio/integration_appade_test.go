@@ -57,7 +57,7 @@ func TestAppADE_RendersTree(t *testing.T) {
 	}
 	// Exact pins from the inputs, and nothing local.
 	gomod := readText(t, filepath.Join(target, "go.mod"))
-	if !strings.Contains(gomod, "require github.com/hollis-labs/ade/go/agenthost v0.1.0\n") || strings.Contains(gomod, "replace") {
+	if !strings.Contains(gomod, "require github.com/hollis-labs/libs/agent/host v0.1.0\n") || strings.Contains(gomod, "replace") {
 		t.Errorf("go.mod:\n%s", gomod)
 	}
 	var pkg struct{ Dependencies map[string]string }
@@ -77,7 +77,7 @@ func TestAppADE_RendersTree(t *testing.T) {
 	// The wiring: the agent host behind the guard, the owner from the verified principal, its
 	// routes on the scope table, its model from the app's settings.
 	agent := readText(t, filepath.Join(target, "cmd", "notes-app", "agent.go"))
-	for _, s := range []string{`"github.com/hollis-labs/ade/go/agenthost"`, "libauth.FromContext", "p.Verified", "scopes.Route(", `"/api/agent/runs/{run}/tool-results"`, "agenthost.OpenSQLite", "System:  agentPrompt"} {
+	for _, s := range []string{`agenthost "github.com/hollis-labs/libs/agent/host"`, "libauth.FromContext", "p.Verified", "scopes.Route(", `"/api/agent/runs/{run}/tool-results"`, "agenthost.OpenSQLite", "System:  agentPrompt"} {
 		if !strings.Contains(agent, s) {
 			t.Errorf("agent.go lacks %q", s)
 		}
@@ -254,8 +254,8 @@ func TestAppADE_BuildsAndRuns(t *testing.T) {
 	if !needTool(t, "go") || !needTool(t, "npm") {
 		return
 	}
-	if out, err := exec.Command("go", "mod", "download", "-json", "github.com/hollis-labs/ade/go/agenthost@"+host).CombinedOutput(); err != nil {
-		t.Skipf("SKIPPED, not passed: go/agenthost@%s does not resolve: %s", host, out)
+	if out, err := exec.Command("go", "mod", "download", "-json", "github.com/hollis-labs/libs/agent/host@"+host).CombinedOutput(); err != nil {
+		t.Skipf("SKIPPED, not passed: agent/host@%s does not resolve: %s", host, out)
 	}
 	if out, err := exec.Command("npm", "view", "@hollis-labs/ade-core@"+pkgs, "version").CombinedOutput(); err != nil {
 		t.Skipf("SKIPPED, not passed: @hollis-labs/ade-core@%s does not resolve: %s", pkgs, out)
