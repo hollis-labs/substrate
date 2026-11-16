@@ -8,6 +8,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **app-ade** preset: a Substrate app where a person and an agent work over the same surface, on the
+  ADE packages (`@hollis-labs/ade-core`, `ade-agent`, `ade-react`) and `github.com/hollis-labs/libs/agent/host`, all exact
+  inputs with no default. It mounts the agent host at `/api/agent` behind the app's guard (owner from
+  the verified principal, model from the app's `agent` settings block; none set: the panel says no
+  model is connected), and renders a workspace page and a starter notes board. Sync rules mark the
+  domain (`frontend/src/domain/**`), the prompt and the README as authored (`skip`); the shell files
+  are kept current by `folio sync`. `substrate-baseline` and `substrate-frontend` gain a `with_ade`
+  switch (every other preset renders byte-identical). See `docs/app-ade.md`.
+
 - **`folio sync <dir>`** is real (it was a stub that exited 1). It applies `inspect`'s classification
   against the preset version folio has now: preset-updated and new files are written and recorded,
   local edits are kept, conflicts are left and reported (`--theirs-to .folio-new` writes the new

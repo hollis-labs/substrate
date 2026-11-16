@@ -34,6 +34,7 @@ var allPresetInputs = map[string]map[string]any{
 	"substrate-service":       {"repo_name": "tool-svc", "substrate_version": "v0.1.1-0.20261112164520-da9f59bb59b7"},
 	"app-dashboard":           frontendInputs("sub-dash"),
 	"app-chat":                chatInputs("sub-chat"),
+	"app-ade":                 adeInputs("sub-ade"),
 }
 
 func frontendInputs(name string) map[string]any {

@@ -1,6 +1,6 @@
 import { ManifestShell, type PageComponent } from "@hollis-labs/app-shell"
 import { Button } from "@hollis-labs/design-components"
-import { {{ if .inputs.with_chat }}LogOut, MessageSquare{{ else }}List, LogOut{{ end }} } from "lucide-react"
+import { {{ if .inputs.with_ade }}LayoutPanelLeft, LogOut{{ else if .inputs.with_chat }}LogOut, MessageSquare{{ else }}List, LogOut{{ end }} } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { ApiError, request, UNAUTHORIZED_EVENT } from "./api/request"
 import { Entry, SetupOffline } from "./identity/entry"
@@ -8,16 +8,16 @@ import { APP_NAME, Notice } from "./identity/forms"
 import { type Session, SessionContext } from "./identity/session"
 import { SignOutPage } from "./identity/signout"
 import { manifest } from "./manifest"
-{{ if .inputs.with_chat }}import { ChatPage } from "./pages/chat"{{ else }}import { ItemsPage } from "./pages/items"{{ end }}
+{{ if .inputs.with_ade }}import { WorkspacePage } from "./pages/workspace"{{ else if .inputs.with_chat }}import { ChatPage } from "./pages/chat"{{ else }}import { ItemsPage } from "./pages/items"{{ end }}
 
 // Kit icon names used by the contributions, resolved by the shell.
 const icons = {
-{{ if .inputs.with_chat }}  chat: MessageSquare,{{ else }}  list: List,{{ end }}
+{{ if .inputs.with_ade }}  workspace: LayoutPanelLeft,{{ else if .inputs.with_chat }}  chat: MessageSquare,{{ else }}  list: List,{{ end }}
   "log-out": LogOut,
 }
 
 const pages: Record<string, PageComponent> = {
-{{ if .inputs.with_chat }}  chat: () => <ChatPage />,{{ else }}  items: () => <ItemsPage />,{{ end }}
+{{ if .inputs.with_ade }}  workspace: () => <WorkspacePage />,{{ else if .inputs.with_chat }}  chat: () => <ChatPage />,{{ else }}  items: () => <ItemsPage />,{{ end }}
   "sign-out": () => <SignOutPage />,
 }
 

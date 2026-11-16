@@ -5,7 +5,9 @@ go {{ .inputs.go_version }}
 toolchain go{{ .inputs.go_toolchain }}
 {{ end }}
 require github.com/hollis-labs/substrate {{ .inputs.substrate_version }}
-
+{{ if .inputs.with_ade }}
+require github.com/hollis-labs/libs/agent/host {{ .inputs.ade_agenthost }}
+{{ end }}
 // go.sum and the rest of the requirements are not rendered. Once, after generating:
 //   go mod tidy
 //   go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .

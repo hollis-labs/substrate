@@ -55,6 +55,16 @@ inputs:
     default: ""
     pattern: "^(yes)?$"
     description: Chat domain routes, set by app-chat composition
+  - name: with_ade
+    type: string
+    default: ""
+    pattern: "^(yes)?$"
+    description: The agent host (libs agent/host at /api/agent) and its settings, set by app-ade composition
+  - name: ade_agenthost
+    type: string
+    default: ""
+    pattern: "^(v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?)?$"
+    description: The github.com/hollis-labs/libs/agent/host version, required by app-ade (no default there)
   - name: with_frontend
     type: string
     default: ""
