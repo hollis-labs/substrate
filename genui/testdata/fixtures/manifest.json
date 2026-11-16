@@ -255,6 +255,40 @@
       "file": "safe_integer_boundary.json",
       "valid": true,
       "terminal": true
+    },
+    {
+      "name": "unicode_call_boundary",
+      "schema": "call/1",
+      "file": "unicode_call_boundary.json",
+      "valid": true
+    },
+    {
+      "name": "unicode_response_boundary",
+      "schema": "response-read/1",
+      "file": "unicode_response_boundary.json",
+      "valid": true,
+      "known": true,
+      "terminal": true
+    },
+    {
+      "name": "unicode_response_excess",
+      "schema": "response-read/1",
+      "file": "unicode_response_excess.json",
+      "valid": false
+    },
+    {
+      "name": "unicode_unknown_status_boundary",
+      "schema": "response-read/1",
+      "file": "unicode_unknown_status_boundary.json",
+      "valid": true,
+      "known": false,
+      "terminal": false
+    },
+    {
+      "name": "unicode_unknown_status_excess",
+      "schema": "response-read/1",
+      "file": "unicode_unknown_status_excess.json",
+      "valid": false
     }
   ]
 }

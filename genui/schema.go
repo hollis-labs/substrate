@@ -199,7 +199,9 @@ func ReadResponse(raw []byte) (ResponseObservation, error) {
 		return result, fmt.Errorf("invalid function response")
 	}
 	id, ok := r["functionCallId"].(string)
-	if !ok || id == "" || len(id) > 256 {
+	// ReceiverResponse schema already enforces Unicode code-point lengths.
+	// Do not add byte-length checks that reject valid non-ASCII correlation IDs.
+	if !ok || id == "" {
 		return result, fmt.Errorf("invalid function call ID")
 	}
 	if value, ok := r["value"]; ok {
@@ -208,7 +210,7 @@ func ReadResponse(raw []byte) (ResponseObservation, error) {
 			return result, fmt.Errorf("outcome must be an object")
 		}
 		status, ok := out["status"].(string)
-		if !ok || status == "" || len(status) > 128 || status == "partial" {
+		if !ok || status == "" || status == "partial" {
 			return result, fmt.Errorf("invalid outcome status")
 		}
 		if !Status(status).Known() {
