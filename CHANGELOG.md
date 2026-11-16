@@ -12,6 +12,14 @@ minor releases may break APIs.
 
 ### Added
 
+- `genui/gateway` and optional `genui` module: reviewed-pattern surfaces and
+  scoped action/recovery routes backed by host-owned persistence, policy and
+  execution ports. Durable claims survive uncertain results and restart;
+  recovery preserves the selected choice and complete form input without
+  confirmation secrets. No default authority, listener or production store is
+  installed. The frontend package is declared but remains unavailable to
+  generation until a genuine release is pinned in the BOM.
+
 - `httphost.ServeOptions.Listener` (CW-20261115-0003): serve a `net.Listener` the app created (a unix socket, a socket-activated descriptor) instead of listening on `Addr`. Serve keeps `Stopping`, handler tracking and the graceful drain over it, runs the auth bind check on `Listener.Addr()` (a unix address as `unix:<path>`) and closes it on every return, a refused bind included. In `off` and `permissive` a unix listener must be a socket file that other users cannot write to: an abstract socket (`@name`) or an `o+w` socket file is refused (file permissions are its only protection). `httphost.ListenUnix(path, perm)` creates one safely: bound in a private directory next to `path`, chmodded there and linked into place, so the socket is never reachable with the umask's permissions; a stale socket is replaced only if nothing answers on it; it is removed on close. `httphost.ServeOptions.ConnContext` (CW-20261115-0004) is passed to `http.Server.ConnContext` after Serve's own and receives the connection exactly as `Accept` returned it, never wrapped, so a `*net.UnixConn` assertion holds. `httphost.PeerCredentials(r)` returns the uid, gid and pid of a unix-socket peer (Linux `SO_PEERCRED`, darwin `LOCAL_PEERCRED`/`LOCAL_PEERPID`; `ok` is false on TCP, on a wrapped conn, in httptest and on other platforms). A `unix:` address in `ServeOptions.Addr` or config `httphost.addr` without a `Listener` is refused with an error naming `ServeOptions.Listener` (it failed before with a TCP lookup error). `golang.org/x/sys` becomes a direct, pinned dependency (same version). Additive; nothing changes for callers that set none of these.
 
 ### Fixed
