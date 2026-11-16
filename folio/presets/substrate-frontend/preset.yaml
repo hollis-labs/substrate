@@ -32,6 +32,11 @@ inputs:
     type: string
     default: ""
     pattern: "^(yes)?$"
+  - name: with_ade
+    type: string
+    default: ""
+    pattern: "^(yes)?$"
+    description: The ADE workspace page and packages, set by app-ade composition
   - name: repo_name
     type: string
     required: true
@@ -97,6 +102,21 @@ inputs:
     type: string
     default: ""
     pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+)?$"
+
+  - name: ade_core
+    type: string
+    default: ""
+    pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?)?$"
+
+  - name: ade_agent
+    type: string
+    default: ""
+    pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?)?$"
+
+  - name: ade_react
+    type: string
+    default: ""
+    pattern: "^([0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?)?$"
 
 files:
   source: ./files

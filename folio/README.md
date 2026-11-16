@@ -35,6 +35,12 @@ apps with the agentic profile, enforced auth, own offline-created identity, SQLi
 scoped routes and authenticated MCP. Dashboard adds an app-shell list UI; chat adds
 owner-isolated conversations and messages using the published kit-chat and kit-identity.
 Chat starts with no assistant provider connected; its service layer offers a provider hook.
+`app-ade` puts a person and an agent over the same surface with the ADE packages: the agent host
+at `/api/agent` (owner from the verified principal, model from operator configuration), a
+workspace page (surface, guide bar, agent panel, attention layer) and a starter notes board. The
+domain, the agent's prompt and the README are the person's and `folio sync` never writes them
+(sync policy `skip`); the shell is the preset's and sync keeps it current. See
+[`docs/app-ade.md`](./docs/app-ade.md).
 
 Each app includes a project descriptor, fleet deployment and native Cerberus supervision,
 a runbook, full checks, build artifacts and a SemVer release workflow. Managed runs work
@@ -43,7 +49,7 @@ Release workflows accept only correctly prefixed SemVer tags whose commit is on 
 
 `substrate_version` and the applicable `kit_*` versions have no defaults: take them from
 the selected framework’s `bom/bom.yaml`. Chat additionally requires `kit_chat`, `kit_cards`,
-`kit_identity` and `kit_account`. After rendering, follow the generated README: tidy Go,
+`kit_identity` and `kit_account`; ADE requires `ade_agenthost`, `ade_core`, `ade_agent` and `ade_react`. After rendering, follow the generated README: tidy Go,
 sync pins, tidy again; for UI apps install frontend packages and commit the lockfile.
 Folio itself never installs, builds or runs a rendered project. See [architecture](./docs/architecture.md).
 

@@ -64,11 +64,22 @@ func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
 	if err != nil {
 		return err
 	}
+{{ if .inputs.with_ade }}	routes := api.New(service.New(st.Reader(), st.DB())).Mux()
+	// The agent host (agent.go): its routes join the API's, behind the same guard.
+	agent, err := mountAgent(ctx, auth.ScopeTable(app), routes, cfg.Agent)
+	if err != nil {
+		return err
+	}
+	defer agent.Close()
 	handler, err := httphost.Handler(app, httphost.Options{
+		Assets: assets,
+		Routes: routes,
+	})
+{{ else }}	handler, err := httphost.Handler(app, httphost.Options{
 		Assets: assets,
 		Routes: api.New(service.New(st.Reader(), st.DB())).Mux(),
 	})
-	if err != nil {
+{{ end }}	if err != nil {
 		return err
 	}
 	// Outermost first: the Host check (DNS rebinding) and forwarding-header hygiene, then the

@@ -18,7 +18,10 @@
   },
   "dependencies": {
     "@base-ui/react": "1.8.0",
-    "@hollis-labs/app-shell": "{{ .inputs.kit_app_shell }}",
+{{ if .inputs.with_ade }}    "@hollis-labs/ade-agent": "{{ .inputs.ade_agent }}",
+    "@hollis-labs/ade-core": "{{ .inputs.ade_core }}",
+    "@hollis-labs/ade-react": "{{ .inputs.ade_react }}",
+{{ end }}    "@hollis-labs/app-shell": "{{ .inputs.kit_app_shell }}",
     "@hollis-labs/design-app-runtime": "{{ .inputs.kit_design_app_runtime }}",
     "@hollis-labs/design-bindings": "{{ .inputs.kit_design_bindings }}",
     "@hollis-labs/design-components": "{{ .inputs.kit_design_components }}",

@@ -1,0 +1,69 @@
+# {{ .computed.app_title }}
+
+An app-ade project: the shared Substrate agentic app host with its own identity and SQLite,
+app-shell, and the ADE packages, so a person and an agent work over the same surface. The
+person and the agent see the same thing, point at it, change it through the same actions with
+the same outcomes, and follow guides that wait on what really happens. The starter surface is a
+small board of notes; it is there to be replaced.
+
+## Start
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+cd frontend
+npm install
+npm run typecheck
+npm run lint
+npm run build
+cd ..
+go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+./{{ .inputs.repo_name }} identity setup --username owner
+./{{ .inputs.repo_name }} serve --managed
+```
+
+Commit `go.sum` and `frontend/package-lock.json`. See `docs/identity-bootstrap.md` for scoped
+keys and `docs/runbook.md` for installed operation.
+
+## The model
+
+With no model configured the app runs and the agent panel says no model is connected. To
+connect one, set the app's block in the operator configuration (the `SUBSTRATE_CONFIG` file):
+
+```yaml
+{{ .inputs.repo_name }}:
+  agent:
+    model: <the model's name or the gateway's alias>
+    base_url: <an Anthropic-compatible base URL; requests go to <base_url>/v1/messages>
+    key_file: <a file holding the key>
+```
+
+The key is read from its file on each request and never reaches the page, a log or the
+conversation. Each signed-in person has their own thread; it is kept in `agent.db` in the
+data directory, beside the app's database. The agent's routes are under `/api/agent` and need
+`{{ .inputs.repo_name }}.read` or `{{ .inputs.repo_name }}.write`, like the rest of the API.
+
+## Your domain
+
+These files are yours. `folio sync` never writes them, whatever has happened to them or to the
+preset (its sync policy is `skip`):
+
+- `frontend/src/domain/**`: the surface. `index.ts` exports `SURFACE`, `labels`, `Surface` (the
+  view on the left of the workspace) and `context` (what the model sees with each message).
+  Replace the notes board with your own thing and keep those exports.
+- `cmd/{{ .inputs.repo_name }}/prompt.go`: the agent's prompt.
+- `README.md`: this file.
+
+These are the preset's, and `folio sync` brings them up to date when the preset changes (if you
+edit one, sync reports a conflict instead of overwriting it):
+
+- `cmd/{{ .inputs.repo_name }}/agent.go`: mounts the agent host at `/api/agent`.
+- `frontend/src/pages/workspace.tsx`: the workspace page (surface, guide bar, agent panel,
+  attention layer).
+- `frontend/src/ade/**`: the hub, the agent session, guide persistence and the guide events the
+  agent is told about.
+
+Everything else comes from the Substrate app layers, with their own sync rules. Run
+`folio inspect .` to see how the project stands against the preset and `folio sync . --plan`
+to see what a sync would do.

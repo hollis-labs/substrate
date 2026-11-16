@@ -1,0 +1,122 @@
+folio_version: "0.1"
+id: app-ade
+version: 0.1.0
+description: A Substrate app where a person and an agent work over the same surface (ADE), with a starter notes board to replace
+author: hollis-labs
+license: MIT
+
+# The shell is the preset's: the agent host mount (cmd/<repo>/agent.go), the workspace page and the ADE
+# setup (frontend/src/pages/workspace.tsx, frontend/src/ade/setup.ts); folio sync keeps them current.
+# The domain is the person's: frontend/src/domain/**, the agent's prompt (cmd/<repo>/prompt.go) and
+# README.md start as a small notes board and are never written again (sync policy skip).
+#
+# Versions: the ADE packages and go/agenthost are inputs with no default, like the kits.
+
+composes:
+  - id: substrate-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../substrate-baseline
+    vars:
+      with_ade: "yes"
+      with_frontend: "yes"
+  - id: substrate-frontend
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../substrate-frontend
+    vars:
+      with_ade: "yes"
+
+inputs:
+  - name: with_ade
+    type: string
+    default: "yes"
+    pattern: "^yes$"
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary and Substrate app name (lowercase, hyphens allowed)
+  - name: substrate_version
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: The github.com/hollis-labs/substrate version for the go.mod require line. No default.
+  - name: ade_agenthost
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: The github.com/hollis-labs/ade/go/agenthost version for the go.mod require line. No default.
+  - name: ade_core
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"
+    description: "@hollis-labs/ade-core, exact. No default."
+  - name: ade_agent
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"
+    description: "@hollis-labs/ade-agent, exact. No default."
+  - name: ade_react
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+([-+][0-9A-Za-z.-]+)?$"
+    description: "@hollis-labs/ade-react, exact. No default."
+  - name: kit_app_shell
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/app-shell, exact. No default."
+  - name: kit_design_app_runtime
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-app-runtime, exact. No default."
+  - name: kit_design_bindings
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-bindings, exact. No default."
+  - name: kit_design_components
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-components, exact. No default."
+  - name: kit_design_tokens
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/design-tokens, exact. No default."
+  - name: kit_dashboard
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/kit-dashboard, exact. No default."
+  - name: kit_plugin_host_ui
+    type: string
+    required: true
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: "@hollis-labs/plugin-host-ui, exact (app-shell depends on it with a range, so it is pinned directly), from the Substrate bom.yaml kits block. No default."
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+# Rules are tried in order, these before the layers' own. The domain and the prompt are authored: never
+# written by sync, whatever has happened to them. The shell files take the preset's copy when the person
+# has not edited them; an edited one is reported as a conflict, not overwritten.
+sync:
+  default: prompt
+  rules:
+    - glob: "frontend/src/domain/**"
+      policy: skip
+    - glob: "cmd/*/prompt.go"
+      policy: skip
+    - glob: "README.md"
+      policy: skip
+    - glob: "cmd/*/agent.go"
+      policy: prompt
+    - glob: "frontend/src/pages/workspace.tsx"
+      policy: prompt
+    - glob: "frontend/src/ade/**"
+      policy: prompt

@@ -1,0 +1,91 @@
+/**
+ * The workspace's ADE wiring: one hub, one agent session over it, the guide kept as it goes,
+ * and the agent told when a guide ends or stalls. This file is the preset's (folio sync keeps it
+ * current); what is particular to the application comes from ../domain.
+ */
+import { createAgentSession } from "@hollis-labs/ade-agent"
+import { adeTools, createHub, type GuideState, type HubEvent } from "@hollis-labs/ade-core"
+import { context as domainContext } from "../domain"
+
+const GUIDE_KEY = "{{ .inputs.repo_name }}.guide"
+
+export const hub = createHub()
+
+/** The app's requests carry X-Requested-With, which the backend requires on cookie writes. */
+const sameOrigin: typeof fetch = (input, init) =>
+  fetch(input, {
+    credentials: "same-origin",
+    ...init,
+    headers: {
+      ...(init?.headers as Record<string, string> | undefined),
+      "X-Requested-With": "XMLHttpRequest",
+    },
+  })
+
+/** What the model is shown with each message: the domain's view of things, and the guide. */
+function context() {
+  const guide = hub.guideState()
+  const seen = domainContext(hub)
+  if (!guide || guide.status === "stopped") return seen
+  return {
+    ...(seen && typeof seen === "object" ? seen : { surface: seen }),
+    guide: {
+      title: guide.guide.title,
+      status: guide.status,
+      step: guide.index + 1,
+      of: guide.guide.steps.length,
+    },
+  }
+}
+
+export const session = createAgentSession({
+  tools: () => adeTools(hub),
+  context,
+  fetch: sameOrigin,
+})
+
+function readGuide(): GuideState | null {
+  try {
+    const raw = window.localStorage.getItem(GUIDE_KEY)
+    return raw ? (JSON.parse(raw) as GuideState) : null
+  } catch {
+    return null
+  }
+}
+function writeGuide(state: GuideState | null) {
+  try {
+    if (state) window.localStorage.setItem(GUIDE_KEY, JSON.stringify(state))
+    else window.localStorage.removeItem(GUIDE_KEY)
+  } catch {
+    // Not kept this time.
+  }
+}
+
+/** Takes up a guide kept from before, once the surface is there to guide on. */
+export function restoreGuide() {
+  const saved = readGuide()
+  if (saved && !hub.guideState()) hub.restoreGuide(saved)
+}
+
+// The guide is kept as it goes, and the agent is told when it ends: the person should not have to
+// say "I finished" for the agent to carry on.
+hub.subscribe((e: HubEvent) => {
+  if (e.type !== "guide") return
+  writeGuide(
+    e.state && (e.state.status === "running" || e.state.status === "paused") ? e.state : null,
+  )
+  if (e.what === "stalled" && e.state?.stalled) {
+    void session.send(
+      `<guide-event>\nThe guide "${e.state.guide.title}" is paused at step ${e.state.index + 1}: its own action was refused. ${e.state.stalled.reason} The application wrote this; the person did not type it. Look at the surface, then put it right: stop this guide and start a corrected one from where things stand, and tell the person in a sentence what happened.\n</guide-event>`,
+      { auto: "The guide needs the assistant" },
+    )
+    return
+  }
+  if (e.what !== "done" || !e.state) return
+  const s = e.state
+  const how = s.history.map((h) => `${h.step} ${h.how}`).join(", ")
+  void session.send(
+    `<guide-event>\nThe guide "${s.guide.title}" has finished. The application wrote this; the person did not type it. How each step ended: ${how}. Say one or two sentences on how it went, then offer the natural next thing or ask what they want.\n</guide-event>`,
+    { auto: `Guide finished: ${s.guide.title}` },
+  )
+})
