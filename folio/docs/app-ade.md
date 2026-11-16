@@ -33,7 +33,7 @@ the ADE release you build on.
 ```sh
 folio new app-ade notes-app --non-interactive \
   --input repo_name=notes-app \
-  --input substrate_version=v0.1.1-0.20261115173848-45b018004dd2 \
+  --input substrate_version=v0.1.1-0.20261116062748-5f79189d91ba \
   --input ade_agenthost=v0.1.0 \
   --input ade_core=0.1.0 --input ade_agent=0.1.0 --input ade_react=0.1.0 \
   --input kit_app_shell=0.11.0 \
