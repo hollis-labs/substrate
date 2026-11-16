@@ -1,0 +1,11 @@
+{
+  "schema_version": 0,
+  "module": "genui",
+  "package": {"name": "@hollis-labs/genui"},
+  "envelopes": {"emits": ["genui.declarative-surface@1.0.0"], "accepts_actions": ["genui_action"]},
+  "routes": [
+    {"method":"POST","path":"/api/genui/surfaces","scope":"{app}.genui.show"},
+    {"method":"POST","path":"/api/genui/actions","scope":"{app}.genui.act"},
+    {"method":"GET","path":"/api/genui/actions/{actionID}","scope":"{app}.genui.read"}
+  ]
+}

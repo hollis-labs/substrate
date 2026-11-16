@@ -1,0 +1,1078 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/hollis-labs/substrate/genui/contract/1",
+  "title": "GenUI contract 1",
+  "$defs": {
+    "Subject": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "Basis": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "projectionRevision": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "required": [
+        "revision"
+      ],
+      "additionalProperties": false
+    },
+    "Action": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 256
+        },
+        "subject": {
+          "$ref": "#/$defs/Subject"
+        },
+        "risk": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "basis": {
+          "$ref": "#/$defs/Basis"
+        },
+        "confirmation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8192
+        }
+      },
+      "required": [
+        "id",
+        "subject",
+        "basis"
+      ],
+      "additionalProperties": false
+    },
+    "JSONValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        {
+          "type": "string",
+          "maxLength": 16384
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/JSONValue"
+          },
+          "minItems": 0,
+          "maxItems": 256
+        },
+        {
+          "type": "object",
+          "maxProperties": 256,
+          "propertyNames": {
+            "maxLength": 256
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/JSONValue"
+          }
+        }
+      ]
+    },
+    "Input": {
+      "type": "object",
+      "maxProperties": 256,
+      "propertyNames": {
+        "maxLength": 256
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/JSONValue"
+      }
+    },
+    "CallArgs": {
+      "type": "object",
+      "properties": {
+        "genui_action": {
+          "$ref": "#/$defs/Action"
+        },
+        "input": {
+          "$ref": "#/$defs/Input"
+        }
+      },
+      "required": [
+        "genui_action",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "FunctionCall": {
+      "type": "object",
+      "properties": {
+        "@call": {
+          "const": "genui_action"
+        },
+        "catalogId": {
+          "const": "urn:hollis-labs:genui:catalog:1"
+        },
+        "args": {
+          "$ref": "#/$defs/CallArgs"
+        }
+      },
+      "required": [
+        "@call",
+        "args"
+      ],
+      "additionalProperties": false
+    },
+    "Call": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "1.0"
+        },
+        "callAgentFunction": {
+          "type": "object",
+          "properties": {
+            "surfaceId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "functionCallId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "callFunction": {
+              "$ref": "#/$defs/FunctionCall"
+            }
+          },
+          "required": [
+            "surfaceId",
+            "functionCallId",
+            "callFunction"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "version",
+        "callAgentFunction"
+      ],
+      "additionalProperties": false
+    },
+    "Confirm": {
+      "type": "object",
+      "properties": {
+        "what": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "ttlMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400000
+        },
+        "who": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        }
+      },
+      "required": [
+        "what",
+        "scope",
+        "ttlMs"
+      ],
+      "additionalProperties": false
+    },
+    "RefusedReason": {
+      "enum": [
+        "unsupported-action",
+        "invalid-arguments",
+        "denied",
+        "unregistered-route",
+        "unresolved-target",
+        "stale-owner",
+        "absent-scope",
+        "cancelled"
+      ]
+    },
+    "Outcome": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "ok"
+            },
+            "result": {
+              "$ref": "#/$defs/JSONValue"
+            },
+            "receipt": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "accepted"
+            },
+            "handle": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "poll": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "status",
+            "handle"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "needs_confirmation"
+            },
+            "confirm": {
+              "$ref": "#/$defs/Confirm"
+            }
+          },
+          "required": [
+            "status",
+            "confirm"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "refused"
+            },
+            "reason": {
+              "$ref": "#/$defs/RefusedReason"
+            }
+          },
+          "required": [
+            "status",
+            "reason"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "conflict"
+            },
+            "recorded": {
+              "$ref": "#/$defs/Outcome"
+            }
+          },
+          "required": [
+            "status",
+            "recorded"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "stale"
+            },
+            "current": {
+              "$ref": "#/$defs/Basis"
+            }
+          },
+          "required": [
+            "status",
+            "current"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "canceled"
+            },
+            "cause": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "expired"
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "superseded"
+            },
+            "by": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "status": {
+              "const": "failed"
+            },
+            "code": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            },
+            "detail": {
+              "$ref": "#/$defs/JSONValue"
+            }
+          },
+          "required": [
+            "status",
+            "code",
+            "message"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ProtocolError": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    },
+    "FunctionResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "functionCallId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "value": {
+              "$ref": "#/$defs/Outcome"
+            }
+          },
+          "required": [
+            "functionCallId",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "functionCallId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "error": {
+              "$ref": "#/$defs/ProtocolError"
+            }
+          },
+          "required": [
+            "functionCallId",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Response": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "1.0"
+        },
+        "agentFunctionResponse": {
+          "$ref": "#/$defs/FunctionResponse"
+        }
+      },
+      "required": [
+        "version",
+        "agentFunctionResponse"
+      ],
+      "additionalProperties": false
+    },
+    "Choice": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "callFunction": {
+          "$ref": "#/$defs/FunctionCall"
+        }
+      },
+      "required": [
+        "label",
+        "callFunction"
+      ],
+      "additionalProperties": false
+    },
+    "ViewState": {
+      "enum": [
+        "ready",
+        "loading",
+        "empty",
+        "error",
+        "stale",
+        "conflict",
+        "expired"
+      ]
+    },
+    "Change": {
+      "type": "object",
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "before": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "after": {
+          "type": "string",
+          "maxLength": 4096
+        }
+      },
+      "required": [
+        "label",
+        "before",
+        "after"
+      ],
+      "additionalProperties": false
+    },
+    "ApprovalProps": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 4096
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Change"
+          },
+          "minItems": 0,
+          "maxItems": 64
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Choice"
+          },
+          "minItems": 1,
+          "maxItems": 4
+        },
+        "state": {
+          "$ref": "#/$defs/ViewState"
+        }
+      },
+      "required": [
+        "title",
+        "changes",
+        "choices",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "FormField": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "maxLength": 64
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "type": {
+          "enum": [
+            "text",
+            "textarea",
+            "checkbox",
+            "integer"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "help": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "min": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "max": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "maxLength": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16384
+        }
+      },
+      "required": [
+        "key",
+        "label",
+        "type",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "FormProps": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FormField"
+          },
+          "minItems": 1,
+          "maxItems": 32
+        },
+        "submit": {
+          "$ref": "#/$defs/Choice"
+        },
+        "state": {
+          "$ref": "#/$defs/ViewState"
+        }
+      },
+      "required": [
+        "title",
+        "fields",
+        "submit",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "ListItem": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "ListDetailProps": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ListItem"
+          },
+          "minItems": 0,
+          "maxItems": 128
+        },
+        "selectedId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "detail": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "body": {
+              "type": "string",
+              "maxLength": 16384
+            }
+          },
+          "required": [
+            "title",
+            "body"
+          ],
+          "additionalProperties": false
+        },
+        "state": {
+          "$ref": "#/$defs/ViewState"
+        }
+      },
+      "required": [
+        "title",
+        "items",
+        "state"
+      ],
+      "additionalProperties": false
+    },
+    "Root": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "root"
+            },
+            "component": {
+              "const": "GenuiApproval"
+            },
+            "props": {
+              "$ref": "#/$defs/ApprovalProps"
+            }
+          },
+          "required": [
+            "id",
+            "component",
+            "props"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "root"
+            },
+            "component": {
+              "const": "GenuiForm"
+            },
+            "props": {
+              "$ref": "#/$defs/FormProps"
+            }
+          },
+          "required": [
+            "id",
+            "component",
+            "props"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "const": "root"
+            },
+            "component": {
+              "const": "GenuiListDetail"
+            },
+            "props": {
+              "$ref": "#/$defs/ListDetailProps"
+            }
+          },
+          "required": [
+            "id",
+            "component",
+            "props"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Pattern": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "enum": [
+            "approval",
+            "form",
+            "list_detail"
+          ]
+        },
+        "version": {
+          "const": "1.0.0"
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "Metadata": {
+      "type": "object",
+      "properties": {
+        "extensions": {
+          "type": "object",
+          "properties": {
+            "genui_surface": {
+              "type": "object",
+              "properties": {
+                "contract_version": {
+                  "const": "1"
+                }
+              },
+              "required": [
+                "contract_version"
+              ],
+              "additionalProperties": false
+            },
+            "genui_pattern": {
+              "$ref": "#/$defs/Pattern"
+            }
+          },
+          "required": [
+            "genui_surface",
+            "genui_pattern"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "extensions"
+      ],
+      "additionalProperties": false
+    },
+    "DataModel": {
+      "type": "object",
+      "properties": {
+        "draft": {
+          "$ref": "#/$defs/Input"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "CreateSurface": {
+      "type": "object",
+      "properties": {
+        "surfaceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "catalogId": {
+          "const": "urn:hollis-labs:genui:catalog:1"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Root"
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "dataModel": {
+          "$ref": "#/$defs/DataModel"
+        },
+        "metadata": {
+          "$ref": "#/$defs/Metadata"
+        }
+      },
+      "required": [
+        "surfaceId",
+        "catalogId",
+        "components",
+        "dataModel",
+        "metadata"
+      ],
+      "additionalProperties": false
+    },
+    "SurfaceMessage": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "1.0"
+        },
+        "createSurface": {
+          "$ref": "#/$defs/CreateSurface"
+        }
+      },
+      "required": [
+        "version",
+        "createSurface"
+      ],
+      "additionalProperties": false
+    },
+    "Envelope": {
+      "type": "object",
+      "properties": {
+        "v": {
+          "const": 1
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "type": {
+          "const": "genui.declarative-surface"
+        },
+        "typeVersion": {
+          "const": "1.0.0"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "context": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4096
+        },
+        "presentation": {
+          "enum": [
+            "inline",
+            "modal",
+            "drawer",
+            "fullscreen"
+          ]
+        },
+        "data": {
+          "$ref": "#/$defs/SurfaceMessage"
+        }
+      },
+      "required": [
+        "v",
+        "id",
+        "type",
+        "typeVersion",
+        "data"
+      ],
+      "additionalProperties": false
+    },
+    "UnknownOutcome": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "not": {
+            "enum": [
+              "ok",
+              "accepted",
+              "needs_confirmation",
+              "refused",
+              "conflict",
+              "stale",
+              "canceled",
+              "expired",
+              "superseded",
+              "failed",
+              "partial"
+            ]
+          }
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": {
+        "$ref": "#/$defs/JSONValue"
+      },
+      "maxProperties": 256
+    },
+    "ReceiverFunctionResponse": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "functionCallId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "value": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/Outcome"
+                },
+                {
+                  "$ref": "#/$defs/UnknownOutcome"
+                }
+              ]
+            }
+          },
+          "required": [
+            "functionCallId",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "functionCallId": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "error": {
+              "$ref": "#/$defs/ProtocolError"
+            }
+          },
+          "required": [
+            "functionCallId",
+            "error"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "ReceiverResponse": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": "1.0"
+        },
+        "agentFunctionResponse": {
+          "$ref": "#/$defs/ReceiverFunctionResponse"
+        }
+      },
+      "required": [
+        "version",
+        "agentFunctionResponse"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

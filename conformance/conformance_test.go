@@ -14,6 +14,7 @@ import (
 	"github.com/hollis-labs/substrate/catalog"
 	"github.com/hollis-labs/substrate/manifest"
 	"github.com/hollis-labs/substrate/module"
+	genuiModule "github.com/hollis-labs/substrate/modules/genui"
 	"github.com/hollis-labs/substrate/modules/policy"
 	"github.com/hollis-labs/substrate/modules/router"
 
@@ -52,6 +53,8 @@ func newApp(t *testing.T) *module.App {
 // stops them. It returns the app as it was while running.
 func startStop(t *testing.T, names []string) {
 	t.Helper()
+	genuiModule.UseHost(conformanceGenuiHost)
+	defer genuiModule.UseHost(nil)
 	policy.UsePDP(policy.AllowAll{}) // policy refuses to start without an app-supplied PDP
 	// router refuses to start without rules.
 	router.UseRules(librouter.RuleSet{Version: "conformance", Strategy: librouter.FirstMatch, Rules: []librouter.Rule{{
