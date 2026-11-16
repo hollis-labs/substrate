@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -453,5 +454,37 @@ func TestSemanticIntentBindsAuthenticatedScope(t *testing.T) {
 		if err != nil || a == b {
 			t.Fatal("scope missing from semantic digest", err)
 		}
+	}
+}
+
+func TestCompleteResponseLimitNeverEmitsOversizedSuccessOrReexecutes(t *testing.T) {
+	parts := map[string]string{"a": strings.Repeat("a", 16000), "b": strings.Repeat("b", 16000), "c": strings.Repeat("c", 16000), "d": strings.Repeat("d", 16000), "tail": ""}
+	o := genui.Outcome{Status: genui.StatusOK, Result: encode(parts)}
+	parts["tail"] = strings.Repeat("z", 65500-len(encode(o)))
+	o.Result = encode(parts)
+	if _, err := validOutcome(o); err != nil {
+		t.Fatal("boundary outcome must itself be valid", err)
+	}
+	if len(encode(genui.Response{Version: genui.ProtocolVersion, AgentFunctionResponse: genui.FunctionResponse{FunctionCallID: "invocation_1", Value: &o}})) <= genui.MaxActionBytes {
+		t.Fatal("fixture did not cross full response boundary")
+	}
+	db := newFileStore(t)
+	var calls atomic.Int32
+	s := serviceFixture(t, db, fixtureSurface(t), allowPolicy(), executorFunc(func(context.Context, Execution) (genui.Outcome, error) { calls.Add(1); return o, nil }))
+	r := submit(t, s, fixtureCall())
+	if r.AgentFunctionResponse.Error == nil || calls.Load() != 1 {
+		t.Fatal("oversized success emitted")
+	}
+	recovered, err := s.Recover(t.Context(), testScope, "action_1", "read_1")
+	if err != nil || recovered.Response.AgentFunctionResponse.Error == nil {
+		t.Fatal("oversized recovery emitted", err)
+	}
+	duplicate := submit(t, s, fixtureCall())
+	if duplicate.AgentFunctionResponse.Error == nil || calls.Load() != 1 {
+		t.Fatal("large recorded result enabled retry")
+	}
+	record, err := db.Load(t.Context(), Key{testScope, "action_1"})
+	if err != nil || !record.Claimed || record.Phase != PhaseTerminal {
+		t.Fatal("known durable result was erased", err)
 	}
 }

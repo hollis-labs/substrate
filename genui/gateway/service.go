@@ -180,7 +180,15 @@ func intentDigest(surface Surface, call genui.Call, operation string) (string, e
 }
 
 func response(id string, outcome genui.Outcome) genui.Response {
-	return genui.Response{Version: genui.ProtocolVersion, AgentFunctionResponse: genui.FunctionResponse{FunctionCallID: id, Value: &outcome}}
+	r := genui.Response{Version: genui.ProtocolVersion, AgentFunctionResponse: genui.FunctionResponse{FunctionCallID: id, Value: &outcome}}
+	// An individually bounded outcome may exceed the complete RPC limit after
+	// correlation/wrapping (or when nested as a recorded conflict). Never emit
+	// an unreadable success; the journal remains authoritative and consumed.
+	raw, err := json.Marshal(r)
+	if err != nil || genui.ValidateJSON(genui.ResponseSchema, raw) != nil {
+		return unavailable(id)
+	}
+	return r
 }
 func unavailable(id string) genui.Response {
 	return genui.Response{Version: genui.ProtocolVersion, AgentFunctionResponse: genui.FunctionResponse{FunctionCallID: id, Error: &genui.ProtocolError{Code: "unavailable", Message: "Action result is unavailable; do not resubmit."}}}

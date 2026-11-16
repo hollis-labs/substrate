@@ -55,6 +55,11 @@ after execution, solely to survive client disconnect. It cannot grant authority
 or execute effects. Publication happens after durable result acknowledgement;
 a publisher failure does not erase or rerun a known result.
 
+Host outcomes must fit the complete native response limit, including correlation
+and any recorded-conflict wrapper. Oversized wrappers return protocol unavailable
+while retaining the original result and consumed claim for host reconciliation;
+they never authorize retry. Prefer bounded result references for large outputs.
+
 ## HTTP and recovery
 
 `gateway.NewHTTP` mounts handlers through the application's existing host:
