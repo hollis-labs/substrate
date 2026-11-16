@@ -28,6 +28,7 @@ libs:
   github.com/hollis-labs/libs/ui/ui-go: v0.4.0   # v0.2 to v0.4 add streamhub event ids, epochs, logkit and retention; nothing removed
 app_libs:                 # libs an app may import that Substrate itself does not require
   github.com/hollis-labs/libs/agent/core: v0.5.0   # context and tool selection (Tradecraft and standalone MCP gateway)
+  github.com/hollis-labs/libs/agent/host: v0.1.0   # embedded agent host (Folio app-ade preset, chess tutor)
   github.com/hollis-labs/libs/agent/sdk: v0.0.0-20261115211534-c76ea978573d   # merged Tradecraft SDK foundation
   github.com/hollis-labs/libs/workflow/engine: v0.2.0
   github.com/hollis-labs/libs/harness/core: v0.17.1-0.20261115212742-8f2ed31176b0   # merged operation-bound provider approvals
