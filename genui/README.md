@@ -52,6 +52,10 @@ IDs, 32 form fields, 128 list items, four approval choices, and 64 displayed
 changes. `maxLength` uses Unicode code points, while the global decoded string
 limit uses UTF-8 bytes. Duplicate keys, invalid UTF-8, unpaired surrogates and
 trailing input refuse. No parser may silently round before validation.
+Typed materializers validate original strings and map keys before JSON encoding;
+malformed UTF-8 is never replaced silently. Literal U+FFFD remains valid. Typed
+inputs use ordinary contract structs and JSON values, not custom JSON/text
+serializers; use strict raw decoders for externally serialized data.
 
 `CanonicalJSON` uses RFC 8785 after validating this numeric profile. It does not
 choose a semantic digest projection: the host must deliberately bind the

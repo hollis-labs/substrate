@@ -14,12 +14,12 @@ func NewSurface(id string, pattern Pattern, props any, data DataModel) (Envelope
 	if !ok {
 		return Envelope{}, fmt.Errorf("unknown reviewed pattern")
 	}
-	raw, err := json.Marshal(props)
+	raw, err := marshalTyped(props)
 	if err != nil {
 		return Envelope{}, err
 	}
 	e := Envelope{V: 1, ID: id, Type: EnvelopeType, TypeVersion: TypeVersion, Presentation: "inline", Data: SurfaceMessage{Version: ProtocolVersion, CreateSurface: Surface{SurfaceID: id, CatalogID: CatalogID, Components: []Component{{ID: "root", Component: component, Props: raw}}, DataModel: data, Metadata: Metadata{Extensions: Extensions{Surface: SurfaceVersion{ContractVersion: ContractVersion}, Pattern: PatternMetadata{ID: pattern, Version: TypeVersion}}}}}}
-	raw, err = json.Marshal(e)
+	raw, err = marshalTyped(e)
 	if err != nil {
 		return Envelope{}, err
 	}
@@ -98,7 +98,7 @@ func validateChoice(c Choice) error {
 // ValidateFormDraft checks field semantics and values. Initial drafts may omit
 // required values; complete submissions may not. It does not authorize a change.
 func ValidateFormDraft(p FormProps, draft map[string]any, submitted bool) error {
-	rawProps, err := json.Marshal(p)
+	rawProps, err := marshalTyped(p)
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func ValidateFormDraft(p FormProps, draft map[string]any, submitted bool) error 
 	}
 	// Round-trip only after the raw decoder has proved the numeric profile. For
 	// typed callers this verifies the JSON values they actually supplied.
-	raw, err := json.Marshal(draft)
+	raw, err := marshalTyped(draft)
 	if err != nil {
 		return err
 	}
@@ -186,7 +186,7 @@ func ValidateFormDraft(p FormProps, draft map[string]any, submitted bool) error 
 // Choices returns detached offered choices. It is presentation data; a host
 // must still resolve them to its own registered operation and current policy.
 func Choices(e Envelope) ([]Choice, error) {
-	raw, err := json.Marshal(e)
+	raw, err := marshalTyped(e)
 	if err != nil {
 		return nil, err
 	}

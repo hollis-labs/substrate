@@ -2,11 +2,14 @@ package genui
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"io"
+	"reflect"
 	"regexp"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/cyberphone/json-canonicalization/go/src/webpki.org/jsoncanonicalizer"
@@ -132,4 +135,105 @@ func readValue(d *json.Decoder, depth int) (any, error) {
 	default:
 		return nil, fmt.Errorf("unsupported JSON token")
 	}
+}
+
+// marshalTyped checks the original values before encoding/json can replace
+// malformed strings or map keys. Custom serializers are not contract inputs;
+// callers can instead provide their serialized bytes to the strict raw decoders.
+func marshalTyped(value any) ([]byte, error) {
+	if err := validateTyped(reflect.ValueOf(value), 0); err != nil {
+		return nil, err
+	}
+	return json.Marshal(value)
+}
+
+func validateTyped(v reflect.Value, depth int) error {
+	if depth > MaxDepth {
+		return fmt.Errorf("typed JSON nesting exceeds limit")
+	}
+	if !v.IsValid() {
+		return nil
+	}
+	if v.Kind() == reflect.Interface {
+		if v.IsNil() {
+			return nil
+		}
+		return validateTyped(v.Elem(), depth)
+	}
+	if v.CanInterface() {
+		if raw, ok := v.Interface().(json.RawMessage); ok {
+			if raw == nil {
+				return nil
+			}
+			_, err := parseJSON(raw, MaxSurfaceBytes)
+			return err
+		}
+		if _, ok := v.Interface().(json.Marshaler); ok {
+			return fmt.Errorf("custom JSON marshaler is not a typed contract value")
+		}
+		if _, ok := v.Interface().(encoding.TextMarshaler); ok {
+			return fmt.Errorf("custom text marshaler is not a typed contract value")
+		}
+	}
+	// Addressable values may implement a serializer only on their pointer.
+	if v.CanAddr() && v.Addr().CanInterface() {
+		if _, ok := v.Addr().Interface().(json.Marshaler); ok {
+			return fmt.Errorf("custom JSON marshaler is not a typed contract value")
+		}
+		if _, ok := v.Addr().Interface().(encoding.TextMarshaler); ok {
+			return fmt.Errorf("custom text marshaler is not a typed contract value")
+		}
+	}
+	switch v.Kind() {
+	case reflect.String:
+		if !utf8.ValidString(v.String()) {
+			return fmt.Errorf("invalid UTF-8 in typed string")
+		}
+	case reflect.Pointer:
+		if !v.IsNil() {
+			return validateTyped(v.Elem(), depth+1)
+		}
+	case reflect.Struct:
+		for i := 0; i < v.NumField(); i++ {
+			field := v.Type().Field(i)
+			if field.PkgPath != "" || strings.Split(field.Tag.Get("json"), ",")[0] == "-" {
+				continue
+			}
+			if !utf8.ValidString(field.Tag.Get("json")) {
+				return fmt.Errorf("invalid UTF-8 in JSON field tag")
+			}
+			if err := validateTyped(v.Field(i), depth+1); err != nil {
+				return err
+			}
+		}
+	case reflect.Map:
+		if v.Len() > MaxCollection {
+			return fmt.Errorf("too many typed object members")
+		}
+		for it := v.MapRange(); it.Next(); {
+			if it.Key().Kind() != reflect.String {
+				return fmt.Errorf("typed object keys must be strings")
+			}
+			if err := validateTyped(it.Key(), depth+1); err != nil {
+				return err
+			}
+			if err := validateTyped(it.Value(), depth+1); err != nil {
+				return err
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		// Plain byte slices encode as base64 strings; RawMessage was checked above.
+		if v.Type().Elem().Kind() == reflect.Uint8 {
+			return nil
+		}
+		if v.Len() > MaxCollection {
+			return fmt.Errorf("too many typed array items")
+		}
+		for i := 0; i < v.Len(); i++ {
+			if err := validateTyped(v.Index(i), depth+1); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

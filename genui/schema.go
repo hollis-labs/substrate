@@ -163,7 +163,7 @@ func DecodeOutcome(raw []byte) (Outcome, error) {
 	return o, err
 }
 func ValidateOutcome(o Outcome) error {
-	raw, err := json.Marshal(o)
+	raw, err := marshalTyped(o)
 	if err != nil {
 		return err
 	}
