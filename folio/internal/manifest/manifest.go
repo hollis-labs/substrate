@@ -1,6 +1,6 @@
 // Package manifest reads and writes .folio.yaml, the in-repo manifest folio
 // generates alongside a rendered project. The manifest is the source of
-// truth for re-render (folio sync, deferred) — it records which preset(s)
+// truth for re-render (folio inspect and folio sync) — it records which preset(s)
 // produced the project, the resolved inputs + computed values, and a
 // per-file SHA-256 digest computed AFTER LF newline normalization so the
 // digests are stable across platforms.
@@ -42,7 +42,7 @@ type PresetRef struct {
 	Digest       string `yaml:"digest,omitempty"`
 }
 
-// FileRecord captures per-file metadata used by `folio sync` (deferred) to
+// FileRecord captures per-file metadata used by `folio inspect` and `folio sync` to
 // decide whether the on-disk content has drifted from the rendered version.
 //
 // DigestAtGen is `sha256:<hex>` of the rendered content AFTER LF newline
@@ -65,8 +65,8 @@ type PostRenderRecord struct {
 	Ran         bool      `yaml:"ran"`
 }
 
-// SyncEvent is one entry in the sync_history log. v0 always emits a single
-// "init" event when the project is first generated.
+// SyncEvent is one entry in the sync_history log: "init" when the project is
+// generated, then one "sync" per folio sync that wrote.
 type SyncEvent struct {
 	At        time.Time   `yaml:"at"`
 	Operation string      `yaml:"operation"`

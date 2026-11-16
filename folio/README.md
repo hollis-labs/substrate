@@ -106,7 +106,7 @@ folio new ts-plugin ./echo-plugin --non-interactive \
 | `folio preset list [--json]` | List every bundled and user-dir preset (`~/.folio/presets/local/<id>@<version>/`) with its version, source and description. |
 | `folio preset show <id> [--json]` | Show one preset's metadata, its own declared `composes:` entries (not a resolved chain) and its inputs. Exits 1 if the id is unknown. |
 | `folio inspect <dir> [--json]` | Read-only drift report: re-render the preset recorded in `<dir>/.folio.yaml` with the recorded inputs and compare it, per file, with the project (`unchanged`, `preset_updated`, `locally_modified`, `conflict`, `added_upstream`, `removed_upstream`, `missing_locally`). Never writes; exits 0 whenever it can report (1 if `<dir>` has no `.folio.yaml` or the preset no longer accepts the recorded inputs). Replays the generation clock and folio version from the manifest, so a `LICENSE` reading `{{ .now.Year }}` does not drift when the year turns; a file that renders random bytes (`uuid`) is marked `*` and compared for local edits only. |
-| `folio sync` | Reserved — prints "not yet implemented in v0" and exits 1. A real sync needs the original rendered bytes for a three-way merge; `.folio.yaml` stores only digests. |
+| `folio sync <dir> [--plan] [--input k=v] [--theirs-to SUFFIX] [--json]` | Apply what `inspect` reports, against the preset version folio has now: write `preset_updated` and `added_upstream` files (never over an untracked file already there), keep `locally_modified`, leave a `conflict` as it is and report it (`--theirs-to .folio-new` writes the preset's new rendering beside it to merge by hand), and leave `removed_upstream` and `missing_locally` files alone. A path under a sync rule with policy `skip` is never written, whatever its state: that is how a preset marks authored files. A conflict under a rule with policy `overwrite` takes the preset's copy. Rules match in order, the root preset's first, then the rendering layer's (`**` spans directories). `--input` sets an input a newer preset version requires. `--plan` writes nothing; otherwise `.folio.yaml` records the new versions, inputs and digests and a `sync_history` entry. There is no three-way merge: `.folio.yaml` stores only digests. Repository workflows are not synced. |
 
 ## Composing presets
 
@@ -247,8 +247,8 @@ Chimera dashboard of 2.x (clean break: `project_name`, `gui_host`, `chimera_*`, 
 
 `sysop-ui` remains a deprecated alias: `new`, `plan`, `preset show` and `inspect` resolve it to
 `app-dashboard`, and new breadcrumbs record `app-dashboard`. Supported breadcrumbs remain readable by `inspect`, which reports drift without updating
-the app or its breadcrumb. Removed presets and pre-3.0 dashboard breadcrumbs fail explicitly. `folio sync` remains reserved; nothing migrates an already generated
-app. Removed `chat-app` breadcrumbs still fail with `preset_removed`; fresh chat projects use
+the app or its breadcrumb. Removed presets and pre-3.0 dashboard breadcrumbs fail explicitly. `folio sync` applies a preset's updates file by file but
+nothing migrates an already generated app to a different preset. Removed `chat-app` breadcrumbs still fail with `preset_removed`; fresh chat projects use
 `app-chat`. There is no automatic migration or alias between the two.
 
 ## License
@@ -278,4 +278,4 @@ Checks and reusable builds are written to the selected root's `.github/workflows
 with the module working directory and dependency-cache path. An existing workflow or module path
 is refused; other modules and authored workflows are preserved. The manifest records each workflow's
 repository destination. Inspection reads those files only when you explicitly supply the root.
-Plan output uses paths relative to that root. This is new-project generation; sync remains deferred.
+Plan output uses paths relative to that root. This is new-project generation; `folio sync` does not sync repository workflows.

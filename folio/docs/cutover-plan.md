@@ -8,7 +8,7 @@ Cerberus apply or fleet install is part of this completion assignment.
 
 Existing `.folio.yaml` breadcrumbs remain untouched. Removed `chat-app`, `go-service-app`, Chimera
 and pre-3.0 dashboard presets still fail explicitly with `preset_removed`. Fresh chat generation uses
-`app-chat`; there is no implicit migration. General sync remains reserved.
+`app-chat`; there is no implicit migration. `folio sync` updates a project within its own preset, never across presets.
 
 The optional user preset directory is read as before. Folio has no database or daemon to migrate.
 Its new own `project.yaml` describes current behavior and does not install a runtime or policy gate.

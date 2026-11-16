@@ -2,9 +2,8 @@
 //
 // A preset declares: identity (id, version), the inputs schema agents/users
 // fill, computed variables derived from inputs, the file tree to render, and
-// optional composition / post-render / sync metadata. v0 implements parsing
-// and a subset of validation; composition execution, post-render hooks, and
-// sync are deferred.
+// optional composition / post-render / sync metadata. Post-render hooks are
+// deferred; sync rules are applied by `folio sync` (service.Sync).
 package preset
 
 import "gopkg.in/yaml.v3"
@@ -14,8 +13,7 @@ import "gopkg.in/yaml.v3"
 // Field order mirrors the design doc §2 schema. composes is parsed and
 // shape-validated at parse time; cross-preset rules and execution run in
 // internal/compose. post_render is parsed but ignored (validation emits a
-// warning). sync is parsed and stored for forward-compatibility but not yet
-// acted on. layer_only is informational: it marks a preset meant to be composed
+// warning). sync rules decide what `folio sync` may write (service.Sync). layer_only is informational: it marks a preset meant to be composed
 // by others rather than rendered directly, is surfaced by `folio preset list`
 // and `show`, and never changes what a render produces.
 type Preset struct {
@@ -91,7 +89,7 @@ type PostRender struct {
 	Inputs    map[string]string `yaml:"inputs,omitempty"`
 }
 
-// Sync declares the per-file sync policy applied by `folio sync` (deferred).
+// Sync declares the per-file sync policy applied by `folio sync`.
 type Sync struct {
 	Default string     `yaml:"default,omitempty"`
 	Rules   []SyncRule `yaml:"rules,omitempty"`

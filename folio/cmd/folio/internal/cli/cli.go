@@ -68,25 +68,9 @@ directory; ` + "`folio plan`" + ` previews the same render without writing.`,
 	root.AddCommand(presetCmd(bundledFS, version))
 	root.AddCommand(inspectCmd(bundledFS, version))
 	root.AddCommand(deployCmd())
-
-	// Reserved subcommands. These announce themselves as "not yet
-	// implemented" so users get a clear signal that the surface is planned
-	// rather than missing or buggy.
-	for _, name := range []string{"sync"} {
-		root.AddCommand(stubCmd(name))
-	}
+	root.AddCommand(syncCmd(bundledFS, version))
 
 	return root
-}
-
-func stubCmd(name string) *cobra.Command {
-	return &cobra.Command{
-		Use:   name,
-		Short: fmt.Sprintf("%s (not yet implemented in v0)", name),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return &service.Error{Code: service.ErrInternal, Message: fmt.Sprintf("%s: not yet implemented in v0", name)}
-		},
-	}
 }
 
 // exitCodeFor maps service errors and Cobra usage errors to the documented

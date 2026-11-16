@@ -58,7 +58,7 @@ Changing deployment target architecture does not rewrite the CI build target. Se
 For an existing monorepo, `--repository-root` and explicit `repository_name` select the boundary and
 repository identity. Folio derives module location/path and creates named workflows at the repository
 root. It refuses collisions and symlink escapes; standalone generation remains supported. `inspect`
-requires that explicit root to read recorded repository workflow files. General sync remains deferred.
+requires that explicit root to read recorded repository workflow files. `folio sync` leaves repository workflows alone.
 
 ## Versions and validation
 
