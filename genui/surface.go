@@ -98,6 +98,13 @@ func validateChoice(c Choice) error {
 // ValidateFormDraft checks field semantics and values. Initial drafts may omit
 // required values; complete submissions may not. It does not authorize a change.
 func ValidateFormDraft(p FormProps, draft map[string]any, submitted bool) error {
+	rawProps, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	if err = ValidateJSON("form-props/1", rawProps); err != nil {
+		return err
+	}
 	fields := map[string]FormField{}
 	for _, f := range p.Fields {
 		if _, ok := fields[f.Key]; ok {

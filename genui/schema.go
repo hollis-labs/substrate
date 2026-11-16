@@ -20,7 +20,7 @@ const (
 
 //go:embed schema/*.json
 var contractFiles embed.FS
-var definitions = map[string]string{EnvelopeSchema: "Envelope", CallSchema: "Call", OutcomeSchema: "Outcome", ResponseSchema: "Response", ReceiverResponseSchema: "ReceiverResponse"}
+var definitions = map[string]string{EnvelopeSchema: "Envelope", CallSchema: "Call", OutcomeSchema: "Outcome", ResponseSchema: "Response", ReceiverResponseSchema: "ReceiverResponse", "form-props/1": "FormProps"}
 
 type compiledSchema struct {
 	once     sync.Once
@@ -28,7 +28,7 @@ type compiledSchema struct {
 	err      error
 }
 
-var compiled = map[string]*compiledSchema{EnvelopeSchema: {}, CallSchema: {}, OutcomeSchema: {}, ResponseSchema: {}, ReceiverResponseSchema: {}}
+var compiled = map[string]*compiledSchema{EnvelopeSchema: {}, CallSchema: {}, OutcomeSchema: {}, ResponseSchema: {}, ReceiverResponseSchema: {}, "form-props/1": {}}
 
 // ContractSchema returns an independent copy of the canonical definitions.
 func ContractSchema() ([]byte, error) { return contractFiles.ReadFile("schema/contract.schema.json") }

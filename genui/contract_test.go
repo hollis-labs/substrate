@@ -178,3 +178,22 @@ func TestFieldAndListSemantics(t *testing.T) {
 		}
 	}
 }
+
+func TestTypedFormValidationDoesNotBypassSchema(t *testing.T) {
+	raw, err := os.ReadFile("testdata/fixtures/form.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := DecodeEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p FormProps
+	if err = json.Unmarshal(e.Data.CreateSurface.Components[0].Props, &p); err != nil {
+		t.Fatal(err)
+	}
+	p.Fields[0].Type = "unreviewed"
+	if err = ValidateFormDraft(p, nil, false); err == nil {
+		t.Fatal("typed invalid field schema accepted without draft values")
+	}
+}
