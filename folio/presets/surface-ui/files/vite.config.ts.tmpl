@@ -1,0 +1,53 @@
+{{ if eq .inputs.kind "desk" }}import { writeFileSync } from "node:fs"
+{{ end }}import { resolve } from "node:path"
+{{- if eq .inputs.kind "desk" }}
+import { surfacePage } from "@hollis-labs/surface-page/vite"
+{{- end }}
+import tailwindcss from "@tailwindcss/vite"
+import { defineConfig } from "vite"
+
+{{- if eq .inputs.kind "desk" }}
+
+// The server ({{ .inputs.repo_name }} serve) embeds the built page from webui/dist. In development the page is
+// served here with hot reload and talks to the running server.
+const api = process.env.{{ .computed.env_prefix }}_API ?? "http://127.0.0.1:{{ .inputs.port }}"
+{{- end }}
+
+export default defineConfig({
+{{- if eq .inputs.kind "desk" }}
+  // surfacePage(): the page package draws with this app's own components (@/components/ui/*).
+  plugins: [
+    tailwindcss(),
+    surfacePage(),
+    {
+      // emptyOutDir removes webui/dist/.gitkeep, which the Go embed needs to compile before a build.
+      name: "keep-gitkeep",
+      closeBundle() {
+        writeFileSync(resolve(import.meta.dirname, "webui/dist/.gitkeep"), "")
+      },
+    },
+  ],
+{{- else }}
+  plugins: [tailwindcss()],
+{{- end }}
+  // Components import each other, and the page imports them, as @/components/ui/<name>.
+  resolve: { alias: { "@": resolve(import.meta.dirname, "src") } },
+  esbuild: { jsx: "automatic" },
+  build: {
+{{- if eq .inputs.kind "desk" }}
+    outDir: "webui/dist",
+    emptyOutDir: true,
+    chunkSizeWarningLimit: 4000,
+{{- end }}
+    rollupOptions: {
+      // Base UI and the components mark their modules "use client", which means nothing to a page that
+      // only runs in the browser; dropping the directive is what produces both warnings.
+      onwarn(warning, warn) {
+        if (warning.code !== "MODULE_LEVEL_DIRECTIVE" && warning.code !== "SOURCEMAP_ERROR") warn(warning)
+      },
+    },
+  },
+{{- if eq .inputs.kind "desk" }}
+  server: { proxy: { "/api": api, "/mcp": api } },
+{{- end }}
+})

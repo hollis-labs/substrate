@@ -1,0 +1,36 @@
+// Command {{ .inputs.repo_name }} is a Surface desk app: the Surface core and this app's modules.
+//
+// A module registers itself when imported; add one by importing it below and naming it in modules.
+package main
+
+import (
+	"github.com/hollis-labs/surface/app"
+
+	"{{ .computed.module_path }}/webui"
+
+	// Substrate's mechanism: config, logging, health, the database handle, the CLI, HTTP.
+	_ "github.com/hollis-labs/substrate/modules/cli"
+	_ "github.com/hollis-labs/substrate/modules/config"
+	_ "github.com/hollis-labs/substrate/modules/database"
+	_ "github.com/hollis-labs/substrate/modules/health"
+	_ "github.com/hollis-labs/substrate/modules/httphost"
+	_ "github.com/hollis-labs/substrate/modules/logging"
+
+	// This app's modules.
+	_ "{{ .computed.module_path }}/modules/start"
+)
+
+// modules is the start order of this app's modules.
+var modules = []string{"start"}
+
+func main() {
+	assets, _ := webui.Assets()
+	app.Main(app.Config{
+		Name:                "{{ .inputs.repo_name }}",
+		Title:               {{ quote .computed.app_title }},
+		Modules:             modules,
+		SubstrateModules:    []string{"config", "logging", "health", "database", "cli", "httphost"},
+		SubstrateConfigJSON: `{"database":{"sqlite":{"path":"surface.db"}},"httphost":{"addr":"127.0.0.1:{{ .inputs.port }}"},"logging":{"format":"text","level":"info"}}`,
+		Assets:              assets,
+	})
+}

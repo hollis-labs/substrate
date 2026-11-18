@@ -1,0 +1,28 @@
+@import "tailwindcss";
+/* The Surface theme, installed from the registry by `make setup`. Never edit it here. */
+@import "./components/surface.css";
+{{- if eq .inputs.kind "desk" }}
+/* Tailwind does not look inside node_modules; the page package's classes are named here. */
+@source "../node_modules/@hollis-labs/surface-page/dist";
+{{- end }}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+/*
+ * This app's own look, if it needs one, is the theme's variables overridden here, and only here.
+ * Every name is in src/components/surface.css. A colour for every app is changed in the Surface
+ * registry's theme instead (docs/gui.md in github.com/hollis-labs/surface).
+ *
+ * :root {
+ *   --primary: oklch(0.55 0.2 260);
+ *   --radius: 0.5rem;
+ * }
+ * .dark {
+ *   --primary: oklch(0.7 0.15 260);
+ * }
+ */

@@ -53,6 +53,13 @@ the selected framework’s `bom/bom.yaml`. Chat additionally requires `kit_chat`
 sync pins, tidy again; for UI apps install frontend packages and commit the lockfile.
 Folio itself never installs, builds or runs a rendered project. See [architecture](./docs/architecture.md).
 
+## Surface apps
+
+`surface-app` (a plain web app: the app frame and views) and `surface-desk` (a Go server on Surface with
+windows, the agent panel and cards) scaffold an app whose interface is built from Surface's `@surface`
+registry at a pinned release: the theme, the raw-control lint rule, `npx surface-ui verify` in CI, agent
+instructions and a gallery. `make setup` once, then `make check`. See [`docs/surface-apps.md`](./docs/surface-apps.md).
+
 ## Class 2 tools
 
 `substrate-cli` and `substrate-service` (layer `substrate-tool-baseline`) render a class 2 tool of the

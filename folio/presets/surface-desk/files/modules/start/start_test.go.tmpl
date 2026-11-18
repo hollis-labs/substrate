@@ -1,0 +1,18 @@
+package start
+
+import "testing"
+
+func TestGreeting(t *testing.T) {
+	for in, want := range map[string]string{"Ada": "Hello, Ada.", "  ": "Hello, there."} {
+		if got := Greeting(in); got != want {
+			t.Errorf("Greeting(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestManifest(t *testing.T) {
+	m := (&mod{}).Manifest()
+	if m.ID != "start" || len(m.Views) != 1 || len(m.Tools) != 1 {
+		t.Fatalf("manifest: %+v", m)
+	}
+}

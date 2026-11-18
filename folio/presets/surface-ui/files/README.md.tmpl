@@ -1,0 +1,41 @@
+# {{ .computed.app_title }}
+
+{{ if eq .inputs.kind "desk" -}}
+A Surface desk app on Surface {{ .computed.surface_ref }}: a Go server (`github.com/hollis-labs/surface`) and its page
+(`@hollis-labs/surface-page`).
+{{- else -}}
+A web app whose interface is built from Surface's `@surface` registry at {{ .computed.surface_ref }}.
+{{- end }}
+
+## Set up
+
+Needs Node 24{{ if eq .inputs.kind "desk" }} and Go (the version in `go.mod`){{ end }}.
+
+```sh
+make setup    # npm install, then the components from the registry at {{ .computed.surface_ref }}{{ if eq .inputs.kind "desk" }}, then go mod tidy{{ end }}
+make check    # ui-verify, lint, typecheck, build{{ if eq .inputs.kind "desk" }}, go vet, go test, go build{{ end }}
+```
+
+Commit what `make setup` wrote: `package-lock.json`, `ui.lock.json` and `src/components/`{{ if eq .inputs.kind "desk" }}, `go.sum`{{ end }}. CI runs
+`npm ci` and `npx surface-ui verify`, so it needs them.
+
+## Run
+
+{{ if eq .inputs.kind "desk" -}}
+```sh
+make serve    # builds the page and the binary, serves http://127.0.0.1:{{ .inputs.port }}
+npm run dev   # the page with hot reload against that server
+```
+
+The agent panel says what it needs when no model is configured; `docs/agent.md` in the Surface repository covers it.
+{{- else -}}
+```sh
+npm run dev   # the app, and its gallery at #/gallery
+```
+{{- end }}
+
+## How the interface is built
+
+Read `AGENTS.md`. In short: views are made from the installed `@surface` components, a look is changed in the Surface
+registry and synced here, and `npx surface-ui verify` and lint enforce it. The full guide is `docs/gui.md` in
+github.com/hollis-labs/surface.

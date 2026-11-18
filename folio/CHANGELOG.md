@@ -8,6 +8,20 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **surface-app** and **surface-desk** presets, on the new layer `surface-ui`: an app whose interface is
+  built from Surface's `@surface` registry, the way docs/gui.md in github.com/hollis-labs/surface sets out.
+  One Surface release pins everything (`surface_version`, default `0.1.0`): `ui.lock.json` reads the
+  registry at the tag `v0.1.0`, and `@hollis-labs/surface-ui`, `-page`, `-chat`, `-cards`, `-genui` and (desk)
+  `github.com/hollis-labs/surface` are exact. Both get the theme, the Biome rule that fails a raw
+  `<button>`, `<input>`, `<select>` or `<textarea>` outside the installed components, `npx surface-ui verify`
+  in CI, `AGENTS.md` pointing at Surface's rules, and a gallery (the plain app's `#/gallery`; the desk's
+  Components window). `surface-app` is a Vite page with the app frame and a starter view; `surface-desk` is
+  a Go server on `github.com/hollis-labs/surface/app` with a starter module (`modules/start`, one window, one
+  agent tool) and its page on `@hollis-labs/surface-page`. `make setup` installs packages and components;
+  `make check` is CI. The installed components and `ui.lock.json` are surface-ui's: `folio sync` never
+  writes them. The `title` is free text (one line) and is escaped for each place it lands: a quoted Go
+  string in `main.go`, HTML text in `index.html`. See `docs/surface-apps.md`.
+
 - **app-ade** preset: a Substrate app where a person and an agent work over the same surface, on the
   ADE packages (`@hollis-labs/ade-core`, `ade-agent`, `ade-react`) and `github.com/hollis-labs/libs/agent/host`, all exact
   inputs with no default. It mounts the agent host at `/api/agent` behind the app's guard (owner from
