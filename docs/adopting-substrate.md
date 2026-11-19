@@ -226,8 +226,7 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 
    `authenticated` and `public` are `ui.json` words that `module.AddRoutes` translates (to `""` and to an open route).
    On a direct `ScopeTable.Route` call libs `security/auth` treats every non-empty string as a real scope name, so
-   `Route("GET", "/api/x", "authenticated")` requires a scope literally called `authenticated`: only a principal
-   holding `*` passes, and an API key with `app.read,app.write` gets 403 `required scope: authenticated` (Caster hit
+   `Route("GET", "/api/x", "authenticated")` requires a scope literally called `authenticated`: a principal holding `authenticated` or `*` passes, and an API key with `app.read,app.write` gets 403 `required scope: authenticated` (Caster hit
    this in a real binary). Pass `""` for authentication only. `TestAuthenticatedIsALiteralScopeOnADirectRoute`
    (`modules/auth`) pins both spellings. Add a test that
    every registered route has a scope (and break one on purpose to see it fail).
