@@ -12,6 +12,7 @@ minor releases may break APIs.
 
 ### Added
 
+- `substrate pins check --app DIR --frontend [--frontend-dir frontend] [--no-npm-ls] [--bom FILE]`: holds an app's frontend to the BOM kits. Reads `package.json` and `package-lock.json` (v2/v3) and fails on a top-level kit that is not the exact BOM version (in either file), a range on a pinned kit that the resolved copy does not meet or that has no copy (npm's invalid and missing), a pinned kit installed again, nested, at another version (every path listed; `kit_exceptions` honoured and printed as accepted), and anything `npm ls --all --package-lock-only` reports for a pinned kit. Why: Parallax's lockfile kept stale nested 0.4.0 design-tokens and design-components copies that made `npm ls` fail while `pins check --npm` (registry metadata only) passed. The lockfile analysis needs no network and no `node_modules`; `npm ls` needs npm and the check fails without it unless `--no-npm-ls`. `--bom` takes a `bom.yaml` in place of the one the app's Substrate release carries. Read-only: it changes no app. Nothing changes for existing flags.
 - Shared `agents.dir` config (default `agents/` beside app config) and the `agents` path helper: absolute authored paths, sorted agent subdirectory names, and separate per-agent state paths under the host’s state root. No Nanite dependency. See `docs/agents.md`.
 
 - `genui/gateway` and optional `genui` module: reviewed-pattern surfaces and
