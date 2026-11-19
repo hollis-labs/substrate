@@ -12,6 +12,8 @@ minor releases may break APIs.
 
 ### Added
 
+- Shared `agents.dir` config (default `agents/` beside app config) and the `agents` path helper: absolute authored paths, sorted agent subdirectory names, and separate per-agent state paths under the host’s state root. No Nanite dependency. See `docs/agents.md`.
+
 - `genui/gateway` and optional `genui` module: reviewed-pattern surfaces and
   scoped action/recovery routes backed by host-owned persistence, policy and
   execution ports. Durable claims survive uncertain results and restart;

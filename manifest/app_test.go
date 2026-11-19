@@ -9,6 +9,7 @@ func TestAppConfigBlockAndContributionsPath(t *testing.T) {
 	base := "app: myapp\nvariant: service\nprofiles: [minimal]\n"
 	ok := map[string]string{
 		"config for the app itself": base + "config:\n  myapp: {greeting: hi}\n",
+		"shared agents config":      base + "config:\n  agents: {dir: custom-agents}\n",
 		"config for a module":       base + "config:\n  logging: {level: debug}\n",
 		"contributions path":        base + "frontend:\n  contributions: ui/app.json\n",
 	}
