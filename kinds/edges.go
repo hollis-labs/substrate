@@ -5,6 +5,8 @@ import "fmt"
 type EdgeType string
 
 const (
+	DeployedAs     EdgeType = "deployed_as"
+	Configures     EdgeType = "configures"
 	OwnedBy        EdgeType = "owned_by"
 	OperatedBy     EdgeType = "operated_by"
 	ResponsibleFor EdgeType = "responsible_for"
@@ -29,23 +31,44 @@ type EdgeSpec struct {
 	Inverse     string
 	SourceKinds []string // empty = any declared kind
 	TargetKinds []string // empty = any declared kind
+	// AllowsCycle explicitly admits this relation in a directed cycle. Services
+	// enforce graph-wide checks; false is the default for dependency relations.
+	AllowsCycle bool
 }
 
 func EdgeSpecs() []EdgeSpec {
 	return []EdgeSpec{
-		{OwnedBy, "owns", nil, nil}, {OperatedBy, "operates", nil, nil},
-		{ResponsibleFor, "has_responsible", nil, nil}, {AnswersTo, "oversees", nil, nil},
-		{Consumes, "consumed_by", nil, nil}, {PartOf, "contains", nil, nil},
-		{Supersedes, "superseded_by", nil, nil},
-		{ComposesWith, "", []string{"tool"}, []string{"tool"}},
-		{UseInstead, "", []string{"tool"}, []string{"tool"}},
-		{Requires, "", []string{"tool"}, nil},
-		{RelatedSkill, "", []string{"tool"}, []string{"skill"}},
-		{RelatedDoc, "", []string{"tool"}, []string{"document"}},
-		{AlternativeFor, "", []string{"tool"}, []string{"tool"}},
-		{Precedes, "", []string{"tool"}, []string{"tool"}},
-		{ConflictsWith, "", []string{"tool"}, []string{"tool"}},
+		{DeployedAs, "", []string{"project"}, []string{"service"}, false},
+		{Configures, "", []string{"config"}, []string{"project", "service", "agent", "agency"}, false},
+		{OwnedBy, "owns", nil, nil, false},
+		{OperatedBy, "operates", nil, nil, false},
+		{ResponsibleFor, "has_responsible", nil, nil, false},
+		{AnswersTo, "oversees", nil, nil, false},
+		{Consumes, "consumed_by", nil, nil, true},
+		{PartOf, "contains", nil, nil, false},
+		{Supersedes, "superseded_by", nil, nil, false},
+		{ComposesWith, "", []string{"tool"}, []string{"tool"}, false},
+		{UseInstead, "", []string{"tool"}, []string{"tool"}, false},
+		{Requires, "", []string{"tool"}, nil, false},
+		{RelatedSkill, "", []string{"tool"}, []string{"skill"}, true},
+		{RelatedDoc, "", []string{"tool"}, []string{"document"}, true},
+		{AlternativeFor, "", []string{"tool"}, []string{"tool"}, false},
+		{Precedes, "", []string{"tool"}, []string{"tool"}, false},
+		{ConflictsWith, "", []string{"tool"}, []string{"tool"}, true},
 	}
+}
+
+// AllowsCycle reports the explicit relation policy; unknown types fail closed.
+// A directed cycle is admitted only when every edge on that cycle allows it,
+// including mixed-relation cycles. This function does not traverse a graph.
+// Self-edges count as cycles and use the same policy and endpoint constraints.
+func AllowsCycle(t EdgeType) (bool, error) {
+	for _, s := range EdgeSpecs() {
+		if s.Type == t {
+			return s.AllowsCycle, nil
+		}
+	}
+	return false, fmt.Errorf("unknown edge type %q", t)
 }
 
 // Reference retains an external authority's opaque native identifier. ID is

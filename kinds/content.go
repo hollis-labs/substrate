@@ -95,12 +95,12 @@ type TraceReference struct {
 	Depth          *int64 `json:"depth,omitempty"`
 }
 
-// CanonicalContentID applies only to the six content schemas; project and tool
+// CanonicalContentID applies to the authored content schemas; project and tool
 // have their own approved identity rules. Native IDs remain exact after ':';
 // transport adapters must encode the whole value rather than path-clean it.
 func CanonicalContentID(schema, id string) (string, error) {
 	switch schema {
-	case AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema:
+	case AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema, ServiceSchema, ConfigSchema, KnowledgeSchema, MCPServerSchema, LaunchProfileSchema:
 	default:
 		return "", fmt.Errorf("%w: %s", ErrUnknownSchema, schema)
 	}
@@ -110,12 +110,23 @@ func CanonicalContentID(schema, id string) (string, error) {
 	return strings.TrimSuffix(schema, "/1") + ":" + id, nil
 }
 
-// ParseContentJSON returns one of *Agent, *Agency, *Skill, *Document,
-// *Workstream or *Correlation after strict structural validation. References
+// ParseContentJSON returns the typed authored content value after strict
+// validation (Agent, Agency, Skill, Document, Workstream, Correlation, Service,
+// Config, Knowledge, MCPServer or LaunchProfile, as pointers). References
 // may be unavailable; their existence or authority is not certified here.
 func ParseContentJSON(schema string, data []byte) (any, error) {
 	var out any
 	switch schema {
+	case ServiceSchema:
+		out = &Service{}
+	case ConfigSchema:
+		out = &Config{}
+	case KnowledgeSchema:
+		out = &Knowledge{}
+	case MCPServerSchema:
+		out = &MCPServer{}
+	case LaunchProfileSchema:
+		out = &LaunchProfile{}
 	case AgentSchema:
 		out = &Agent{}
 	case AgencySchema:
@@ -154,6 +165,9 @@ func validateContent(data []byte, schema string) error {
 	}
 	if _, err := CanonicalContentID(schema, identity.ID); err != nil {
 		return err
+	}
+	if schema == ConfigSchema {
+		return validateConfig(data)
 	}
 	if schema == AgencySchema {
 		var a Agency

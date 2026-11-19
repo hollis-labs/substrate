@@ -164,3 +164,85 @@ source. Typed decoding represents both as an empty name; callers may display an
 ID fallback but must not persist an invented source name. Replacement APIs need
 not adopt the source's PATCH omission-versus-clear command semantics. Project
 URN omission and an empty array both describe no project memberships here.
+
+### Registry service, config and knowledge contracts
+
+`service/1`, `config/1`, `knowledge/1`, `mcp_server/1` and
+`launch_profile/1` use the same `ParseContentJSON`, `CanonicalContentID`,
+`ValidateJSON` and schema discovery API. Typed values also provide `Validate`.
+These contracts describe authored intent; they confer no publication, launch,
+deployment or contact authority. Registry owns revisions, approval and target
+existence. Final schema acceptance and consumer activation are separate gates.
+
+- Services identify their project, host, Cerberus resource, owner/operator,
+  interfaces and deployment method (`fleet-install` or `cerberus`). Port and
+  health URL are optional: non-listening processes do not get an invented port
+  or probe. An empty interface list is explicit. The contract does not attest
+  that a described service is running or healthy.
+- Config targets one project, service, agent or agency, with a matching `scope`.
+  `settings_schema` is an embedded JSON Schema object with `type: object`;
+  `settings` must validate against it. Local `$defs`/references work; external
+  schema loads are refused and no defaults are applied. Validation uses the
+  existing JSON Schema library and shared numeric domain. Application-owned
+  live config remains in the application's database. `secret_refs` maps field
+  names to typed `{authority, kind: "secret", id}` locators.
+- Knowledge is standalone authored content with a Markdown or plain-text body,
+  nonempty provenance references and an optional versioned `upstream` reference
+  to Tesseract. Temporary sync must preserve upstream authority, revisions and
+  drift rather than push local edits back. Import checkpoints and body digests
+  belong to the consuming service, not mutable fields invented by this package.
+- MCP servers retain transport plus an exact versioned Tether-owned source
+  reference; optional tool/config references describe relationships. Launch
+  profiles retain an exact versioned Tether-owned launch-profile source.
+  Neither copies Tether's native execution/permission schema. Reference shape
+  validation does not prove the source revision exists or is executable.
+
+`deployed_as` stores project → service; `configures` stores config →
+project/service/agent/agency. Both constrain endpoint kinds and have no inferred
+inverse. Service → project uses the existing `part_of` relation. Existing FC-8
+relations remain available to all new kinds. No relation implies transitive
+closure, grants or an operational binding. Cross-record consistency (including
+agreement between embedded references and authored edges) is a Registry check.
+
+All five new kinds call `ValidateNoSecretsJSON` before structural validation.
+The helper is also available for service envelopes and earlier kinds. It uses
+`libs/security/redact` credential detection over decoded strings (including
+free text, URLs and nested metadata); sensitive property names require a typed
+secret reference, never a literal or placeholder. This path refuses input,
+never silently scrubs it. Errors contain no rejected credential values.
+Secret references are never resolved. Detection is deliberately conservative:
+it cannot establish that every opaque string is safe. Services must bound
+request sizes, screen source projections, and avoid logging rejected inputs.
+
+`EdgeSpec.AllowsCycle` and `AllowsCycle(type)` provide the explicit graph cycle
+policy. Only `consumes`, `related_doc`, `related_skill` and `conflicts_with`
+permit directed cycles. Every other declared relation forbids cycles; unknown
+relation types return an error and false. A mixed-relation cycle is admissible
+only if **every** participating edge permits it. Self-edges are cycles too.
+Endpoint-kind constraints still apply. The service detects paths and enforces
+this against its complete transaction-local graph, including same-batch edges;
+validating an individual relation alone does not certify graph acyclicity.
+This policy does not imply transitive closure or operational permission.
+
+`SemanticReferences(schema, payload)` strictly admits one of the five new
+kinds and returns sorted, exact-deduplicated `SemanticReference` values
+(`Relation`, `Reference`). Services project these as authored outgoing edges:
+service project → `part_of`; service config → `consumes`; config target →
+`configures`; MCP server tools/config → `consumes`. Knowledge and launch
+profiles return an explicit empty slice. Source/upstream/provenance, generic
+descriptive references, secret locators and opaque owner/operator text do not
+produce semantic dependencies. Target resolution, immutable publication pins,
+canonical graph IDs and removal of stale projected edges remain transactional
+service responsibilities. Native external IDs are never implicitly local IDs.
+
+Secret admission recognizes schema-valued slots only at the known kind's
+structural positions: config `settings_schema`, tool `definition.input_schema`
+and `definition.output_schema`, and skill `input_schema`/`output_schema`.
+The same slots are recognized under a Registry Input envelope's `payload`
+using its top-level `schema`. JSON Schema property/definition names declare
+fields rather than contain values; literal `default`, `const`, `enum` and
+`examples` remain instance data and are screened, including sensitive named
+properties through schema combinators. Decoded schema documentation strings
+are screened too. A similarly named field under metadata or instance settings
+does not gain a schema exemption. This checks credentials without resolving
+schemas or applying their defaults.
