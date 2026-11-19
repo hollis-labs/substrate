@@ -3,9 +3,11 @@ module github.com/hollis-labs/substrate
 go 1.26.11
 
 require (
+	github.com/cyberphone/json-canonicalization v0.0.0-20261011152517-32a48195b9b2
+	github.com/google/jsonschema-go v0.4.3
 	github.com/hollis-labs/libs/app/app-host v0.1.0
 	github.com/hollis-labs/libs/core/store v0.1.0
-	github.com/hollis-labs/libs/core/util v0.6.0
+	github.com/hollis-labs/libs/core/util v0.11.1
 	github.com/hollis-labs/libs/mcp/plugin-mcp v0.6.0
 	github.com/hollis-labs/libs/security/auth v0.3.1
 	github.com/hollis-labs/libs/security/policy v0.1.0
@@ -25,7 +27,6 @@ require (
 	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
-	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hollis-labs/libs/core/panics v0.1.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
@@ -40,6 +41,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/segmentio/encoding v0.5.4 // indirect
 	github.com/sethvargo/go-retry v0.5.0 // indirect

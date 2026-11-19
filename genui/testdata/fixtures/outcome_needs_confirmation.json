@@ -1,0 +1,10 @@
+{
+  "status": "needs_confirmation",
+  "confirm": {
+    "what": "Approve change",
+    "scope": [
+      "project:project_example"
+    ],
+    "ttlMs": 60000
+  }
+}

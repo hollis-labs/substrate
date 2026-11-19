@@ -12,6 +12,15 @@ minor releases may break APIs.
 
 ### Added
 
+- Shared `agents.dir` config (default `agents/` beside app config) and the `agents` path helper: absolute authored paths, sorted agent subdirectory names, and separate per-agent state paths under the host’s state root. No Nanite dependency. See `docs/agents.md`.
+
+- `genui/gateway` and optional `genui` module: reviewed-pattern surfaces and
+  scoped action/recovery routes backed by host-owned persistence, policy and
+  execution ports. Durable claims survive uncertain results and restart;
+  recovery preserves the selected choice and complete form input without
+  confirmation secrets. No default authority, listener or production store is
+  installed. Frontend generation uses the published package pinned in the BOM.
+
 - `httphost.ServeOptions.Listener` (CW-20261115-0003): serve a `net.Listener` the app created (a unix socket, a socket-activated descriptor) instead of listening on `Addr`. Serve keeps `Stopping`, handler tracking and the graceful drain over it, runs the auth bind check on `Listener.Addr()` (a unix address as `unix:<path>`) and closes it on every return, a refused bind included. In `off` and `permissive` a unix listener must be a socket file that other users cannot write to: an abstract socket (`@name`) or an `o+w` socket file is refused (file permissions are its only protection). `httphost.ListenUnix(path, perm)` creates one safely: bound in a private directory next to `path`, chmodded there and linked into place, so the socket is never reachable with the umask's permissions; a stale socket is replaced only if nothing answers on it; it is removed on close. `httphost.ServeOptions.ConnContext` (CW-20261115-0004) is passed to `http.Server.ConnContext` after Serve's own and receives the connection exactly as `Accept` returned it, never wrapped, so a `*net.UnixConn` assertion holds. `httphost.PeerCredentials(r)` returns the uid, gid and pid of a unix-socket peer (Linux `SO_PEERCRED`, darwin `LOCAL_PEERCRED`/`LOCAL_PEERPID`; `ok` is false on TCP, on a wrapped conn, in httptest and on other platforms). A `unix:` address in `ServeOptions.Addr` or config `httphost.addr` without a `Listener` is refused with an error naming `ServeOptions.Listener` (it failed before with a TCP lookup error). `golang.org/x/sys` becomes a direct, pinned dependency (same version). Additive; nothing changes for callers that set none of these.
 
 ### Fixed
@@ -24,6 +33,19 @@ minor releases may break APIs.
 - `config`: follow-ups to the numeric override conversion. A nested map with a non-string key (`{1: a}`) in the override file is now refused with an error naming the key path (it used to pass through unconverted). The doc comment no longer claims big integers are "never rounded": a YAML integer beyond 64 bits is decoded by yaml.v3 as a float64 and cannot be told from a float, so it arrives rounded; only 64-bit integers above 2^53 are refused. The queue override tests no longer hang on failure (the release cleanup now runs before the queue stops) and the `poll_ms` test now fails when the conversion is removed (the queue starts empty so the worker sleeps a poll interval first). Removed dead `int` cases in `database` (`sqlite.read_pool`) and `events` (`retention_records`): every number arrives as `float64`.
 
 ### Changed
+
+- BOM kits: pin the published `@hollis-labs/genui` 0.1.0 renderer. Selecting the
+  optional `genui` module can now generate its frontend dependency normally;
+  missing package pins still fail closed. Existing kit versions, Go dependencies,
+  host-owned authority requirements and module defaults are unchanged.
+
+- BOM app libraries: add the merged Tradecraft SDK (`agent/sdk` at `c76ea978573d`)
+  and Gatecrasher coordinator (`mesh/gatecrasher` at `4cb9c2a6b9b7`) pseudo-versions;
+  advance `agent/core` to v0.5.0, `mesh/core` to v0.11.0 and `harness/core` to the
+  merged provider-approval foundation at `8f2ed31176b0`. Keep the existing higher
+  compatible llm/core, redact, eventbus and x/sys pins and Go 1.26.11 floor.
+  Apps can adopt these libraries through normal pins sync after updating Substrate;
+  this changes no framework features, auth configuration or running consumers.
 
 - `httphost`: a service (`variant: service`) answers an unknown path 404 `not_found` and a wrong method 405 `method_not_allowed` in the flat body, instead of 200 placeholder HTML (a client checking only the status took a mistyped API path for success). The builder carries the variant to runtime as new config `httphost.fallback`: `not_found` for a service unless the manifest sets it, `spa` (the default, today's behaviour) otherwise; the key can be set by hand either way. It applies only with nil `Assets`; `Options.NotFound` wins over it. App-host apps, including those with nil `Assets` (hello-app-host and the scaffolds), keep the placeholder. Takes effect when a service regenerates its wiring with the new builder. Service-variant apps today: the Tether port (S4) is the one this was filed for; among the manifests GitHub code search indexes (Sigil `cli`; Mentat and Tangent `app-host`) none is a service. (migration: none; a service that relied on the placeholder sets `httphost: {fallback: spa}`) (CW-20261115-0006)
 

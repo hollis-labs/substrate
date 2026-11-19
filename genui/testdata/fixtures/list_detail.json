@@ -1,0 +1,47 @@
+{
+  "v": 1,
+  "id": "surface_review_1",
+  "type": "genui.declarative-surface",
+  "typeVersion": "1.0.0",
+  "presentation": "inline",
+  "data": {
+    "version": "1.0",
+    "createSurface": {
+      "surfaceId": "surface_review_1",
+      "catalogId": "urn:hollis-labs:genui:catalog:1",
+      "components": [
+        {
+          "id": "root",
+          "component": "GenuiListDetail",
+          "props": {
+            "title": "Changes",
+            "items": [
+              {
+                "id": "change_1",
+                "title": "Rename"
+              }
+            ],
+            "selectedId": "change_1",
+            "detail": {
+              "title": "Rename",
+              "body": "Review the proposed name."
+            },
+            "state": "ready"
+          }
+        }
+      ],
+      "dataModel": {},
+      "metadata": {
+        "extensions": {
+          "genui_surface": {
+            "contract_version": "1"
+          },
+          "genui_pattern": {
+            "id": "list_detail",
+            "version": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}
