@@ -61,3 +61,36 @@ func TestEdgesAndReferences(t *testing.T) {
 		t.Fatal("missing authority")
 	}
 }
+
+func TestExplicitRelationCyclePolicy(t *testing.T) {
+	expected := map[kinds.EdgeType]bool{
+		kinds.DeployedAs: false, kinds.Configures: false,
+		kinds.OwnedBy: false, kinds.OperatedBy: false,
+		kinds.ResponsibleFor: false, kinds.AnswersTo: false,
+		kinds.Consumes: true, kinds.PartOf: false, kinds.Supersedes: false,
+		kinds.ComposesWith: false, kinds.UseInstead: false, kinds.Requires: false,
+		kinds.RelatedSkill: true, kinds.RelatedDoc: true,
+		kinds.AlternativeFor: false, kinds.Precedes: false, kinds.ConflictsWith: true,
+	}
+	specs := kinds.EdgeSpecs()
+	if len(specs) != len(expected) {
+		t.Fatal("every new relation requires an explicit cycle-policy fixture")
+	}
+	seen := map[kinds.EdgeType]bool{}
+	for _, spec := range specs {
+		want, ok := expected[spec.Type]
+		if !ok || seen[spec.Type] {
+			t.Fatalf("unknown or duplicate relation %s", spec.Type)
+		}
+		seen[spec.Type] = true
+		got, err := kinds.AllowsCycle(spec.Type)
+		if err != nil || got != want || spec.AllowsCycle != want {
+			t.Fatalf("%s: policy %t spec %t want %t, error %v", spec.Type, got, spec.AllowsCycle, want, err)
+		}
+	}
+	for _, relation := range []kinds.EdgeType{"unknown", "owns", "contains", "consumed_by", ""} {
+		if allowed, err := kinds.AllowsCycle(relation); allowed || err == nil {
+			t.Fatalf("unknown/inverse %q must fail closed", relation)
+		}
+	}
+}

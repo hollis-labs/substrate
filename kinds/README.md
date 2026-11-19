@@ -213,3 +213,13 @@ never silently scrubs it. Errors contain no rejected credential values.
 Secret references are never resolved. Detection is deliberately conservative:
 it cannot establish that every opaque string is safe. Services must bound
 request sizes, screen source projections, and avoid logging rejected inputs.
+
+`EdgeSpec.AllowsCycle` and `AllowsCycle(type)` provide the explicit graph cycle
+policy. Only `consumes`, `related_doc`, `related_skill` and `conflicts_with`
+permit directed cycles. Every other declared relation forbids cycles; unknown
+relation types return an error and false. A mixed-relation cycle is admissible
+only if **every** participating edge permits it. Self-edges are cycles too.
+Endpoint-kind constraints still apply. The service detects paths and enforces
+this against its complete transaction-local graph, including same-batch edges;
+validating an individual relation alone does not certify graph acyclicity.
+This policy does not imply transitive closure or operational permission.
