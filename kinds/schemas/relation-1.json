@@ -1,0 +1,427 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "relation/1"
+    },
+    "type": {
+      "enum": [
+        "owned_by",
+        "operated_by",
+        "responsible_for",
+        "answers_to",
+        "consumes",
+        "part_of",
+        "supersedes",
+        "composes_with",
+        "use_instead",
+        "requires",
+        "related_skill",
+        "related_doc",
+        "alternative_for",
+        "precedes",
+        "conflicts_with"
+      ]
+    },
+    "from": {
+      "type": "object",
+      "properties": {
+        "authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "authority",
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "to": {
+      "type": "object",
+      "properties": {
+        "authority": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]*$"
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uri": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "authority",
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "weight": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "context": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "harness": {
+              "type": "string",
+              "minLength": 1
+            },
+            "role/cell": {
+              "type": "string",
+              "minLength": 1
+            },
+            "task_class": {
+              "type": "string",
+              "minLength": 1
+            },
+            "workflow": {
+              "type": "string",
+              "minLength": 1
+            },
+            "domain": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "source": {
+      "enum": [
+        "authored",
+        "mined",
+        "reviewed"
+      ]
+    },
+    "status": {
+      "enum": [
+        "proposed",
+        "reviewed"
+      ]
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "authority": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]*$"
+          },
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uri": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "authority",
+          "kind",
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "type",
+    "from",
+    "to",
+    "source",
+    "status"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "composes_with"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "use_instead"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "requires"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "related_skill"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "skill"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "related_doc"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "document"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "alternative_for"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "precedes"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "conflicts_with"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "const": "tool"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "source": {
+            "const": "mined"
+          }
+        },
+        "required": [
+          "source"
+        ]
+      },
+      "then": {
+        "properties": {
+          "status": {
+            "const": "proposed"
+          }
+        }
+      }
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/hollis-labs/substrate/agents"
 	"github.com/hollis-labs/substrate/catalog"
 )
 
@@ -187,7 +188,7 @@ func (m *Manifest) Validate() []error {
 		}
 	}
 	for k := range m.Config {
-		if _, ok := catalog.Find(k); !ok && k != m.App {
+		if _, ok := catalog.Find(k); !ok && k != m.App && k != agents.ConfigBlock {
 			bad("config for unknown module %q (the app's own block is config.%s)", k, m.App)
 		}
 	}

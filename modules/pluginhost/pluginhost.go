@@ -8,8 +8,10 @@
 //
 //	pluginhost.UseSpecs(spec1, spec2)
 //
-// The forwarding routes (/api/plugins/{id}/..., any method) are declared in
-// ui.json and mounted by httphost under /api/, so the auth guard covers them.
+// The forwarding routes (/api/plugins/{id}/..., any method) are declared one per
+// registered Spec and mounted by httphost under /api/, so the auth guard covers
+// them. Other paths under /api/plugins/ are not claimed: an app may serve its
+// own handlers there through httphost.Options.Routes.
 // Their scope is "<app>.plugins" (config pluginhost.scope replaces it). An app
 // that wants finer scopes per plugin maps its own routes on auth.ScopeTable
 // after boot.Start; those are consulted first.
@@ -17,9 +19,9 @@ package pluginhost
 
 import (
 	"context"
-	_ "embed"
 	"fmt"
 	"net/http"
+	"regexp"
 	"sync"
 
 	"github.com/hollis-labs/libs/app/app-host/plugins"
@@ -30,11 +32,54 @@ import (
 	"github.com/hollis-labs/substrate/ui"
 )
 
-//go:embed ui.json
-var uiJSON []byte
+// UI declares one forwarding route per registered Spec, "* /api/plugins/<id>/".
+// The module does not claim the rest of /api/plugins/, so an app can serve its
+// own handlers under the ids it does not register as plugins. Once Start has
+// mounted the routes, UI reports the list it mounted, not a later UseSpecs.
+func (m *mod) UI() ui.Contribution {
+	mu.Lock()
+	list, ok := m.mounted, m.started
+	mu.Unlock()
+	if !ok {
+		list = registered()
+	}
+	return routesFor(list)
+}
 
-// UI declares the plugin forwarding routes.
-func (*mod) UI() ui.Contribution { return ui.MustParse(uiJSON) }
+func registered() []libhost.Spec {
+	mu.Lock()
+	defer mu.Unlock()
+	return append([]libhost.Spec(nil), specs...)
+}
+
+func routesFor(list []libhost.Spec) ui.Contribution {
+	c := ui.Contribution{Module: "pluginhost"}
+	seen := map[string]bool{}
+	for _, s := range list {
+		if seen[s.ID] {
+			continue
+		}
+		seen[s.ID] = true
+		c.Routes = append(c.Routes, ui.Route{Method: "*", Path: routePath(s.ID), Scope: "{app}.plugins"})
+	}
+	return c
+}
+
+func routePath(id string) string { return "/api/plugins/" + id + "/" }
+
+// pluginID is a single plain path segment: the id becomes the route
+// /api/plugins/<id>/, so a space, a slash, a "{wildcard}" or ".." would give a
+// bad, dead or over-broad route.
+var pluginID = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]*$`)
+
+func checkIDs(list []libhost.Spec) error {
+	for _, s := range list {
+		if !pluginID.MatchString(s.ID) {
+			return fmt.Errorf("pluginhost: plugin id %q is not a single plain path segment (letters, digits, '_', '.', '-'; starting with a letter or digit)", s.ID)
+		}
+	}
+	return nil
+}
 
 // InventoryKey is where the *plugins.Inventory is published.
 const InventoryKey = "pluginhost.inventory"
@@ -54,26 +99,38 @@ func UseSpecs(s ...libhost.Spec) {
 
 func init() { module.Register(&mod{}) }
 
-type mod struct{ inv *plugins.Inventory }
+type mod struct {
+	inv *plugins.Inventory
+	// mounted is the list Start mounted routes for; guarded by mu.
+	mounted []libhost.Spec
+	started bool
+}
 
 func (*mod) Name() string { return "pluginhost" }
 
 func (m *mod) Start(ctx context.Context, app *module.App) error {
-	mu.Lock()
-	list := append([]libhost.Spec(nil), specs...)
-	mu.Unlock()
-
+	list := registered()
+	if err := checkIDs(list); err != nil {
+		return err
+	}
 	inv := plugins.NewInventory(list)
 	if err := inv.Start(ctx); err != nil {
 		return fmt.Errorf("start plugins: %w", err)
 	}
 	m.inv = inv
 	app.Set(InventoryKey, inv)
-	if err := module.AddRoutes(app, m.UI(), map[string]http.Handler{"* /api/plugins/": inv.APIRoutes()}); err != nil {
+	handlers := map[string]http.Handler{}
+	for _, sp := range list {
+		handlers["* "+routePath(sp.ID)] = inv.APIRoutes()
+	}
+	if err := module.AddRoutes(app, routesFor(list), handlers); err != nil {
 		_ = inv.Stop(ctx)
 		m.inv = nil
 		return err
 	}
+	mu.Lock()
+	m.mounted, m.started = list, true
+	mu.Unlock()
 	if reg := health.From(app); reg != nil {
 		reg.Add("plugins", func(context.Context) error {
 			for _, s := range list {
@@ -88,6 +145,9 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 }
 
 func (m *mod) Stop(ctx context.Context) error {
+	mu.Lock()
+	m.mounted, m.started = nil, false
+	mu.Unlock()
 	if m.inv == nil {
 		return nil
 	}

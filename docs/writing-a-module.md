@@ -35,7 +35,7 @@ func (*mod) Stop(ctx context.Context) error { ... }
 
 Config arrives as `app.Config["<name>"]`, a `map[string]any` from the manifest's `config` block (JSON types:
 numbers are `float64`). Document every key in the package comment, give each a default, and refuse a bad value
-at Start with an error that names the key. The `config` module deep-merges the YAML file named by `SUBSTRATE_CONFIG` over it (maps merge recursively; scalars and lists replace; `null` removes a key, so your default applies). Override numbers arrive as `int` (YAML), manifest numbers as `float64`: accept both.
+at Start with an error that names the key. The `config` module deep-merges the YAML file named by `SUBSTRATE_CONFIG` over it (maps merge recursively; scalars and lists replace; `null` removes a key, so your default applies). Numbers always arrive as `float64`, whichever source set them: the manifest's JSON gives `float64`, and the `config` module converts every integer from the override file (nested maps and lists included) to `float64` as it merges, refusing a 64-bit integer above 2^53 with an error naming the key (an integer literal beyond 64 bits is decoded by yaml.v3 as a float64 and cannot be told from a float, so it arrives rounded, not refused) and a nested map with a non-string key with an error naming its path. Read a number with `.(float64)` only; an `int` case is dead code.
 
 ## Hooks for the app
 
@@ -74,11 +74,14 @@ return module.AddRoutes(app, m.UI(), map[string]http.Handler{"GET /api/<name>": 
   the app name. `"authenticated"` (and `"public"`) are words of this file: `AddRoutes` translates them. A route
   registered directly with `auth.ScopeTable(app).Route(method, pattern, scope)` does not get the translation: there
   `authenticated` is a literal scope that only `*` holds, and "any verified caller" is the empty string `""`. An app can replace every scope of your module with the string config `<name>.scope`.
-- `method` may be `*`; a path ending in `/` is a subtree (`/api/plugins/`). Paths must be under `/api/` or
+- `method` may be `*`; a path ending in `/` is a subtree (`/api/plugins/<id>/`). Paths must be under `/api/` or
   `/admin/`.
 - Every declared route needs a handler and every handler a declared route; `AddRoutes` fails otherwise.
 - Errors use `apierr.Write(w, status, code, message, details)`, the flat `{code, message, details?}` body the
   frontend reads. Streaming handlers must not buffer; the wrapper in httphost passes `Flush` through.
+  A module that relays a third-party protocol cannot choose its own error shape from inside: the app declares the
+  path raw (`httphost.Options.RawPrefixes`, `Mount.Raw`; `docs/adopting-substrate.md` section 5), so say in your
+  docs which prefix the app must list.
 - The same file can carry UI `contributions`, `envelopes` and a companion `package`, validated against
   `ui.Default`. The kinds are the design team's vocabulary (SF-2 v0.4.1): `nav.item`, `nav.group`,
   `settings.region`, `surface`, `panel`, `dock.tab`, `widget`, `slot`, `menu.item`, `command`; do not invent others. Each kind takes only

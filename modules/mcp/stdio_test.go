@@ -5,7 +5,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -159,3 +161,48 @@ func TestStdioRefusesWithoutAnAcceptableToken(t *testing.T) {
 type nopWriteCloser struct{ io.Writer }
 
 func (nopWriteCloser) Close() error { return nil }
+
+func TestServerOptionsReachTheServer(t *testing.T) {
+	t.Cleanup(func() { mcp.UseServerOptions() })
+	var mu sync.Mutex
+	var seen []string
+	mcp.UseServerOptions(
+		gmcp.WithInstructions("posture: read-only"),
+		gmcp.WithReceivingMiddleware(func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+			return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
+				mu.Lock()
+				seen = append(seen, method)
+				mu.Unlock()
+				return next(ctx, method, req)
+			}
+		}),
+	)
+	app := stdioApp(t, `{}`)
+	cs, _ := connectWith(t, app, mcp.StdioOptions{})
+	if got := cs.InitializeResult().Instructions; got != "posture: read-only" {
+		t.Errorf("instructions: %q", got)
+	}
+	if out, isErr := callTool(t, cs, "ping"); isErr || !strings.Contains(out, "pong") {
+		t.Fatalf("ping: %q err=%v", out, isErr)
+	}
+	mu.Lock()
+	if !slices.Contains(seen, "tools/call") {
+		t.Errorf("the app's receiving middleware did not see tools/call: %v", seen)
+	}
+	mu.Unlock()
+	// Cleared: a later start has no instructions.
+	mcp.UseServerOptions()
+	cs2, _ := connectWith(t, stdioApp(t, `{}`), mcp.StdioOptions{})
+	if got := cs2.InitializeResult().Instructions; got != "" {
+		t.Errorf("instructions after clearing: %q", got)
+	}
+}
+
+func TestARefusedServerOptionFailsStart(t *testing.T) {
+	t.Cleanup(func() { mcp.UseServerOptions() })
+	mcp.UseServerOptions(gmcp.WithInstructions(strings.Repeat("x", gmcp.MaxInstructionsLen+1)))
+	_, err := boot.Start(context.Background(), "t", []string{"health", "httphost", "mcp"}, `{}`)
+	if err == nil || !strings.Contains(err.Error(), "server option") {
+		t.Fatalf("start with over-long instructions: %v", err)
+	}
+}

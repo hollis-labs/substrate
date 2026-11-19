@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
@@ -111,6 +112,30 @@ func main() {
 	}
 }
 
+// wiringConfig is the manifest config plus the defaults the variant implies: a service has no
+// SPA, so httphost answers unknown paths 404 (httphost.fallback: not_found) unless the manifest
+// says otherwise. m.Config itself is not changed.
+func wiringConfig(m *manifest.Manifest, mods []string) map[string]any {
+	if m.Variant != "service" || !slices.Contains(mods, "httphost") {
+		return m.Config
+	}
+	out := make(map[string]any, len(m.Config)+1)
+	for k, v := range m.Config {
+		out[k] = v
+	}
+	hh := map[string]any{}
+	if cur, ok := out["httphost"].(map[string]any); ok {
+		for k, v := range cur {
+			hh[k] = v
+		}
+	}
+	if _, set := hh["fallback"]; !set {
+		hh["fallback"] = "not_found"
+	}
+	out["httphost"] = hh
+	return out
+}
+
 func fail(err error) { fmt.Fprintln(os.Stderr, "substrate:", err); os.Exit(1) }
 
 // generate writes substrate_wiring.go: blank imports of the selected modules
@@ -120,7 +145,7 @@ func generate(m *manifest.Manifest, manifestPath, pkg string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cfg, err := json.Marshal(m.Config)
+	cfg, err := json.Marshal(wiringConfig(m, mods))
 	if err != nil {
 		return "", fmt.Errorf("config must be JSON-compatible: %w", err)
 	}

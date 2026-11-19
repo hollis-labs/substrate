@@ -92,7 +92,9 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
   <-r.Context().Done(): /* client left */ case ev := <-events: ... }`. It reaches the handler through the host check,
   identity, the guard and `apierr.Normalize` (it rides the request context). `r.Context()` is deliberately not
   cancelled when a graceful stop begins, so a request doing real work (a database call) finishes; only the grace
-  expiry cancels it. Outside `Serve` (httptest) `Stopping` is a nil channel and never fires.
+  expiry cancels it. Outside `Serve` (httptest) `Stopping` is a nil channel and never fires. An app's own background
+  goroutines started from a handler (a worker the request kicked off) should watch the app context, not
+  `Stopping(r)`, which belongs to the request's own connection.
 
 ## 4. Persistence
 
@@ -102,6 +104,34 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
 - Use the `database` module's store (`database.From(app)`), not your own `sql.Open`. SQLite and Postgres are both
   supported by the module; if your SQL uses `?` placeholders and SQLite syntax, say in the architecture note that the
   app is SQLite only. Identity and other modules use `Dialect().Rebind` and work on both.
+- Local store plus a data store. This is not a step of every port, and no port needs it to cut over. Whether a port uses a
+  second store (its class B and C data on Postgres) is its director's ruling; it comes after adoption, with the Postgres
+  switch. When an app does move its growing data to Postgres but must still start and be repairable without that server
+  (settings, definitions and identity local; events, logs, domain tables on Postgres), keep the default store local and add
+  a named one: `database.stores.data` with `driver: postgres`, `required: false`, `schema_mode: verify`,
+  `postgres: {dsn_file: ..., migrate_dsn_file: ...}`, and `database.UseNamedMigrationFS("data", fsys, root)`. In code take
+  `h := database.Named(app, "data")`; `h.Get()` returns the store or an error wrapping `database.ErrUnavailable`. A handler
+  maps that, and any connection-level error (`database.IsUnavailable(err)`, which it also passes to `h.Report(err)` so the
+  state flips at once), to `database.WriteUnavailable(w, h)` (503 `database_unavailable`), or wraps a route group in
+  `database.Gate(h)` (`GateWith(h, deny)` keeps a protocol-fixed API's own error envelope). Both panic at construction on a
+  nil handle: `database.Named` returns nil for a name that is not configured, and that typo should not surface as a route that
+  is quietly always 503. `h.OnChange(fn)` re-arms work that depends on the store after an outage; `h.Wait(ctx)` waits for
+  the first time it is ready.
+  While an optional store is down the app is up and `/healthz` says `degraded` with HTTP 200 (naming the store and its host
+  and database, never credentials; a 503 would make a deploy gate roll the app back or a supervisor restart it), writes to it
+  are refused (nothing is queued or spooled), and the module reconnects by itself with backoff. A missing secret file or an
+  unset variable is an outage; a secret file that cannot be read (permission, a directory, empty) fails `Start` and names the
+  path. A store whose error will not fix itself (a rejected login, a missing database, a schema that is behind) shows as
+  `failed` (an optional store; a required one fails `Start`). Producers that must not block (events, telemetry) batch in memory with a bound and drop the oldest, counting
+  drops; they do not persist locally. Each named store has its own version table (`goose_db_version_<name>`), so two stores
+  can share one database.
+  Migrations: a Postgres named store defaults to `schema_mode: verify`, which never reads `migrate_dsn_*`, so the running app
+  needs no schema-owner secret and does not migrate a shared server. The deploy step migrates with the schema-owner role:
+  `<app> db migrate --store data` (the database module adds the `db` verb when the app has named stores and the cli module is
+  selected; it is `database.MigrateNamed(ctx, app, name)` underneath) with `migrate_dsn_file` or `migrate_dsn_env` set. If an
+  optional store's schema is behind at start, the store is `failed` and recovers by itself once the deploy step has migrated
+  it. A required store with the schema behind fails `Start` (it is required), which is why `db migrate` does not open the
+  named stores at boot: run it before the app starts, including on a store's first deploy.
 - The store contract. `database.From(app)` is libs `core/store` (`*store.Store`). On SQLite it has ONE write
   connection (`DB()`, `WriteTx`, `ExecContext`; pool size forced to 1, `BEGIN IMMEDIATE`) and a separate read-only pool
   (`Reader()`, `QueryContext`, `QueryRowContext`, `ReadTx`; opened `mode=ro`, 4 connections by default, set with
@@ -117,6 +147,14 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
     from scratch on `SQLITE_BUSY`.
   - SQLite in memory (`:memory:`) uses a single shared connection for reads and writes, so there even a `Reader()`
     query inside an open cursor waits. Tests on `:memory:` hang sooner, not differently.
+  - Starting the same app twice at once on one new SQLite file is safe: the `database` module opens and migrates
+    under an exclusive advisory lock (`flock`) on `<db path>.open.lock`, so the second process waits, then finds the
+    schema current. The kernel drops the lock when its holder exits, so a crash leaves nothing stale (the leftover
+    file is harmless and is not removed). A wait longer than `database.sqlite.open_lock_timeout` (default `30s`) fails
+    the start with an error naming the lock file. Limits: the lock covers only processes that start through the
+    `database` module (a tool that opens the file itself, such as the `sqlite3` shell, is not serialised); it is not
+    taken for `:memory:` or Postgres; on a non-unix build it is a no-op; and flock on a network file system is only as
+    good as that file system.
   - Postgres has one pool (`Reader()` and `DB()` share it), so the deadlock is SQLite's. Keep the same discipline
     anyway: the code has to run on both.
 
@@ -195,6 +233,22 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    every registered route has a scope (and break one on purpose to see it fail).
 4. Routes that authenticate their own callers (a native device protocol, a webhook, an A2A endpoint) are
    `httphost.Mount`s with `Open: true`. Their handlers must verify the credential themselves; say so in the code.
+   **Relaying a third-party protocol.** Every route and mount is wrapped in `apierr.Normalize`, which rewrites a
+   4xx/5xx body `{"error":{"code","message"}}` into the flat `{code, message}`. That is right for the app's own API
+   and wrong for a handler that relays an upstream whose error shape clients depend on (an OpenAI-dialect gateway:
+   `{"error":{"message","type","param","code"}}`, read as `error.message` by the OpenAI SDKs). Declare that path once:
+   `httphost.Options{RawPrefixes: []string{"/api/llm-gateway/v1/"}}` for routes under `/api/` (each prefix starts with
+   `/api/`, ends with `/`, is not `/api/` itself, appears once and must not overlap a module-declared route; a bad
+   one is an error from `Handler` naming it), or `Mount{Raw: true}` for a mount outside `/api/`. The handler's
+   response (status, headers, body, streams) then passes untouched. The guard's and the scope table's refusals,
+   `route_not_mapped` included, still answer flat, so a client sees the upstream dialect for upstream errors and the
+   framework shape for framework refusals. Do not use it for the app's own API: the frontend reads the flat shape.
+   **Unknown paths without a UI.** In an app-host a path no route or mount matches loads the SPA (the placeholder page
+   when there are no assets), 200 HTML. A service (`variant: service`, config `httphost.fallback: not_found`, which the
+   builder writes) answers it 404 and a wrong method 405, flat. A service whose clients expect its own error envelope
+   sets `httphost.Options{NotFound: h}`: it then answers every unmatched path outside `/api/`, raw and unguarded (so
+   it must never serve data), and a wrong method on a method-specific mount with `Allow` set (answer 405 when it is). A wrong
+   method other than GET or HEAD on a method-specific path is 405, never the SPA, in either case.
 5. The data owner of a row is the verified principal subject from the request context, never a request field.
 6. Keep stored secrets behind the `secrets` module's resolver. Never return a secret, a secret reference, a hash or a
    session value from any API.
@@ -206,7 +260,8 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    call site: `mcp.ServeStdio(ctx, app, mcp.StdioOptions{LocalTrust: true})`. There is no config key and the
    default is off, so a manifest or override file cannot enable it. With no token configured the tools run under
    `local:operator` (kind `operator`, verified by filesystem trust, scopes `*`; narrow with `LocalScopes`, and
-   per-tool `mcp.Authorize` then refuses what the list lacks). A token that is given is verified as always and a
+   per-tool `mcp.Authorize` then refuses what the list lacks; in enforce mode the list must cover `mcp.scope`, as a
+   token must, or `ServeStdio` refuses to start). A token that is given is verified as always and a
    bad one is an error, never a fallback. The trust statement, verbatim: the process runs as a user who can open
    the data file; the module cannot tell who launched it and checks nothing about the file or the parent. A
    child launched by a gateway (Tether) on the same host as the same user counts as local. A gateway that serves
@@ -216,7 +271,12 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    key a cache on a verified principal see the local principal as verified.
 
    **An app with a scope that must never be held by an agent on the same host (Tangent has one: approving a human-in-the-loop item) MUST pass `LocalScopes` that leave it out: under `LocalTrust` the default scopes are `*`, and local trust is the trust of anyone who can run the binary as that user, which on our hosts includes agents.**
-10. One issuer per database. The identity module creates its signing key at start only when the database holds no
+10. An app that issues its own JWTs from a rotating key ring (agent tokens) verifies them through the auth module,
+    not a second private verifier: `auth.UseKeySource` (the ring's public keys as JWKS, read in process) and
+    `auth.UseDenyList` (its in-process `*libauth.DenyList`) before `boot.Start`, and `auth.RefreshKeys(ctx, app)`
+    after a rotation. Do not point `auth.jwks_url` at the app itself. They combine with the identity module's tokens;
+    see `docs/identity.md`, An issuer that verifies its own tokens.
+11. One issuer per database. The identity module creates its signing key at start only when the database holds no
     users or API keys; with identity rows and no key file at `identity.key_file` it refuses to start and names the
     path. A child process pointed at the service's database (an explicit `-db`) must point `key_file` at the
     service's key. `identity.allow_new_signing_key: true` is the deliberate override for a lost key.
@@ -239,6 +299,10 @@ Map every old environment variable to a config key (or drop it on purpose) and w
   and allow), then `enforce` for release.
 
 ## 8. The frontend
+
+The frontend reads the flat `{code, message}` error body, which is why `httphost` flattens every error by default.
+A path that relays a third-party protocol opts out with `RawPrefixes` or `Mount.Raw` (section 5, step 4); the UI
+must not call such a path expecting the flat shape.
 
 - The UI is built on app-shell and the BOM-pinned kits (`bom/bom.yaml` `kits:`, exact versions, no `^`). Run
   `substrate frontend -f cmd/myapp/substrate.yaml` to generate the frontend manifest and use the pinned versions.

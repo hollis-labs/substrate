@@ -31,6 +31,13 @@ jobs:
           go-version-file: go.mod
       - run: go vet ./...
       - run: go test ./...
+      - name: the test suite leaves the tree clean
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::go test ./... left files in the working tree (tracked changes or untracked files). A test must keep every file it creates under t.TempDir(); a relative path opens inside the package directory."
+            git status --porcelain
+            exit 1
+          fi
       - name: pins match the BOM (go.mod, this workflow)
         run: go run ./cmd/substrate pins check
       - uses: golangci/golangci-lint-action@v7

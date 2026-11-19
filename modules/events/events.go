@@ -81,8 +81,6 @@ func (m *mod) Start(_ context.Context, app *module.App) error {
 		switch v := cfg["retention_records"].(type) {
 		case float64:
 			records = int(v)
-		case int:
-			records = v
 		}
 	}
 	mu.Lock()

@@ -1,0 +1,42 @@
+{
+  "repository": "https://github.com/a2ui-project/a2ui",
+  "revision": "57f961f143da23f4212313e432a64b5843d978f9",
+  "protocol_version": "1.0",
+  "specification_status": "stable",
+  "retrieved_at": "2026-11-16T03:17:58Z",
+  "license": "Apache-2.0",
+  "files": [
+    {
+      "path": "specification/v1_0/json/agent_capabilities.json",
+      "git_blob": "1f4a5a75a88c5b243564d950042f889eefbd5fdf",
+      "sha256": "6a4282dfb26af95a73d960572a31b91c5d5c89d1f9e54cbb8d24c599afcbc3a2",
+      "vendored_path": "upstream/agent_capabilities.json"
+    },
+    {
+      "path": "specification/v1_0/json/agent_to_renderer.json",
+      "git_blob": "bfa0dfbc43fe1d16ce0b95d30069670dc843b98b",
+      "sha256": "2f575f783fdda0e4d175fe5d331661655e4a4901613262322792dae7e823761d",
+      "vendored_path": "upstream/agent_to_renderer.json"
+    },
+    {
+      "path": "specification/v1_0/json/catalog_definition.json",
+      "git_blob": "68400640b3f7f59db1c0e01e1c70d6a1545beae1",
+      "sha256": "836a48b2deb7ae76c3b68cb4e79c2faa24cba36d4d5396474894796797364d44",
+      "vendored_path": "upstream/catalog_definition.json"
+    },
+    {
+      "path": "specification/v1_0/json/common_types.json",
+      "git_blob": "166fd3b39e5f28b4d29f7ff8b8e7650e52a72040",
+      "sha256": "c4e78305be1de73eecb37f8179ba169730250611703683af291b18135a6430dc",
+      "vendored_path": "upstream/common_types.json"
+    },
+    {
+      "path": "specification/v1_0/json/renderer_to_agent.json",
+      "git_blob": "07c0d9fea9e38bb5ca075e855cb0ec37b4229cd6",
+      "sha256": "58ecde02101f0f37566b5e238dc6ef6af628c3ff312fce0e17ab7670b7215465",
+      "vendored_path": "upstream/renderer_to_agent.json"
+    }
+  ],
+  "license_note": "Only the A2UI specification schemas are vendored; unrelated eval tooling and its separate license are not included.",
+  "vendored_license_sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+}
