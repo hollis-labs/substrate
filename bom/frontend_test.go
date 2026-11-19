@@ -263,3 +263,38 @@ func TestFrontendWithRealNPM(t *testing.T) {
 		t.Fatalf("want a finding from npm ls itself:\n%s", joined(ds))
 	}
 }
+
+func TestFrontendExceptionsWithRealNPM(t *testing.T) {
+	if _, err := exec.LookPath("npm"); err != nil {
+		t.Skip("npm is not installed")
+	}
+	for _, mixed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "accepted", true: "unaccepted-edge"}[mixed], func(t *testing.T) {
+			lock := cleanLock()
+			if mixed {
+				lock[nm(kchat)] = pk{"version": "0.8.0", "dependencies": map[string]string{dtok: "^0.6.0"}}
+			}
+			ds, accepted, err := CheckFrontend(kitBOM(), FrontendOptions{Dir: writeFE(t, cleanDeps(), lock)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(accepted) != 2 {
+				t.Fatalf("accepted = %v, want both documented exceptions", accepted)
+			}
+			if !mixed && len(ds) != 0 {
+				t.Fatalf("accepted exceptions rejected with real npm: %s", joined(ds))
+			}
+			if mixed {
+				var npmFinding bool
+				for _, d := range ds {
+					if d.File == "npm ls" && strings.Contains(d.Msg, kchat) {
+						npmFinding = true
+					}
+				}
+				if !npmFinding {
+					t.Fatalf("unaccepted npm edge was hidden: %s", joined(ds))
+				}
+			}
+		})
+	}
+}

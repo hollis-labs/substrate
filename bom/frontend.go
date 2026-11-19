@@ -277,7 +277,6 @@ type lsNode struct {
 	Invalid      any               `json:"invalid"`
 	Missing      bool              `json:"missing"`
 	Extraneous   bool              `json:"extraneous"`
-	Problems     []string          `json:"problems"`
 	Dependencies map[string]lsNode `json:"dependencies"`
 }
 
@@ -307,14 +306,6 @@ func npmLsProblems(dir string, b *BOM) ([]string, error) {
 	}
 	var probs []string
 	seen := map[string]bool{}
-	pinned := func(s string) bool {
-		for n := range b.Kits {
-			if strings.Contains(s, n) {
-				return true
-			}
-		}
-		return false
-	}
 	var walk func(trail, parent string, n lsNode)
 	walk = func(trail, parent string, n lsNode) {
 		names := make([]string, 0, len(n.Dependencies))
@@ -344,15 +335,11 @@ func npmLsProblems(dir string, b *BOM) ([]string, error) {
 		}
 	}
 	walk("", "", root)
-	for _, pr := range root.Problems {
-		if pinned(pr) {
-			s := "npm ls: " + pr
-			if !seen[s] {
-				seen[s] = true
-				probs = append(probs, s)
-			}
-		}
-	}
+	// npm's root problems summarize the same flagged dependency nodes but omit
+	// the requesting edge. Re-adding them here would reject kit_exceptions that
+	// the edge-aware walk accepted (and a broad package-name filter would hide
+	// unrelated, unaccepted edges to the same dependency).
+
 	sort.Strings(probs)
 	return probs, nil
 }
