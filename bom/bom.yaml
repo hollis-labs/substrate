@@ -18,6 +18,7 @@ ci:                       # mirrored to Folio platform-pins.yaml
   postgres_image: "postgres:17"   # ci.yml database service; not mirrored to Folio
 libs:
   github.com/hollis-labs/libs/app/app-host: v0.1.0
+  github.com/hollis-labs/libs/core/panics: v0.1.0   # httphost.Harden panic recovery (httpguard); apps use it too (Conduit)
   github.com/hollis-labs/libs/core/store: v0.1.0
   github.com/hollis-labs/libs/core/util: v0.11.1  # queue, scheduler, router, classify, decide and embed packages
   github.com/hollis-labs/libs/mcp/plugin-mcp: v0.6.0   # apps are on v0.3-v0.6; v0.6.0 is the train
@@ -39,7 +40,6 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/mesh/eventbus: v0.2.0  # event export and hub relay (Cerberus port)
   github.com/hollis-labs/libs/security/pairing: v0.0.0-20261018164511-e8bfb38b4f31   # device grants and renewable device tokens (Basalisk companion); untagged in libs
   github.com/hollis-labs/libs/llm/core: v0.4.0        # cost, quota, pricing and usage-ledger types (Station llm-gateway)
-  github.com/hollis-labs/libs/core/panics: v0.1.0     # recovered-panic refs and the HTTP recovery guard (Conduit)
 third_party:
   github.com/cyberphone/json-canonicalization: v0.0.0-20261011152517-32a48195b9b2 # RFC 8785 tool definition hashes
   github.com/google/jsonschema-go: v0.4.3 # shared kind validation; already used by the MCP SDK

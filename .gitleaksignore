@@ -1,0 +1,3 @@
+# Historical synthetic panic-redaction fixture, not an issued credential.
+# Exact commit/file/rule/line only; current tree retains full scanning.
+a2c1295fa03d462d508e9d2199f1edc5b4962154:modules/httphost/harden_test.go:generic-api-key:137

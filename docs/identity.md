@@ -168,4 +168,4 @@ printf '%s\n' "$OWNER_PASSWORD" | <app> identity setup --username owner --displa
 
 ## Config
 
-See the package comment for the full list: `key_file`, `allow_new_signing_key` (default false), `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `setup` (`offline`; `http` for development), `trusted_proxy`, `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).
+See the package comment for the full list: `key_file`, `allow_new_signing_key` (default false), `issuer`, `audience`, `session_ttl` (720h), `token_ttl` (15m), `min_password` (12), `bcrypt_cost` (12), `secure_cookies` (`auto`), `setup` (`offline`; `http` for development), `trusted_proxy` (a local TLS proxy: one `X-Forwarded-Proto: https` from a loopback peer, package `forwarded`; a remote proxy needs `secure_cookies: always`), `allowed_origins`, `retired_key_ttl` (`70m`, also the minimum; a lower value refuses to start).

@@ -24,6 +24,11 @@
 // answer in the flat shape, so a client sees the upstream dialect for upstream errors and the
 // framework shape for framework refusals. Do not use it for an app's own API.
 //
+// # Hardening
+//
+// Harden adds a Host check, an Origin check on writes, a body limit, panic recovery and a
+// credential-free access log, to Handler's result or to an app's own handler. It is opt-in:
+// Handler applies it when Options.Harden is set or a hardening key is configured under httphost:.
 // # Unknown paths and wrong methods
 //
 // A request that no route or mount matches falls to the SPA at "/" (the placeholder page when
@@ -93,6 +98,10 @@ type Options struct {
 	// equal to a mount's path makes that mount raw. Refused otherwise, naming the prefix.
 	// The guard and the framework's own refusals stay flat.
 	RawPrefixes []string
+	// Harden, when set, wraps the handler in Harden with these options. Handler also applies
+	// Harden (with zero options) when a hardening key is configured under httphost:. Nil and no
+	// key (the default) leaves the handler as before.
+	Harden *HardenOptions
 	// NotFound, when set, replaces the SPA (and config httphost.fallback): it answers, raw and unguarded, every request outside
 	// /api/ that no route or mount matches, and a wrong method on a method-specific path (with
 	// the Allow header already set; answer 405 when it is present). For an app with no UI whose
@@ -235,6 +244,14 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		outer.Handle("/api/", h.Handler())
 	}
 	outer.Handle("/", rest)
+	if o.Harden != nil {
+		return Harden(app, outer, *o.Harden)
+	}
+	if hardenConfigured(app) {
+		// Turned on by config alone: only what is configured runs (no panic guard, no default
+		// body limit), so turning on one key (the access log) changes no other request.
+		return harden(app, outer, HardenOptions{}, false)
+	}
 	return outer, nil
 }
 
