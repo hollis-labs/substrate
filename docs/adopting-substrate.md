@@ -212,12 +212,41 @@ root.AddCommand(serveCmd(run.App))      // serve is the default command
    --out FILE` for each machine caller), then start the service, and check `GET /api/setup` answers
    `setup_required: false`. Script all of it; the commands never prompt when stdin is not a terminal. To keep the old
    HTTP first-run for local development only, set `identity: {setup: http}`.
+
+   **Modules the offline commands need.** `<app> identity setup` and `<app> identity key create` run inside the app's
+   own boot, so the command that runs them must start: `config`, `logging`, `health`, `auth`, `database`, `identity`
+   and `cli`, plus `secrets` when the app's boot hooks place its directory (a `boot.Options.Before["secrets"]` hook
+   on a list without `secrets` is a boot error). Of these, `auth`, `database`, `identity` and `cli` are required by the
+   commands themselves (drop `auth` or `database` and the boot fails; drop `identity` and the command does not exist;
+   drop `cli` and there is no root to run it from). `config` is required for agreement with the server: it applies the
+   `SUBSTRATE_CONFIG` override, so without it the command writes the manifest's database path while the server reads the
+   override's. `logging` and `health` are in the list because they are part of the app's normal boot, not because the
+   commands call them. No `httphost`, `mcp`, `queue` or other server module is needed. `TestOfflineCommandsStartOnlyTheDocumentedModules`
+   (`modules/identity/modulelist_test.go`) starts exactly this list and fails when a required module is dropped; if you
+   change the list, change the test and this paragraph together.
+
+   These two commands **create** the data directory contents, the database file and the signing key (starting the
+   identity module writes the key when it is absent), and `key create --out` writes a key file. They therefore belong
+   with the commands that are allowed to write (the migrate and bootstrap steps), not with read-only ones such as
+   `health`, `version`, an MCP stdio process or a status command. A read-only entry point must not select the commands'
+   module list with a data path it may not create.
 2. Wrap the final handler: `identity.From(app).Middleware(handler)`. Browser writes then need an `X-Requested-With`
    header and a same-origin `Origin`.
 3. Declare each route's scope. Either list routes in a module-style `ui.json` and bind handlers with
    `module.AddRoutes`, or register them on the auth module's `ScopeTable` (`auth.ScopeTable(app).Route(method,
-   pattern, scope)`). A route without a scope is refused in `enforce`. Name scopes `<app>.<verb>`; use `authenticated`
-   for any verified caller and `public` for the few routes that must be reachable without credentials. Add a test that
+   pattern, scope)`). A route without a scope is refused in `enforce`. Name scopes `<app>.<verb>`. "Any verified caller"
+   and "no authentication" are spelled differently depending on how the route is declared:
+
+   | Declared | Any verified caller | No authentication |
+   |---|---|---|
+   | `ui.json` + `module.AddRoutes` | `"scope": "authenticated"` | `"scope": "public"` |
+   | directly: `auth.ScopeTable(app).Route(method, pattern, scope)` | the **empty string** `""` | not available here; use an `httphost.Mount` with `Open: true` (item 4) |
+
+   `authenticated` and `public` are `ui.json` words that `module.AddRoutes` translates (to `""` and to an open route).
+   On a direct `ScopeTable.Route` call libs `security/auth` treats every non-empty string as a real scope name, so
+   `Route("GET", "/api/x", "authenticated")` requires a scope literally called `authenticated`: a principal holding `authenticated` or `*` passes, and an API key with `app.read,app.write` gets 403 `required scope: authenticated` (Caster hit
+   this in a real binary). Pass `""` for authentication only. `TestAuthenticatedIsALiteralScopeOnADirectRoute`
+   (`modules/auth`) pins both spellings. Add a test that
    every registered route has a scope (and break one on purpose to see it fail).
 4. Routes that authenticate their own callers (a native device protocol, a webhook, an A2A endpoint) are
    `httphost.Mount`s with `Open: true`. Their handlers must verify the credential themselves; say so in the code.
@@ -321,6 +350,18 @@ must not call such a path expecting the flat shape.
 - Pins are edited only in `bom/bom.yaml` in Substrate. `go run github.com/hollis-labs/substrate/cmd/substrate pins
   check --app .` must pass in the app; `pins sync` rewrites `go.mod` and the CI workflow. A lib the BOM does not
   list is a one-line Substrate PR, not a local `go.mod` exception.
+- Frontend: `go run github.com/hollis-labs/substrate/cmd/substrate pins check --app . --frontend` (add
+  `--frontend-dir DIR` if it is not `frontend`) also reads `package.json` and the committed `package-lock.json` and fails
+  when (1) a pinned `@hollis-labs` kit in `package.json` or at the lockfile's top level is not the BOM's exact version;
+  (2) any package in the tree asks for a pinned kit in a range the copy node would resolve does not meet, or cannot find it
+  (what `npm ls` calls invalid and missing); (3) a pinned kit is installed a second time, nested, at another version (every
+  path is listed, for example a stale `kit-code/node_modules/@hollis-labs/design-tokens` 0.4.0 left by an old lockfile; the
+  top-level check alone passes that); and (4) `npm ls --all --package-lock-only` reports a problem for a pinned kit. Steps
+  1 to 3 are pure Go and need no network and no `node_modules`; step 4 needs `npm` on `PATH` and fails when it is not
+  there (use `--no-npm-ls` to skip it on a machine without node; CI should not). The BOM's `kit_exceptions` (today
+  kit-settings' nested design-tokens and design-components 0.4) are honoured and printed as `accepted:`. Fix a finding by
+  moving `package.json` to the BOM versions and regenerating the lockfile (`rm package-lock.json && npm install`, not a
+  partial update), then run it again. Add it to the app's CI beside the Go pins check.
 - CI: `go vet`, the pins check, `go test -race`, `golangci-lint`, the frontend typecheck/lint/build (built before
   `go test` so the embed has assets) and `go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD`.
   Copy the workflow from a ported app.
