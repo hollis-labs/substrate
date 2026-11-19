@@ -417,3 +417,51 @@ func TestAccessLogAloneChangesNoRequest(t *testing.T) {
 		serveH(h, hreq("GET", "/boom", "", nil))
 	}()
 }
+
+// Hardening wraps the current fallback/method dispatcher, including raw NotFound handlers.
+// Neither opting in nor leaving it off may restore the old unconditional SPA fallback.
+func TestHardenPreservesNotFoundAndMethodDispatch(t *testing.T) {
+	for _, harden := range []bool{false, true} {
+		t.Run(map[bool]string{false: "default", true: "hardened"}[harden], func(t *testing.T) {
+			run, err := boot.Start(context.Background(), "t", []string{"health", "httphost"}, `{}`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { _ = run.Stop(context.Background()) })
+			o := httphost.Options{
+				NotFound: httphost.NotFoundFlat,
+				Mounts:   []httphost.Mount{{Pattern: "POST /submit", Open: true, Handler: ok("submitted")}},
+			}
+			if harden {
+				o.Harden = &httphost.HardenOptions{CheckHost: true, CheckOrigin: true}
+			}
+			h, err := httphost.Handler(run.App, o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range []struct {
+				method, path, origin, code string
+				status                     int
+			}{
+				{"GET", "/missing", "", "not_found", 404},
+				{"GET", "/submit", "", "method_not_allowed", 405},
+				{"POST", "/submit", "http://localhost", "", 200},
+			} {
+				r := hreq(c.method, c.path, "localhost", nil)
+				r.Header.Set("Origin", c.origin)
+				w := serveH(h, r)
+				if w.Code != c.status {
+					t.Fatalf("%s %s: %d %s", c.method, c.path, w.Code, w.Body.String())
+				}
+				if c.code != "" {
+					if code, _ := flat(t, w); code != c.code {
+						t.Errorf("%s %s: code %q, want %q", c.method, c.path, code, c.code)
+					}
+				}
+				if c.status == 405 && w.Header().Get("Allow") != "POST" {
+					t.Errorf("Allow = %q, want POST", w.Header().Get("Allow"))
+				}
+			}
+		})
+	}
+}
