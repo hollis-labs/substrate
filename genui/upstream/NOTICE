@@ -1,0 +1,10 @@
+These unmodified JSON Schema files originate from the A2UI project:
+https://github.com/a2ui-project/a2ui
+Revision and original blob/digest provenance are in ../upstream.lock.json.
+
+A2UI is licensed under the Apache License, Version 2.0. The applicable
+Apache-2.0 terms are reproduced in LICENSE-APACHE-2.0. Unrelated upstream
+evaluation tooling is not distributed here.
+
+The surrounding GenUI profile is independently maintained by Hollis Labs.
+It implements a restricted catalog and does not claim full A2UI renderer support.

@@ -21,18 +21,38 @@ type Check func(context.Context) error
 type Registry struct {
 	mu     sync.RWMutex
 	checks map[string]Check
+	soft   map[string]bool
 }
 
+// Add registers a check. A failing check makes the report "degraded" and the
+// handler answer 503.
 func (r *Registry) Add(name string, c Check) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.checks[name] = c
+	delete(r.soft, name)
+}
+
+// AddSoft registers a check for something the app can run without (an optional
+// data store that may be down). A failing soft check makes the report
+// "degraded", and its message says why, but the handler still answers 200: the
+// process is serving, and a 503 would make a deploy health gate or a
+// supervisor treat the app as dead and roll it back or restart it.
+func (r *Registry) AddSoft(name string, c Check) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.checks[name] = c
+	if r.soft == nil {
+		r.soft = map[string]bool{}
+	}
+	r.soft[name] = true
 }
 
 // Report is the health convention: status "ok" or "degraded", one entry per check.
 type Report struct {
 	Status string            `json:"status"`
 	Checks map[string]string `json:"checks"`
+	hard   bool              // a non-soft check failed
 }
 
 // Report runs every check and returns the result.
@@ -51,6 +71,12 @@ func (r *Registry) Report(ctx context.Context) Report {
 		r.mu.RUnlock()
 		if err := c(ctx); err != nil {
 			rep.Checks[n], rep.Status = err.Error(), "degraded"
+			r.mu.RLock()
+			soft := r.soft[n]
+			r.mu.RUnlock()
+			if !soft {
+				rep.hard = true
+			}
 		} else {
 			rep.Checks[n] = "ok"
 		}
@@ -58,12 +84,13 @@ func (r *Registry) Report(ctx context.Context) Report {
 	return rep
 }
 
-// Handler serves the Report as JSON; 503 when degraded.
+// Handler serves the Report as JSON: 503 when a check failed, except that a
+// report degraded only by soft checks is served with 200.
 func (r *Registry) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		rep := r.Report(req.Context())
 		code := http.StatusOK
-		if rep.Status != "ok" {
+		if rep.hard {
 			code = http.StatusServiceUnavailable
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -79,7 +106,7 @@ type mod struct{}
 func (mod) Name() string { return "health" }
 
 func (mod) Start(_ context.Context, app *module.App) error {
-	app.Set(Key, &Registry{checks: map[string]Check{}})
+	app.Set(Key, &Registry{checks: map[string]Check{}, soft: map[string]bool{}})
 	return nil
 }
 

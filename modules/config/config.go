@@ -22,9 +22,17 @@
 // file (int, int8..int64, uint..uint64) to float64 as it merges, at any depth,
 // inside nested maps and lists. A module therefore reads a number one way,
 // `.(float64)`, whichever source set it. A non-integer float stays as it is.
-// An integer whose magnitude is above 2^53 does not fit float64 exactly and is
-// refused with an error naming the key, never rounded. Booleans and strings are
-// untouched.
+// An integer that yaml.v3 decodes as int or uint64 and whose magnitude is above
+// 2^53 does not fit float64 exactly and is refused with an error naming the key.
+// The limit of that check is 64 bits: an integer literal that does not fit
+// uint64 or int64 (18446744073709551616, -9223372036854775809, 1e23) is decoded
+// by yaml.v3 as a float64 already, cannot be told apart from a float written
+// with a decimal point, and so passes through as that rounded float64; it is
+// not refused. Booleans and strings are untouched.
+//
+// A nested map with a non-string key (`{1: a}`, which yaml.v3 decodes as
+// map[any]any) is refused with an error naming the key path, since config maps
+// are keyed by string everywhere else.
 //
 // Before this module deep-merged, the merge was one level deep and a nested
 // block in the override replaced the whole manifest block.
@@ -145,6 +153,11 @@ func normalize(v any, path string) (any, error) {
 			out[i] = n
 		}
 		return out, nil
+	case map[any]any:
+		for k := range x {
+			return nil, fmt.Errorf("config %q: key %v (%T) is not a string; config keys must be strings", path, k, k)
+		}
+		return map[string]any{}, nil
 	case int:
 		return exact(int64(x), path)
 	case int8:

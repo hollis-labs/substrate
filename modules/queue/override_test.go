@@ -37,13 +37,16 @@ func startOverride(t *testing.T, yamlBlock string) *boot.Running {
 	return run
 }
 
-// poll_ms: 20 takes effect: a job pushed after the start runs well inside the
-// 3s default poll.
+// poll_ms: 20 takes effect: a job pushed after the worker has found the queue
+// empty runs well inside the 3s default poll.
 func TestPollMsFromAnOverrideFileTakesEffect(t *testing.T) {
 	var ran atomic.Bool
 	queue.Reset()
 	queue.Handle("j", func(context.Context, *libqueue.QueuedJob) error { ran.Store(true); return nil })
 	run := startOverride(t, "  poll_ms: 20\n")
+	// Let the worker poll the empty queue and go to sleep first, so the job
+	// below is found only by a later poll: after one poll interval, not at once.
+	time.Sleep(300 * time.Millisecond)
 	if err := queue.Push(context.Background(), run.App, "j", []byte(`1`)); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +82,6 @@ func TestConcurrencyFromAnOverrideFileTakesEffect(t *testing.T) {
 	var inFlight, peak atomic.Int32
 	release := make(chan struct{})
 	var once sync.Once
-	t.Cleanup(func() { once.Do(func() { close(release) }) })
 	queue.Reset()
 	queue.Handle("slow", func(context.Context, *libqueue.QueuedJob) error {
 		n := inFlight.Add(1)
@@ -94,6 +96,10 @@ func TestConcurrencyFromAnOverrideFileTakesEffect(t *testing.T) {
 		return nil
 	})
 	run := startOverride(t, "  poll_ms: 10\n  concurrency: 2\n")
+	// Registered after startOverride, so it runs first (cleanups run in reverse)
+	// and unblocks the handlers before run.Stop waits for them: a failed
+	// assertion fails fast instead of hanging.
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
 	for i := 0; i < 2; i++ {
 		if err := queue.Push(context.Background(), run.App, "slow", []byte(`1`)); err != nil {
 			t.Fatal(err)

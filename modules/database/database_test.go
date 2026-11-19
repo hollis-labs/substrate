@@ -84,16 +84,10 @@ func TestConfigErrorsFailStartWithoutLeakingSecrets(t *testing.T) {
 // SUBSTRATE_TEST_POSTGRES_DSN to run it locally, or SUBSTRATE_E2E_OFFLINE=1 to
 // skip it on purpose.
 func TestPostgresMigratesAndReportsHealth(t *testing.T) {
-	dsn := os.Getenv("SUBSTRATE_TEST_POSTGRES_DSN")
-	if dsn == "" {
-		if os.Getenv("SUBSTRATE_REQUIRE_POSTGRES") == "1" {
-			t.Fatal("SUBSTRATE_REQUIRE_POSTGRES=1 but SUBSTRATE_TEST_POSTGRES_DSN is not set")
-		}
-		if os.Getenv("SUBSTRATE_E2E_OFFLINE") == "1" {
-			t.Skip("SUBSTRATE_E2E_OFFLINE=1")
-		}
-		t.Skip("SUBSTRATE_TEST_POSTGRES_DSN is not set; the Postgres path is covered in CI")
+	if os.Getenv("SUBSTRATE_TEST_POSTGRES_DSN") == "" && os.Getenv("SUBSTRATE_E2E_OFFLINE") == "1" {
+		t.Skip("SUBSTRATE_E2E_OFFLINE=1")
 	}
+	dsn := pgDSN(t) // skips without a server; clears the tables before and after
 	useMigrations(t)
 	t.Setenv("T_PG_DSN", dsn)
 	ctx := context.Background()
@@ -104,10 +98,6 @@ func TestPostgresMigratesAndReportsHealth(t *testing.T) {
 	}
 	defer func() { _ = run.Stop(ctx) }()
 	st := database.From(run.App)
-	t.Cleanup(func() {
-		_, _ = st.ExecContext(ctx, `DROP TABLE IF EXISTS notes`)
-		_, _ = st.ExecContext(ctx, `DROP TABLE IF EXISTS goose_db_version`)
-	})
 	if _, err := st.ExecContext(ctx, `INSERT INTO notes (body) VALUES ('hi')`); err != nil {
 		t.Fatalf("migration did not create notes on postgres: %v", err)
 	}
