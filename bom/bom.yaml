@@ -32,6 +32,7 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/agent/host: v0.1.0   # embedded agent host (Folio app-ade preset, chess tutor)
   github.com/hollis-labs/libs/agent/agentdir: v0.1.0   # shared agent directory format and loader
   github.com/hollis-labs/libs/agent/chat: v0.1.0   # conversation wire: handler, runner port, conformance suite (Surface chat, Nanite chatrunner)
+  github.com/hollis-labs/libs/agent/trace: v0.1.0   # per-turn trace record and run evidence recorder (Nanite traces, evals)
   github.com/hollis-labs/libs/agent/sdk: v0.0.0-20261115211534-c76ea978573d   # merged Tradecraft SDK foundation
   github.com/hollis-labs/libs/workflow/engine: v0.2.0
   github.com/hollis-labs/libs/harness/core: v0.17.1-0.20261115212742-8f2ed31176b0   # merged operation-bound provider approvals
