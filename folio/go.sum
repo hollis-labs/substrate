@@ -51,8 +51,8 @@ github.com/google/jsonschema-go v0.4.3 h1:/DBOLZTfDow7pe2GmaJNhltueGTtDKICi8V8p+
 github.com/google/jsonschema-go v0.4.3/go.mod h1:r5quNTdLOYEz95Ru18zA0ydNbBuYoo9tgaYcxEYhJVE=
 github.com/hollis-labs/go-materialize v0.0.0-20260918203624-4190b433a343 h1:A5oItZgQNcXFwibRoOyEMfAZ59W/VLumT8Lh564Vlho=
 github.com/hollis-labs/go-materialize v0.0.0-20260918203624-4190b433a343/go.mod h1:kruujE9juXWTgF3NnDTVw48K5KdikmPCOcaJRF+7n60=
-github.com/hollis-labs/substrate v0.1.1-0.20261115173848-45b018004dd2 h1:zgHVXFi3HgXmPbBZBkk5G2sdTsmyZ9UAvYqyYSbeWag=
-github.com/hollis-labs/substrate v0.1.1-0.20261115173848-45b018004dd2/go.mod h1:nprRr/7ZnqzwwO/KSiqHPOiJssPi0mXurDkOX/J9RS4=
+github.com/hollis-labs/substrate v0.1.1-0.20261119145946-6a4bb696c942 h1:tPWdq9/ncYvIhlN7vJbDITVuEqhKmZ+/UaFilJxCXJA=
+github.com/hollis-labs/substrate v0.1.1-0.20261119145946-6a4bb696c942/go.mod h1:B6O28XyurEMy9ZdmOV/FlljGqqxrlzbHp8zpEBxpdGY=
 github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
 github.com/inconshreveable/mousetrap v1.1.0/go.mod h1:vpF70FUmC8bwa3OWnCshd2FqLfsEA9PFc4w1p2J65bw=
 github.com/lucasb-eyer/go-colorful v1.2.0 h1:1nnpGOrhyZZuNyfu1QjKiUICQ74+3FNCN69Aj6K7nkY=

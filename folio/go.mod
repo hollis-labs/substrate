@@ -5,7 +5,7 @@ go 1.26.11
 require (
 	github.com/charmbracelet/huh v1.0.0
 	github.com/hollis-labs/go-materialize v0.0.0-20260918203624-4190b433a343
-	github.com/hollis-labs/substrate v0.1.1-0.20261115173848-45b018004dd2
+	github.com/hollis-labs/substrate v0.1.1-0.20261119145946-6a4bb696c942
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.9
 	golang.org/x/mod v0.41.0

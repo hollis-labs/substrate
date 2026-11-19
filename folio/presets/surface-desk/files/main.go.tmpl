@@ -4,8 +4,13 @@
 package main
 
 import (
+	"context"
+
+	"github.com/hollis-labs/substrate/module"
+
 	"github.com/hollis-labs/surface/app"
 
+	"{{ .computed.module_path }}/internal/agentdir"
 	"{{ .computed.module_path }}/webui"
 
 	// Substrate's mechanism: config, logging, health, the database handle, the CLI, HTTP.
@@ -29,8 +34,18 @@ func main() {
 		Name:                "{{ .inputs.repo_name }}",
 		Title:               {{ quote .computed.app_title }},
 		Modules:             modules,
-		SubstrateModules:    []string{"config", "logging", "health", "database", "cli", "httphost"},
-		SubstrateConfigJSON: `{"database":{"sqlite":{"path":"surface.db"}},"httphost":{"addr":"127.0.0.1:{{ .inputs.port }}"},"logging":{"format":"text","level":"info"}}`,
+		SubstrateModules:    []string{"config", "agent-directory", "logging", "health", "database", "cli", "httphost"},
+		SubstrateConfigJSON: `{"agents":{"dir":"agents/"},"database":{"sqlite":{"path":"surface.db"}},"httphost":{"addr":"127.0.0.1:{{ .inputs.port }}"},"logging":{"format":"text","level":"info"}}`,
 		Assets:              assets,
 	})
 }
+
+// Resolve after Substrate has merged SUBSTRATE_CONFIG. This only publishes paths;
+// the app does not open agent definitions or start a Nanite runtime yet.
+func init() { module.Register(agentDirectory{}) }
+
+type agentDirectory struct{}
+
+func (agentDirectory) Name() string                                   { return "agent-directory" }
+func (agentDirectory) Start(_ context.Context, app *module.App) error { return agentdir.Resolve(app) }
+func (agentDirectory) Stop(context.Context) error                     { return nil }

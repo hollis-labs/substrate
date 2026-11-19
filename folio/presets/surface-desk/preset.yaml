@@ -22,6 +22,10 @@ composes:
     path: ../surface-ui
     vars:
       kind: desk
+  - id: agent-dir
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../agent-dir
 
 inputs:
   - name: kind

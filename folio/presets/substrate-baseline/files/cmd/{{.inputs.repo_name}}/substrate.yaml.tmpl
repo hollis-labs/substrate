@@ -8,6 +8,9 @@ profiles: [agentic]
 modules:
   add: [database, identity, cli]
 config:
+{{- if .inputs.with_ade }}
+  agents: { dir: agents/ }
+{{- end }}
   logging: { level: info, format: text }
   httphost: { addr: "127.0.0.1:{{ .inputs.http_port }}" }
   database:

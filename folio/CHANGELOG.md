@@ -8,6 +8,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- `app-ade` and `surface-desk` generate `agents.dir` and a starter
+  `agents/assistant/{agent.md,host.yaml}` via the `agent-dir` layer. Generated apps
+  resolve paths through Substrate's `agents.Resolve` after config merges, with
+  authored and runtime roots kept separate. Files are not opened until chat wiring
+  lands; no built-in tool groups or runtime Nanite dependency are added. A test-only
+  `FOLIO_NANITE` shell-out opens both directories with Nanite's offline embedding example.
+
+
 - **surface-app** and **surface-desk** presets, on the new layer `surface-ui`: an app whose interface is
   built from Surface's `@surface` registry, the way docs/gui.md in github.com/hollis-labs/surface sets out.
   One Surface release pins everything (`surface_version`, default `0.1.0`): `ui.lock.json` reads the

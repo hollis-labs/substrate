@@ -292,3 +292,37 @@ with the module working directory and dependency-cache path. An existing workflo
 is refused; other modules and authored workflows are preserved. The manifest records each workflow's
 repository destination. Inspection reads those files only when you explicitly supply the root.
 Plan output uses paths relative to that root. This is new-project generation; `folio sync` does not sync repository workflows.
+
+## Starter agent directory
+
+`app-ade` and `surface-desk` generate `agents.dir: agents/` in app config and
+`agents/assistant/agent.md` (agentdef v2, durable continuity) and `host.yaml`
+(embedded, application lifetime, the app's name). `folio sync` never writes `agents/**`.
+No Nanite built-in tool group is enabled. `app-chat`, `surface-app` and the other
+presets generate neither the directory nor the config key.
+
+The generated app uses Substrate's `agents.Resolve` after operator config merges,
+publishing `agent-directory.layout` on the Substrate app. Relative `agents.dir`
+paths are beside `SUBSTRATE_CONFIG` when set; with embedded config, they are beside
+`substrate.yaml` in the working directory, so a generated checkout uses `./agents/`.
+For an installed app, set an absolute path or install the directory beside the
+operator config. Runtime paths resolve separately under
+`$XDG_STATE_HOME/<app>/agents/<name>` (default `~/.local/state/<app>/agents/<name>`).
+Resolution creates no files and opens no agents.
+
+**Nothing in the app opens these files yet.** They become live when chat wiring
+lands; app-ade continues to use libs/agent/host and surface-desk uses Surface's Engine.
+The Substrate helper requires `v0.1.1-0.20261119145946-6a4bb696c942` or newer;
+surface-desk pins it directly, and app-ade's explicit `substrate_version` input must
+include the helper.
+
+The loader proof is test-only and shells out to Nanite's offline embedding example,
+which calls `agent.Open` with a scripted provider on a copy of each generated directory:
+
+```sh
+GOBIN=/tmp/folio-nanite go install github.com/hollis-labs/nanite/examples/embed-host@3f3eaed
+FOLIO_NANITE=/tmp/folio-nanite/embed-host go test -run TestAgentDir -v .
+```
+
+When `FOLIO_NANITE` is unset the loader check logs a skip; render and resolver tests
+still run. Folio's generator module has no runtime Nanite dependency.

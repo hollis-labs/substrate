@@ -1,0 +1,36 @@
+// Package agentdir resolves the host-owned agent paths without opening agents or creating state.
+package agentdir
+
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/hollis-labs/substrate/agents"
+	"github.com/hollis-labs/substrate/module"
+)
+
+// Resolve publishes an agents.Layout as agent-directory.layout after config merging.
+// An explicit operator file anchors relative agents.dir paths. With embedded config,
+// substrate.yaml in the working directory is the anchor, so a generated checkout uses ./agents/.
+// Runtime state is separate: $XDG_STATE_HOME/{{ .inputs.repo_name }} (default ~/.local/state).
+// Neither root needs to exist, and this function creates nothing.
+func Resolve(app *module.App) error {
+	configFile := os.Getenv("SUBSTRATE_CONFIG")
+	if configFile == "" {
+		configFile = "substrate.yaml"
+	}
+	state := os.Getenv("XDG_STATE_HOME")
+	if state == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		state = filepath.Join(home, ".local", "state")
+	}
+	layout, err := agents.Resolve(app.Config, configFile, filepath.Join(state, "{{ .inputs.repo_name }}"))
+	if err != nil {
+		return err
+	}
+	app.Set("agent-directory.layout", layout)
+	return nil
+}

@@ -79,3 +79,26 @@ registry, because the Components window draws every item. Any other component: `
 the lint rule, CI and the instructions. `TestSurfacePresets_Acceptance` installs and builds rendered apps
 against the published release and checks that a raw `<button>` fails lint and an edited component fails
 verify. It needs npm and the network: `FOLIO_SURFACE_ACCEPTANCE=1` (plain app) or `=all` (and the desk app).
+
+## Starter agent directory
+
+`app-ade` and `surface-desk` generate `agents.dir: agents/` in app config and
+`agents/assistant/agent.md` (agentdef v2, durable continuity) and `host.yaml`
+(embedded, application lifetime, the app's name). `folio sync` never writes `agents/**`.
+No Nanite built-in tool group is enabled. `app-chat`, `surface-app` and the other
+presets generate neither the directory nor the config key.
+
+The generated app uses Substrate's `agents.Resolve` after operator config merges,
+publishing `agent-directory.layout` on the Substrate app. Relative `agents.dir`
+paths are beside `SUBSTRATE_CONFIG` when set; with embedded config, they are beside
+`substrate.yaml` in the working directory, so a generated checkout uses `./agents/`.
+For an installed app, set an absolute path or install the directory beside the
+operator config. Runtime paths resolve separately under
+`$XDG_STATE_HOME/<app>/agents/<name>` (default `~/.local/state/<app>/agents/<name>`).
+Resolution creates no files and opens no agents.
+
+**Nothing in the app opens these files yet.** They become live when chat wiring
+lands; app-ade continues to use libs/agent/host and surface-desk uses Surface's Engine.
+The Substrate helper requires `v0.1.1-0.20261119145946-6a4bb696c942` or newer;
+surface-desk pins it directly, and app-ade's explicit `substrate_version` input must
+include the helper.
