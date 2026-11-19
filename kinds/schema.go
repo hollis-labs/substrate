@@ -22,6 +22,11 @@ const (
 	DocumentSchema       = "document/1"
 	WorkstreamSchema     = "workstream/1"
 	CorrelationSchema    = "correlation/1"
+	ServiceSchema        = "service/1"
+	ConfigSchema         = "config/1"
+	KnowledgeSchema      = "knowledge/1"
+	MCPServerSchema      = "mcp_server/1"
+	LaunchProfileSchema  = "launch_profile/1"
 )
 
 var ErrUnknownSchema = errors.New("unknown kind schema")
@@ -46,12 +51,17 @@ func ValidateJSONValue(data []byte) error {
 var schemas embed.FS
 
 var schemaFiles = map[string]string{
-	AgentSchema:       "schemas/agent-1.json",
-	AgencySchema:      "schemas/agency-1.json",
-	SkillSchema:       "schemas/skill-1.json",
-	DocumentSchema:    "schemas/document-1.json",
-	WorkstreamSchema:  "schemas/workstream-1.json",
-	CorrelationSchema: "schemas/correlation-1.json",
+	ServiceSchema:       "schemas/service-1.json",
+	ConfigSchema:        "schemas/config-1.json",
+	KnowledgeSchema:     "schemas/knowledge-1.json",
+	MCPServerSchema:     "schemas/mcp-server-1.json",
+	LaunchProfileSchema: "schemas/launch-profile-1.json",
+	AgentSchema:         "schemas/agent-1.json",
+	AgencySchema:        "schemas/agency-1.json",
+	SkillSchema:         "schemas/skill-1.json",
+	DocumentSchema:      "schemas/document-1.json",
+	WorkstreamSchema:    "schemas/workstream-1.json",
+	CorrelationSchema:   "schemas/correlation-1.json",
 
 	ProjectSchema:        "schemas/project-1.json",
 	ToolSchema:           "schemas/tool-1.json",
@@ -61,7 +71,7 @@ var schemaFiles = map[string]string{
 
 // Schemas returns the supported versions in deterministic order.
 func Schemas() []string {
-	return []string{ProjectSchema, ToolSchema, RelationSchema, ClassificationSchema, AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema}
+	return []string{ProjectSchema, ToolSchema, RelationSchema, ClassificationSchema, AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema, ServiceSchema, ConfigSchema, KnowledgeSchema, MCPServerSchema, LaunchProfileSchema}
 }
 
 // Schema returns an independent copy of the JSON Schema document.
@@ -80,6 +90,7 @@ type compiledSchema struct {
 }
 
 var compiled = map[string]*compiledSchema{
+	ServiceSchema: {}, ConfigSchema: {}, KnowledgeSchema: {}, MCPServerSchema: {}, LaunchProfileSchema: {},
 	ProjectSchema: {}, ToolSchema: {}, RelationSchema: {}, ClassificationSchema: {},
 	AgentSchema:       {},
 	AgencySchema:      {},
@@ -97,6 +108,11 @@ func ValidateJSON(version string, data []byte) error {
 	entry, ok := compiled[version]
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrUnknownSchema, version)
+	}
+	if isRegistryKind(version) {
+		if err := ValidateNoSecretsJSON(data); err != nil {
+			return err
+		}
 	}
 	canonical, err := canonicalJSON(data)
 	if err != nil {
@@ -133,7 +149,7 @@ func ValidateJSON(version string, data []byte) error {
 		return t.validateIdentity()
 	}
 	switch version {
-	case AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema:
+	case AgentSchema, AgencySchema, SkillSchema, DocumentSchema, WorkstreamSchema, CorrelationSchema, ServiceSchema, ConfigSchema, KnowledgeSchema, MCPServerSchema, LaunchProfileSchema:
 		return validateContent(data, version)
 	}
 	return nil

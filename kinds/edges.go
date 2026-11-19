@@ -5,6 +5,8 @@ import "fmt"
 type EdgeType string
 
 const (
+	DeployedAs     EdgeType = "deployed_as"
+	Configures     EdgeType = "configures"
 	OwnedBy        EdgeType = "owned_by"
 	OperatedBy     EdgeType = "operated_by"
 	ResponsibleFor EdgeType = "responsible_for"
@@ -33,6 +35,8 @@ type EdgeSpec struct {
 
 func EdgeSpecs() []EdgeSpec {
 	return []EdgeSpec{
+		{DeployedAs, "", []string{"project"}, []string{"service"}},
+		{Configures, "", []string{"config"}, []string{"project", "service", "agent", "agency"}},
 		{OwnedBy, "owns", nil, nil}, {OperatedBy, "operates", nil, nil},
 		{ResponsibleFor, "has_responsible", nil, nil}, {AnswersTo, "oversees", nil, nil},
 		{Consumes, "consumed_by", nil, nil}, {PartOf, "contains", nil, nil},

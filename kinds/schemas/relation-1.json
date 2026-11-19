@@ -21,7 +21,9 @@
         "related_doc",
         "alternative_for",
         "precedes",
-        "conflicts_with"
+        "conflicts_with",
+        "deployed_as",
+        "configures"
       ]
     },
     "from": {
@@ -419,6 +421,77 @@
         "properties": {
           "status": {
             "const": "proposed"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "deployed_as"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "project"
+                ]
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "service"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "configures"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "from": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "config"
+                ]
+              }
+            }
+          },
+          "to": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "project",
+                  "service",
+                  "agent",
+                  "agency"
+                ]
+              }
+            }
           }
         }
       }
