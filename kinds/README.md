@@ -223,3 +223,26 @@ Endpoint-kind constraints still apply. The service detects paths and enforces
 this against its complete transaction-local graph, including same-batch edges;
 validating an individual relation alone does not certify graph acyclicity.
 This policy does not imply transitive closure or operational permission.
+
+`SemanticReferences(schema, payload)` strictly admits one of the five new
+kinds and returns sorted, exact-deduplicated `SemanticReference` values
+(`Relation`, `Reference`). Services project these as authored outgoing edges:
+service project → `part_of`; service config → `consumes`; config target →
+`configures`; MCP server tools/config → `consumes`. Knowledge and launch
+profiles return an explicit empty slice. Source/upstream/provenance, generic
+descriptive references, secret locators and opaque owner/operator text do not
+produce semantic dependencies. Target resolution, immutable publication pins,
+canonical graph IDs and removal of stale projected edges remain transactional
+service responsibilities. Native external IDs are never implicitly local IDs.
+
+Secret admission recognizes schema-valued slots only at the known kind's
+structural positions: config `settings_schema`, tool `definition.input_schema`
+and `definition.output_schema`, and skill `input_schema`/`output_schema`.
+The same slots are recognized under a Registry Input envelope's `payload`
+using its top-level `schema`. JSON Schema property/definition names declare
+fields rather than contain values; literal `default`, `const`, `enum` and
+`examples` remain instance data and are screened, including sensitive named
+properties through schema combinators. Decoded schema documentation strings
+are screened too. A similarly named field under metadata or instance settings
+does not gain a schema exemption. This checks credentials without resolving
+schemas or applying their defaults.

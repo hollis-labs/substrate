@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/hollis-labs/libs/security/redact"
 )
@@ -30,6 +31,36 @@ func ValidateNoSecretsJSON(data []byte) error {
 }
 
 func refuseSecrets(value any) error {
+	slots := map[string]bool{}
+	if root, ok := value.(map[string]any); ok {
+		schema, _ := root["schema"].(string)
+		prefix := ""
+		if _, envelope := root["payload"]; envelope {
+			prefix = "/payload"
+		}
+		switch schema {
+		case ConfigSchema:
+			slots[prefix+"/settings_schema"] = true
+		case ToolSchema:
+			slots[prefix+"/definition/input_schema"] = true
+			slots[prefix+"/definition/output_schema"] = true
+		case SkillSchema:
+			slots[prefix+"/input_schema"] = true
+			slots[prefix+"/output_schema"] = true
+		}
+	}
+	return refuseInstance(value, "", slots)
+}
+
+func pointerKey(key string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(key, "~", "~0"), "/", "~1")
+}
+
+func refuseInstance(value any, path string, schemaSlots map[string]bool) error {
+	if schemaSlots[path] {
+		return refuseSchema(value, false)
+	}
+
 	switch v := value.(type) {
 	case string:
 		if len(redact.Default().Scan(v)) > 0 {
@@ -37,7 +68,7 @@ func refuseSecrets(value any) error {
 		}
 	case []any:
 		for _, item := range v {
-			if err := refuseSecrets(item); err != nil {
+			if err := refuseInstance(item, path+"/[]", schemaSlots); err != nil {
 				return err
 			}
 		}
@@ -51,7 +82,80 @@ func refuseSecrets(value any) error {
 			if len(redact.Default().Scan(key)) > 0 {
 				return ErrSecretValue
 			}
-			if err := refuseSecrets(item); err != nil {
+			if err := refuseInstance(item, path+"/"+pointerKey(key), schemaSlots); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Schema property/definition names declare fields rather than hold instances.
+// Only known schema-valued kind slots enter this path; similarly named metadata
+// stays instance data. Literal annotations are always checked as instances.
+func refuseSchema(value any, sensitive bool) error {
+	object, ok := value.(map[string]any)
+	if !ok {
+		return refuseInstance(value, "", nil)
+	}
+	for key, item := range object {
+		if len(redact.Default().Scan(key)) > 0 {
+			return ErrSecretValue
+		}
+		switch key {
+		case "properties", "patternProperties", "$defs", "definitions", "dependentSchemas":
+			declarations, ok := item.(map[string]any)
+			if !ok {
+				return ErrSecretValue
+			}
+			for name, subschema := range declarations {
+				if len(redact.Default().Scan(name)) > 0 {
+					return ErrSecretValue
+				}
+				if err := refuseSchema(subschema, redact.SensitiveName(name)); err != nil {
+					return err
+				}
+			}
+		case "items", "additionalProperties", "unevaluatedProperties", "unevaluatedItems", "contains", "propertyNames", "not", "if", "then", "else", "contentSchema":
+			if err := refuseSchema(item, sensitive); err != nil {
+				return err
+			}
+		case "allOf", "anyOf", "oneOf", "prefixItems":
+			members, ok := item.([]any)
+			if !ok {
+				return ErrSecretValue
+			}
+			for _, member := range members {
+				if err := refuseSchema(member, sensitive); err != nil {
+					return err
+				}
+			}
+		case "default", "const":
+			if sensitive && !secretReference(item) {
+				return ErrSecretValue
+			}
+			if err := refuseInstance(item, "", nil); err != nil {
+				return err
+			}
+		case "enum", "examples":
+			members, ok := item.([]any)
+			if !ok {
+				return ErrSecretValue
+			}
+			for _, member := range members {
+				if sensitive && !secretReference(member) {
+					return ErrSecretValue
+				}
+				if err := refuseInstance(member, "", nil); err != nil {
+					return err
+				}
+			}
+		default:
+			// Includes decoded documentation strings and unsupported extension values.
+			if redact.SensitiveName(key) && !secretReference(item) {
+				return ErrSecretValue
+			}
+			if err := refuseInstance(item, "", nil); err != nil {
 				return err
 			}
 		}
