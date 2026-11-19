@@ -7,7 +7,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3
 	github.com/hollis-labs/libs/app/app-host v0.1.0
 	github.com/hollis-labs/libs/core/store v0.1.0
-	github.com/hollis-labs/libs/core/util v0.10.0
+	github.com/hollis-labs/libs/core/util v0.11.0
 	github.com/hollis-labs/libs/mcp/plugin-mcp v0.6.0
 	github.com/hollis-labs/libs/security/auth v0.3.1
 	github.com/hollis-labs/libs/security/policy v0.1.0
