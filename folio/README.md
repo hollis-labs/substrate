@@ -72,6 +72,11 @@ enforce auth even if the binary was generated with a development default; option
 `internal/descriptor` validates `project.yaml` and tests that the three descriptor files agree. Needs
 `substrate_version` (no default). See [`docs/class2-tools.md`](./docs/class2-tools.md).
 
+Installed services use `settings.runtime.install_root` as Cerberus `config.dir`. Fleet-install creates
+that stable directory when installing the binary; complete installation before first activation.
+A source checkout is unnecessary, and release pruning does not remove the working directory.
+Application data and configuration remain in their XDG locations.
+
 ## Quickstart
 
 ```sh

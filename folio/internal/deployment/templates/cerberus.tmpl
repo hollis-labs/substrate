@@ -12,6 +12,8 @@ resources:
     project: {{ .ID }}
     connector: local
     config:
+      # Fleet-install provisions this stable directory before service activation.
+      dir: {{ .Runtime.InstallRoot | yaml }}
       command:
         - {{ .Runtime.Link | yaml }}
         - serve

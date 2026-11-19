@@ -9,7 +9,9 @@ layer and explicit scope authorization. Registry registration waits for the cata
 
 Fleet-install owns the binary and its `~/.local/bin/{{ .inputs.repo_name }}` link. Cerberus supervises
 that installed path with the native supervisor (`auto`: launchd on macOS, systemd user on Linux).
-The process needs no checkout. `project.yaml` → `settings.runtime` selects the platform, inventory
+The process needs no checkout. The generated Cerberus `config.dir` is `settings.runtime.install_root`,
+provisioned by fleet-install before activation and retained across release pruning. Complete installation
+before the first resource apply; application data/config still use their XDG paths. `project.yaml` → `settings.runtime` selects the platform, inventory
 host, port, binary link, release directory and SQLite backup path. Optional `env_file` is a reference
 for operator configuration, never a credential value.
 

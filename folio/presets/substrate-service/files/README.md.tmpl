@@ -20,7 +20,10 @@ go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
 
 ## Run under Cerberus
 
-Fleet-install places the binary; Cerberus only supervises it (`{{ .inputs.repo_name }}.cerberus.yaml`, no build, no artifact path):
+Fleet-install provisions `settings.runtime.install_root` while placing the binary. The generated
+Cerberus `config.dir` uses that stable directory, so startup needs no source checkout and survives
+release pruning. Install before the first resource apply; keep app data/config in their XDG paths.
+Cerberus only supervises the installed binary (`{{ .inputs.repo_name }}.cerberus.yaml`, no build, no artifact path):
 
 ```sh
 cerberus validate {{ .inputs.repo_name }}.cerberus.yaml
