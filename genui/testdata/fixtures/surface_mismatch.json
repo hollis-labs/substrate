@@ -1,0 +1,69 @@
+{
+  "v": 1,
+  "id": "other_surface",
+  "type": "genui.declarative-surface",
+  "typeVersion": "1.0.0",
+  "presentation": "inline",
+  "data": {
+    "version": "1.0",
+    "createSurface": {
+      "surfaceId": "surface_review_1",
+      "catalogId": "urn:hollis-labs:genui:catalog:1",
+      "components": [
+        {
+          "id": "root",
+          "component": "GenuiApproval",
+          "props": {
+            "title": "Review change",
+            "changes": [
+              {
+                "label": "Name",
+                "before": "Before",
+                "after": "After"
+              }
+            ],
+            "choices": [
+              {
+                "label": "Approve",
+                "callFunction": {
+                  "@call": "genui_action",
+                  "catalogId": "urn:hollis-labs:genui:catalog:1",
+                  "args": {
+                    "genui_action": {
+                      "id": "action_0001",
+                      "subject": {
+                        "kind": "project",
+                        "id": "project_example"
+                      },
+                      "risk": "high",
+                      "basis": {
+                        "revision": "7",
+                        "projectionRevision": "7"
+                      }
+                    },
+                    "input": {
+                      "approved": true
+                    }
+                  }
+                }
+              }
+            ],
+            "state": "ready"
+          }
+        }
+      ],
+      "dataModel": {},
+      "metadata": {
+        "extensions": {
+          "genui_surface": {
+            "contract_version": "1"
+          },
+          "genui_pattern": {
+            "id": "approval",
+            "version": "1.0.0"
+          }
+        }
+      }
+    }
+  }
+}

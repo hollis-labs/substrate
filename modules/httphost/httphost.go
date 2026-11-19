@@ -29,6 +29,23 @@
 // Harden adds a Host check, an Origin check on writes, a body limit, panic recovery and a
 // credential-free access log, to Handler's result or to an app's own handler. It is opt-in:
 // Handler applies it when Options.Harden is set or a hardening key is configured under httphost:.
+// # Unknown paths and wrong methods
+//
+// A request that no route or mount matches falls to the SPA at "/" (the placeholder page when
+// Assets is nil or not built), so a client-side route works on reload. A request whose path a
+// method-specific mount, module route or /healthz serves but whose method none of them accepts
+// does not fall to the SPA: it is answered 405 method_not_allowed in the flat body with an Allow
+// header. GET and HEAD to such a path still reach the SPA, so a browser can load a client route
+// that shares its path with, say, a POST endpoint.
+//
+// A service (variant: service; the builder writes config httphost.fallback: not_found for it)
+// has no SPA: with Assets nil, an unknown path answers 404 not_found and a wrong method 405
+// method_not_allowed, flat (NotFoundFlat). fallback: spa keeps the placeholder; an app-host
+// defaults to spa. An app with no UI whose clients expect its own error envelope sets
+// Options.NotFound, which wins over the config. The SPA is then not installed: every request outside /api/ that no
+// route or mount matches reaches NotFound, raw, and so does a wrong method on a method-specific
+// path, GET included, with the Allow header already set so NotFound can answer 405 in its own
+// shape. Unknown paths under /api/ stay with Options.Routes.
 package httphost
 
 import (
@@ -39,6 +56,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -84,7 +102,24 @@ type Options struct {
 	// Harden (with zero options) when a hardening key is configured under httphost:. Nil and no
 	// key (the default) leaves the handler as before.
 	Harden *HardenOptions
+	// NotFound, when set, replaces the SPA (and config httphost.fallback): it answers, raw and unguarded, every request outside
+	// /api/ that no route or mount matches, and a wrong method on a method-specific path (with
+	// the Allow header already set; answer 405 when it is present). For an app with no UI whose
+	// clients expect its own error envelope; NotFoundFlat is the flat 404. Refused with Assets.
+	// It runs unguarded, so it must answer refusals only and never serve data. Nil follows
+	// config httphost.fallback (see the package comment).
+	NotFound http.Handler
 }
+
+// NotFoundFlat answers 404 not_found, or 405 method_not_allowed when the Allow header is set,
+// in the flat error body. Use it as Options.NotFound for an app with no UI.
+var NotFoundFlat http.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	if w.Header().Get("Allow") != "" {
+		apierr.Write(w, http.StatusMethodNotAllowed, "method_not_allowed", fmt.Sprintf("method %s is not allowed on %s", r.Method, r.URL.Path), nil)
+		return
+	}
+	apierr.Write(w, http.StatusNotFound, "not_found", fmt.Sprintf("no route for %s", r.URL.Path), nil)
+})
 
 // Mount is an app handler at a net/http mux pattern ("/a2a/" or "GET /.well-known/agent.json").
 // It is guarded by the auth module like /api/ and gets the flat error body, so
@@ -105,6 +140,19 @@ type Mount struct {
 func Handler(app *module.App, o Options) (http.Handler, error) {
 	if err := checkRawPrefixes(app, o); err != nil {
 		return nil, err
+	}
+	if o.NotFound != nil && o.Assets != nil {
+		return nil, fmt.Errorf("httphost: NotFound replaces the SPA; set it or Assets, not both")
+	}
+	if o.NotFound == nil && o.Assets == nil {
+		cfg, _ := app.Config["httphost"].(map[string]any)
+		switch v, _ := cfg["fallback"].(string); v {
+		case "", "spa":
+		case "not_found":
+			o.NotFound = NotFoundFlat
+		default:
+			return nil, fmt.Errorf("httphost: fallback %q is not spa or not_found", v)
+		}
 	}
 	api := http.NewServeMux()
 	if o.Routes != nil {
@@ -159,10 +207,15 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		}
 	}
 	outer.Handle("GET /healthz", health.From(app).Handler())
+	// rest is "/": only a request no other pattern on outer matched reaches it. probe holds the
+	// method-specific patterns, to tell a wrong method from an unknown path there.
+	rest := &fallback{probe: http.NewServeMux(), notFound: o.NotFound}
+	rest.add("GET /healthz")
 	if len(module.Routes(app)) > 0 {
 		for _, r := range module.Routes(app) {
 			if !strings.HasPrefix(r.Path, "/api/") {
 				outer.Handle(r.Pattern(), outerRoutes)
+				rest.add(r.Pattern())
 			}
 		}
 	}
@@ -183,8 +236,14 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		if err := handle(outer, m.Pattern, hh); err != nil {
 			return nil, err
 		}
+		rest.add(m.Pattern)
 	}
-	outer.Handle("/", h.Handler())
+	if o.NotFound == nil {
+		rest.spa = h.Handler()
+	} else {
+		outer.Handle("/api/", h.Handler())
+	}
+	outer.Handle("/", rest)
 	if o.Harden != nil {
 		return Harden(app, outer, *o.Harden)
 	}
@@ -194,6 +253,64 @@ func Handler(app *module.App, o Options) (http.Handler, error) {
 		return harden(app, outer, HardenOptions{}, false)
 	}
 	return outer, nil
+}
+
+// fallback serves "/" on the outer mux. A wrong method on a path a method-specific pattern
+// serves is answered 405 (or by notFound), never by the SPA; GET and HEAD still reach the SPA.
+type fallback struct {
+	probe    *http.ServeMux
+	methods  []string // the methods the probe's patterns use
+	spa      http.Handler
+	notFound http.Handler
+}
+
+// add records a method-specific pattern already registered on outer (so it cannot conflict here).
+func (f *fallback) add(pattern string) {
+	i := strings.IndexByte(pattern, ' ')
+	if i < 0 {
+		return
+	}
+	f.probe.Handle(pattern, http.NotFoundHandler())
+	if m := pattern[:i]; !slices.Contains(f.methods, m) {
+		f.methods = append(f.methods, m)
+	}
+}
+
+// allowed lists the methods the probe accepts for r's path, with HEAD where GET is.
+func (f *fallback) allowed(r *http.Request) []string {
+	var out []string
+	for _, m := range f.methods {
+		r2 := *r
+		r2.Method = m
+		if _, p := f.probe.Handler(&r2); p != "" {
+			out = append(out, m)
+			if m == http.MethodGet && !slices.Contains(f.methods, http.MethodHead) {
+				out = append(out, http.MethodHead)
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+func (f *fallback) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	browse := r.Method == http.MethodGet || r.Method == http.MethodHead
+	if f.spa == nil || !browse {
+		if allow := f.allowed(r); len(allow) > 0 {
+			w.Header().Set("Allow", strings.Join(allow, ", "))
+			if f.notFound != nil {
+				f.notFound.ServeHTTP(w, r)
+				return
+			}
+			apierr.Write(w, http.StatusMethodNotAllowed, "method_not_allowed", fmt.Sprintf("method %s is not allowed on %s", r.Method, r.URL.Path), nil)
+			return
+		}
+	}
+	if f.spa != nil {
+		f.spa.ServeHTTP(w, r)
+		return
+	}
+	f.notFound.ServeHTTP(w, r)
 }
 
 // rawSplit serves a request whose path is raw through the guard with the guard's own refusals
@@ -322,6 +439,22 @@ type ServeOptions struct {
 	// GracePeriod bounds graceful shutdown (default 10s); in-flight requests get
 	// that long to finish.
 	GracePeriod time.Duration
+	// Listener, if set, is served instead of listening on Addr (a unix socket from ListenUnix,
+	// a socket-activated descriptor). Serve keeps its Stopping, handler tracking and drain over
+	// it and closes it on stop. The auth bind check runs on Listener.Addr(); a unix address is
+	// checked as "unix:<path>", and in off and permissive mode the socket must be a file that
+	// other users cannot write to: file permissions are what protect it, so an abstract socket
+	// (@name), which has none, is refused. Create it with ListenUnix rather than net.Listen
+	// and a chmod, which leaves a window with the umask's permissions. Addr and config
+	// httphost.addr are ignored. Serve takes ownership: it closes the listener on every
+	// return, a refused bind included.
+	Listener net.Listener
+	// ConnContext, if set, is called for each new connection after Serve's own and may return
+	// a derived context (http.Server.ConnContext). Derive from the ctx it is given: that one
+	// carries Stopping and PeerCredentials. c is the connection exactly as the listener
+	// accepted it, never wrapped, so a type assertion (*net.UnixConn, *net.TCPConn) holds;
+	// apps rely on that to tell a local socket caller from a remote one.
+	ConnContext func(ctx context.Context, c net.Conn) context.Context
 }
 
 // Serve listens, serves h and shuts down gracefully when ctx ends, so every app
@@ -340,16 +473,31 @@ type ServeOptions struct {
 // were still running.
 func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions) error {
 	addr := o.Addr
-	if addr == "" {
+	if o.Listener != nil {
+		addr = o.Listener.Addr().String()
+		if ua, ok := listenerUnixAddr(o.Listener); ok {
+			addr = "unix:" + ua.Name
+		}
+	} else if addr == "" {
 		cfg, _ := app.Config["httphost"].(map[string]any)
 		addr, _ = cfg["addr"].(string)
 	}
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
+	if o.Listener == nil && strings.HasPrefix(addr, "unix:") {
+		return fmt.Errorf("httphost: addr %q: Serve listens on TCP only; create the unix socket and pass it as ServeOptions.Listener", addr)
+	}
 	if v, ok := app.Value("auth.guard"); ok {
 		if g, ok := v.(interface{ Mode() libauth.Mode }); ok {
-			if err := libauth.ValidateBind(addr, g.Mode()); err != nil {
+			err := libauth.ValidateBind(addr, g.Mode())
+			if ua, ok := listenerUnixAddr(o.Listener); ok && err == nil {
+				err = checkUnixListener(ua, g.Mode())
+			}
+			if err != nil {
+				if o.Listener != nil {
+					_ = o.Listener.Close()
+				}
 				return fmt.Errorf("httphost: %w", err)
 			}
 			// The auth module stays quiet at Start so a short-lived command
@@ -359,9 +507,12 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 			}
 		}
 	}
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		return fmt.Errorf("httphost: %w", err)
+	ln := o.Listener
+	if ln == nil {
+		var err error
+		if ln, err = net.Listen("tcp", addr); err != nil {
+			return fmt.Errorf("httphost: %w", err)
+		}
 	}
 	if o.Ready != nil {
 		o.Ready(ln.Addr())
@@ -383,8 +534,19 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 		h.ServeHTTP(w, r)
 	})
 	srv := &http.Server{
-		Handler:           tracked,
-		BaseContext:       func(net.Listener) context.Context { return base },
+		Handler:     tracked,
+		BaseContext: func(net.Listener) context.Context { return base },
+		// c is what ln.Accept returned, unwrapped: readPeerCreds and the app's ConnContext
+		// type-assert it (*net.UnixConn). Do not wrap the listener or the conn here.
+		ConnContext: func(ctx context.Context, c net.Conn) context.Context {
+			if pc, ok := readPeerCreds(c); ok {
+				ctx = context.WithValue(ctx, peerKey{}, pc)
+			}
+			if o.ConnContext != nil {
+				ctx = o.ConnContext(ctx, c)
+			}
+			return ctx
+		},
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       2 * time.Minute,
 	}
@@ -402,7 +564,7 @@ func Serve(ctx context.Context, app *module.App, h http.Handler, o ServeOptions)
 	}
 	sctx, cancel := context.WithTimeout(context.Background(), grace)
 	defer cancel()
-	err = srv.Shutdown(sctx)
+	err := srv.Shutdown(sctx)
 	for err == nil && active.Load() > 0 {
 		select {
 		case <-sctx.Done():
@@ -448,4 +610,12 @@ type stoppingKey struct{}
 func Stopping(r *http.Request) <-chan struct{} {
 	c, _ := r.Context().Value(stoppingKey{}).(<-chan struct{})
 	return c
+}
+
+func listenerUnixAddr(ln net.Listener) (*net.UnixAddr, bool) {
+	if ln == nil {
+		return nil, false
+	}
+	ua, ok := ln.Addr().(*net.UnixAddr)
+	return ua, ok
 }

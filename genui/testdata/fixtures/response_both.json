@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "agentFunctionResponse": {
+    "functionCallId": "rpc_1",
+    "value": {
+      "status": "ok"
+    },
+    "error": {
+      "code": "error",
+      "message": "no"
+    }
+  }
+}

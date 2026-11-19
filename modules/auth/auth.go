@@ -25,6 +25,10 @@
 //	mint_credential_file: the parent bearer credential presented to mint_url.
 //	mint_body:            the JSON object sent to mint_url.
 //
+// An app that issues its own JWTs from a rotating key ring supplies the keys and the
+// deny-list in process instead of jwks_url and denylist_url: UseKeySource and
+// UseDenyList, before boot.Start (RefreshKeys after a rotation).
+//
 // auth.Token, auth.Transport and auth.HTTPClient attach the configured token. With
 // neither token_file nor mint_url set (the dev default) they attach nothing.
 //
@@ -107,12 +111,23 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	var verifiers []libauth.Verifier
 	dlURL := str("denylist_url", "")
 	url, file := str("jwks_url", ""), str("bootstrap_key_file", "")
-	if dlURL != "" && url == "" && file == "" {
+	src, inDeny := hooks()
+	switch {
+	case src != nil && url != "":
 		cancel()
-		return fmt.Errorf("denylist_url needs the JWT verifier: set jwks_url or bootstrap_key_file")
+		return fmt.Errorf("auth.UseKeySource and jwks_url are both set: choose one key source")
+	case inDeny != nil && dlURL != "":
+		cancel()
+		return fmt.Errorf("auth.UseDenyList and denylist_url are both set: choose one deny-list")
+	case dlURL != "" && url == "" && file == "" && src == nil:
+		cancel()
+		return fmt.Errorf("denylist_url needs the JWT verifier: set jwks_url or bootstrap_key_file (or auth.UseKeySource)")
+	case inDeny != nil && url == "" && file == "" && src == nil:
+		cancel()
+		return fmt.Errorf("auth.UseDenyList needs the JWT verifier: set jwks_url or bootstrap_key_file (or auth.UseKeySource)")
 	}
-	if url != "" || file != "" {
-		var deny *libauth.DenyList
+	if url != "" || file != "" || src != nil {
+		deny := inDeny
 		if dlURL != "" {
 			deny = libauth.NewDenyList()
 			iv := 30 * time.Second
@@ -121,21 +136,22 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 			}
 			go (&libauth.DenyListPoller{URL: dlURL, List: deny, Interval: iv}).Run(runCtx)
 		}
-		jv, err := libauth.NewJWTVerifier(libauth.JWTConfig{
-			Issuer:           str("issuer", ""),
-			Audience:         str("audience", app.Name),
-			JWKSURL:          url,
-			BootstrapKeyFile: file,
-			DenyList:         deny,
-		})
+		jc := libauth.JWTConfig{JWKSURL: url}
+		if src != nil {
+			jc = keySourceConfig(src)
+		}
+		jc.Issuer, jc.Audience = str("issuer", ""), str("audience", app.Name)
+		jc.BootstrapKeyFile, jc.DenyList = file, deny
+		jv, err := libauth.NewJWTVerifier(jc)
 		if err != nil {
 			cancel()
 			return fmt.Errorf("jwt verifier: %w", err)
 		}
-		if url != "" {
+		if jc.JWKSURL != "" {
 			go jv.Run(runCtx)
 		}
 		verifiers = append(verifiers, jv)
+		app.Set(KeysKey, jv)
 	}
 	keys, err := apiKeys(cfg["api_keys"])
 	if err != nil {
@@ -150,7 +166,7 @@ func (m *mod) Start(ctx context.Context, app *module.App) error {
 	_, localIdentity := app.Config["identity"].(map[string]any)
 	if mode == libauth.ModeEnforce && len(verifiers) == 0 && !localIdentity {
 		cancel()
-		return fmt.Errorf("mode enforce needs a verifier: set jwks_url, bootstrap_key_file or api_keys (or select the identity module)")
+		return fmt.Errorf("mode enforce needs a verifier: set jwks_url, bootstrap_key_file or api_keys (or auth.UseKeySource, or select the identity module)")
 	}
 
 	scopes := libauth.NewScopeTable()

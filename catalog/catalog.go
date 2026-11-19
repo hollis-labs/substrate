@@ -25,6 +25,7 @@ var Modules = []Module{
 	{Name: "database", Import: "github.com/hollis-labs/substrate/modules/database", Requires: []string{"health"}, Status: "ready"},
 	{Name: "pluginhost", Import: "github.com/hollis-labs/substrate/modules/pluginhost", Requires: []string{"health"}, Status: "ready"},
 	{Name: "events", Import: "github.com/hollis-labs/substrate/modules/events", Requires: []string{"httphost"}, Status: "ready"},
+	{Name: "genui", Import: "github.com/hollis-labs/substrate/modules/genui", Requires: []string{"auth", "httphost"}, Status: "ready"},
 	{Name: "queue", Import: "github.com/hollis-labs/substrate/modules/queue", Requires: []string{"database"}, Status: "ready"},
 	{Name: "scheduler", Import: "github.com/hollis-labs/substrate/modules/scheduler", Requires: []string{"database"}, Status: "ready"},
 	{Name: "router", Import: "github.com/hollis-labs/substrate/modules/router", Status: "ready"},

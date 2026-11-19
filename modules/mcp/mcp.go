@@ -6,6 +6,9 @@
 //
 //	mcp.Server(app).RegisterChecked(server.Tool{...}, server.Reads("why"))
 //
+// Server options that only apply at construction (instructions, an initialized handler) are
+// given before boot.Start with UseServerOptions.
+//
 // Config under "mcp":
 //
 //	version:         server version string (default "0.0.0-dev").
@@ -26,7 +29,8 @@
 // key, and the default is off). It applies only when no token is configured; a
 // token that is given is verified as always and a bad one is an error, never a
 // fallback. The principal is "local:operator" (kind operator, verified by
-// filesystem trust, not by a credential) with scopes "*" or StdioOptions.LocalScopes.
+// filesystem trust, not by a credential) with scopes "*" or StdioOptions.LocalScopes; in
+// enforce mode LocalScopes must cover the mcp scope (as a token must), or ServeStdio refuses.
 // The trust statement: the process runs as a user who can open the data file; the
 // module cannot tell who launched it, and checks nothing about the file or the
 // parent. A child launched by a gateway on the same host as the same user is local
@@ -70,9 +74,21 @@ const (
 )
 
 var (
-	filterMu   sync.Mutex
-	toolFilter func(ctx context.Context, names []string) []string
+	filterMu      sync.Mutex
+	toolFilter    func(ctx context.Context, names []string) []string
+	serverOptions []gmcp.Option
 )
+
+// UseServerOptions sets options passed to the server when the module starts, for what can only
+// be set at construction: gmcp.WithInstructions (sent to clients on initialize),
+// gmcp.WithInitializedHandler (to see which client connected) and the like. They are applied
+// after the module's own options (the tool filter). Call it before boot.Start; a later call
+// replaces the earlier options, and a call with none clears them.
+func UseServerOptions(opts ...gmcp.Option) {
+	filterMu.Lock()
+	serverOptions = append([]gmcp.Option(nil), opts...)
+	filterMu.Unlock()
+}
 
 // UseToolFilter registers a per-caller visibility filter for tools/list. f gets
 // the names of every registered tool and returns the ones to list to this
@@ -121,7 +137,7 @@ type mod struct{}
 
 func (mod) Name() string { return "mcp" }
 
-func (mod) Start(_ context.Context, app *module.App) error {
+func (mod) Start(_ context.Context, app *module.App) (err error) {
 	cfg, _ := app.Config["mcp"].(map[string]any)
 	str := func(k, def string) string {
 		if s, ok := cfg[k].(string); ok && s != "" {
@@ -138,12 +154,20 @@ func (mod) Start(_ context.Context, app *module.App) error {
 		}
 	}
 	filterMu.Lock()
-	f := toolFilter
+	f, extra := toolFilter, serverOptions
 	filterMu.Unlock()
 	var opts []gmcp.Option
 	if f != nil {
 		opts = append(opts, gmcp.WithReceivingMiddleware(filterTools(f)))
 	}
+	opts = append(opts, extra...)
+	// An option may panic while it is applied (WithInstructions past its length limit); that is
+	// an app configuration error, so Start reports it rather than crashing boot.
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("mcp: a server option was refused: %v", r)
+		}
+	}()
 	srv := gmcp.NewServer(app.Name, str("version", "0.0.0-dev"), opts...)
 	app.Set(ServerKey, srv)
 	app.Set(MountKey, &mount{app: app, srv: srv, scope: str("scope", app.Name+".mcp"), origins: origins})
@@ -265,11 +289,20 @@ func identify(ctx context.Context, app *module.App, o StdioOptions) (context.Con
 		tokenFile, _ = cfg["stdio_token_file"].(string)
 	}
 	enforce := g.Mode() == libauth.ModeEnforce
+	scope, _ := cfg["scope"].(string)
+	if scope == "" {
+		scope = app.Name + ".mcp"
+	}
 	if tokenFile == "" {
 		if o.LocalTrust {
 			scopes := o.LocalScopes
 			if len(scopes) == 0 {
 				scopes = []string{"*"}
+			}
+			// The same gate as a token here and as /mcp over HTTP: in enforce mode the local
+			// principal must hold the endpoint scope, or it would reach every tool without one.
+			if enforce && !(libauth.Principal{Scopes: scopes}).HasScope(scope) {
+				return ctx, fmt.Errorf("mcp: StdioOptions.LocalScopes %v lack the mcp scope %q (list it, \"%s.*\" or \"*\")", scopes, scope, app.Name)
 			}
 			notice := o.Notice
 			if notice == nil {
@@ -302,10 +335,6 @@ func identify(ctx context.Context, app *module.App, o StdioOptions) (context.Con
 	p, err := vf.Verify(ctx, tok)
 	if err != nil {
 		return ctx, errors.New("mcp: the stdio token was not accepted")
-	}
-	scope, _ := cfg["scope"].(string)
-	if scope == "" {
-		scope = app.Name + ".mcp"
 	}
 	if enforce && !p.HasScope(scope) {
 		return ctx, fmt.Errorf("mcp: the stdio token lacks the scope %q", scope)
