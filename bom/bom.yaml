@@ -35,7 +35,7 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/agent/trace: v0.2.0   # per-turn trace record and run evidence recorder (Nanite traces, evals)
   github.com/hollis-labs/libs/agent/sdk: v0.0.0-20261115211534-c76ea978573d   # merged Tradecraft SDK foundation
   github.com/hollis-labs/libs/workflow/engine: v0.2.0
-  github.com/hollis-labs/libs/harness/core: v0.17.1-0.20261115212742-8f2ed31176b0   # merged operation-bound provider approvals
+  github.com/hollis-labs/libs/harness/core: v0.17.1-0.20261119210534-e787671699c2   # merged anchored materializer manifest commits
   github.com/hollis-labs/libs/mesh/core: v0.11.0     # operation-bound gate and host-issued runtime references
   github.com/hollis-labs/libs/mesh/gatecrasher: v0.0.0-20261115211738-4cb9c2a6b9b7   # merged approval coordinator; host-owned ports
   github.com/hollis-labs/libs/mesh/eventbus: v0.2.0  # event export and hub relay (Cerberus port)
