@@ -34,6 +34,7 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/agent/chat: v0.1.0   # conversation wire: handler, runner port, conformance suite (Surface chat, Nanite chatrunner)
   github.com/hollis-labs/libs/agent/trace: v0.2.0   # per-turn trace record and run evidence recorder (Nanite traces, evals)
   github.com/hollis-labs/libs/agent/desk: v0.1.0   # front desk: intake planner, topic ledger, delivery editor (Nanite chatrunner)
+  github.com/hollis-labs/libs/agent/steer: v0.1.0   # steering: modes and presets, work-slot selection, classifier policy, reflexes (Nanite)
   github.com/hollis-labs/libs/agent/sdk: v0.0.0-20261115211534-c76ea978573d   # merged Tradecraft SDK foundation
   github.com/hollis-labs/libs/workflow/engine: v0.2.0
   github.com/hollis-labs/libs/harness/core: v0.17.1-0.20261119210534-e787671699c2   # merged anchored materializer manifest commits
