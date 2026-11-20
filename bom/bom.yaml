@@ -30,7 +30,7 @@ libs:
 app_libs:                 # libs an app may import that Substrate itself does not require
   github.com/hollis-labs/libs/agent/core: v0.5.0   # context and tool selection (Tradecraft and standalone MCP gateway)
   github.com/hollis-labs/libs/agent/host: v0.1.1   # embedded agent host (Folio app-ade preset, chess tutor; v0.1.1: stream keepalive)
-  github.com/hollis-labs/libs/agent/agentdir: v0.3.0   # shared agent directory format and loader (v0.3.0: compact_* and idle_timeout runtime keys)
+  github.com/hollis-labs/libs/agent/agentdir: v0.4.0   # shared agent directory format and loader (v0.4.0: runtime.cache_ttl)
   github.com/hollis-labs/libs/agent/chat: v0.1.0   # conversation wire: handler, runner port, conformance suite (Surface chat, Nanite chatrunner)
   github.com/hollis-labs/libs/agent/trace: v0.2.0   # per-turn trace record and run evidence recorder (Nanite traces, evals)
   github.com/hollis-labs/libs/agent/desk: v0.1.0   # front desk: intake planner, topic ledger, delivery editor (Nanite chatrunner)
@@ -42,7 +42,7 @@ app_libs:                 # libs an app may import that Substrate itself does no
   github.com/hollis-labs/libs/mesh/gatecrasher: v0.0.0-20261115211738-4cb9c2a6b9b7   # merged approval coordinator; host-owned ports
   github.com/hollis-labs/libs/mesh/eventbus: v0.2.0  # event export and hub relay (Cerberus port)
   github.com/hollis-labs/libs/security/pairing: v0.0.0-20261018164511-e8bfb38b4f31   # device grants and renewable device tokens (Basalisk companion); untagged in libs
-  github.com/hollis-labs/libs/llm/core: v0.4.0        # cost, quota, pricing and usage-ledger types (Station llm-gateway)
+  github.com/hollis-labs/libs/llm/core: v0.5.0        # cost, quota, pricing and usage-ledger types (Station llm-gateway)
 third_party:
   github.com/cyberphone/json-canonicalization: v0.0.0-20261011152517-32a48195b9b2 # RFC 8785 tool definition hashes
   github.com/google/jsonschema-go: v0.4.3 # shared kind validation; already used by the MCP SDK
