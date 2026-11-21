@@ -30,7 +30,7 @@ libs:
 app_libs:                 # libs an app may import that Substrate itself does not require
   github.com/hollis-labs/libs/agent/core: v0.5.0   # context and tool selection (Tradecraft and standalone MCP gateway)
   github.com/hollis-labs/libs/agent/host: v0.1.1   # embedded agent host (Folio app-ade preset, chess tutor; v0.1.1: stream keepalive)
-  github.com/hollis-labs/libs/agent/agentdir: v0.5.0   # shared agent directory format and loader (v0.5.0: runtime.daily_token_budget)
+  github.com/hollis-labs/libs/agent/agentdir: v0.6.0   # shared agent directory format and loader (v0.6.0: identity.tether)
   github.com/hollis-labs/libs/agent/chat: v0.1.0   # conversation wire: handler, runner port, conformance suite (Surface chat, Nanite chatrunner)
   github.com/hollis-labs/libs/agent/trace: v0.2.0   # per-turn trace record and run evidence recorder (Nanite traces, evals)
   github.com/hollis-labs/libs/agent/desk: v0.1.0   # front desk: intake planner, topic ledger, delivery editor (Nanite chatrunner)
