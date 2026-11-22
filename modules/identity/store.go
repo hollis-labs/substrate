@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"embed"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -13,59 +14,23 @@ import (
 	"time"
 
 	"github.com/hollis-labs/libs/core/store"
+	"github.com/hollis-labs/libs/core/store/migrate"
 )
 
-// The tables are prefixed identity_ and created idempotently at start, so the
-// app's own migrations never mention them. Times are Unix seconds and flags are
-// integers, which both SQLite and Postgres store the same way.
-var schema = []string{
-	`CREATE TABLE IF NOT EXISTS identity_users (
-		id TEXT PRIMARY KEY,
-		username TEXT NOT NULL UNIQUE,
-		display_name TEXT NOT NULL DEFAULT '',
-		email TEXT NOT NULL DEFAULT '',
-		password_hash TEXT NOT NULL,
-		scopes TEXT NOT NULL DEFAULT '',
-		disabled INTEGER NOT NULL DEFAULT 0,
-		created_at BIGINT NOT NULL,
-		updated_at BIGINT NOT NULL,
-		password_changed_at BIGINT NOT NULL
-	)`,
-	`CREATE TABLE IF NOT EXISTS identity_sessions (
-		id TEXT PRIMARY KEY,
-		user_id TEXT NOT NULL,
-		token_hash TEXT NOT NULL UNIQUE,
-		created_at BIGINT NOT NULL,
-		expires_at BIGINT NOT NULL,
-		last_seen_at BIGINT NOT NULL,
-		user_agent TEXT NOT NULL DEFAULT '',
-		revoked_at BIGINT NOT NULL DEFAULT 0
-	)`,
-	`CREATE TABLE IF NOT EXISTS identity_credentials (
-		id TEXT PRIMARY KEY,
-		name TEXT NOT NULL,
-		token_hash TEXT NOT NULL UNIQUE,
-		scopes TEXT NOT NULL DEFAULT '',
-		audiences TEXT NOT NULL DEFAULT '',
-		created_by TEXT NOT NULL DEFAULT '',
-		created_at BIGINT NOT NULL,
-		expires_at BIGINT NOT NULL DEFAULT 0,
-		revoked_at BIGINT NOT NULL DEFAULT 0,
-		last_used_at BIGINT NOT NULL DEFAULT 0
-	)`,
-	`CREATE TABLE IF NOT EXISTS identity_pairing_codes (
-		id TEXT PRIMARY KEY,
-		code_hash TEXT NOT NULL UNIQUE,
-		name TEXT NOT NULL,
-		scopes TEXT NOT NULL DEFAULT '',
-		audiences TEXT NOT NULL DEFAULT '',
-		key_ttl_seconds BIGINT NOT NULL DEFAULT 0,
-		created_by TEXT NOT NULL DEFAULT '',
-		created_at BIGINT NOT NULL,
-		expires_at BIGINT NOT NULL,
-		used_at BIGINT NOT NULL DEFAULT 0
-	)`,
-}
+// The tables are prefixed identity_ and created by numbered migrations
+// (migrations/<dialect>/NNNN_*.sql, goose format, through libs core/store
+// migrate) under their own version table, so they never mix with the app's own
+// migrations. Times are Unix seconds and flags are integers, which both SQLite
+// and Postgres store the same way. 0001 is the schema as it was created before
+// versioning (CREATE TABLE IF NOT EXISTS), so a database made by an older
+// release upgrades in place.
+//
+//go:embed migrations
+var migrationFiles embed.FS
+
+// Migrations is the identity module's schema source (checked for dialect parity
+// in tests). Its version table is identity_schema.
+var Migrations = migrate.Source{FS: migrationFiles, Root: "migrations", Table: "identity_schema"}
 
 // Errors the HTTP layer maps to responses.
 var (
@@ -82,10 +47,15 @@ type db struct {
 func (d db) q(query string) string { return d.st.Dialect().Rebind(query) }
 
 func (d db) migrate(ctx context.Context) error {
-	for _, ddl := range schema {
-		if _, err := d.st.ExecContext(ctx, ddl); err != nil {
-			return fmt.Errorf("identity: schema: %w", err)
-		}
+	err := migrate.UpStore(ctx, d.st, Migrations)
+	if err != nil {
+		// Two processes starting on one new SQLite file race to migrate it and the
+		// loser sees a busy or already-applied error; by now the winner is done.
+		time.Sleep(200 * time.Millisecond)
+		err = migrate.UpStore(ctx, d.st, Migrations)
+	}
+	if err != nil {
+		return fmt.Errorf("identity: schema: %w", err)
 	}
 	return nil
 }
@@ -97,6 +67,7 @@ type User struct {
 	DisplayName string    `json:"display_name"`
 	Email       string    `json:"email,omitempty"`
 	Scopes      []string  `json:"scopes"`
+	Role        string    `json:"role,omitempty"` // in the default space; not a column of identity_users
 	Disabled    bool      `json:"disabled"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -204,12 +175,24 @@ func (d db) createFirstUser(ctx context.Context, u User) error {
 		if n > 0 {
 			return ErrSetupClosed
 		}
-		return d.insertUser(ctx, tx, u)
+		if err := d.insertUser(ctx, tx, u); err != nil {
+			return err
+		}
+		return d.setRole(ctx, tx, u.ID, RoleOwner, u.CreatedAt)
 	})
 }
 
-func (d db) createUser(ctx context.Context, u User) error {
-	return d.st.WriteTx(ctx, func(ctx context.Context, tx store.Tx) error { return d.insertUser(ctx, tx, u) })
+// createUser adds an account with a role in the default space ("" for none).
+func (d db) createUser(ctx context.Context, u User, role string) error {
+	return d.st.WriteTx(ctx, func(ctx context.Context, tx store.Tx) error {
+		if err := d.insertUser(ctx, tx, u); err != nil {
+			return err
+		}
+		if role == "" {
+			return nil
+		}
+		return d.setRole(ctx, tx, u.ID, role, u.CreatedAt)
+	})
 }
 
 type execer interface {

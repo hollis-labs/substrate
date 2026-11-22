@@ -135,7 +135,9 @@ func (s *Service) setupStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	// setup_over_http says whether POST /api/setup can complete it; false means
 	// the owner is created offline ("<app> identity setup").
-	writeJSON(w, http.StatusOK, map[string]any{"setup_required": !exists, "setup_over_http": s.cfg.setupHTTP})
+	// setup_link says POST /api/setup takes a setup_token (a link "<app> identity
+	// setup-link" printed), whatever identity.setup says.
+	writeJSON(w, http.StatusOK, map[string]any{"setup_required": !exists, "setup_over_http": s.cfg.setupHTTP, "setup_link": true})
 }
 
 type credentials struct {
@@ -168,20 +170,26 @@ func (s *Service) newUser(c credentials, scopes []string) (User, error) {
 		CreatedAt: now, UpdatedAt: now, passwordHash: hash, passwordChangedAt: now}, nil
 }
 
-// setup makes the owner, once, and signs them in.
+// setup makes the owner, once, and signs them in. With a setup_token (a setup link) it
+// works in either identity.setup mode; without one only under identity.setup: http.
 func (s *Service) setup(w http.ResponseWriter, r *http.Request) {
-	if !s.cfg.setupHTTP {
-		apierr.Write(w, http.StatusForbidden, "setup_offline", "first-run setup over HTTP is disabled; create the owner on the host with `"+s.app.Name+" identity setup`", nil)
-		return
-	}
 	if !s.sameOrigin(r) {
 		apierr.Write(w, http.StatusForbidden, "bad_origin", "the request did not come from this app", nil)
 		return
 	}
-	var c credentials
-	if !decode(w, r, &c) {
+	var in setupInput
+	if !decode(w, r, &in) {
 		return
 	}
+	if in.SetupToken != "" {
+		s.setupWithToken(w, r, in)
+		return
+	}
+	if !s.cfg.setupHTTP {
+		apierr.Write(w, http.StatusForbidden, "setup_offline", "first-run setup over HTTP is disabled; create the owner on the host with `"+s.app.Name+" identity setup`, or open the link `"+s.app.Name+" identity setup-link` prints", nil)
+		return
+	}
+	c := in.credentials
 	u, err := s.newUser(c, []string{"*"})
 	if err != nil {
 		bad(w, err.Error())
@@ -239,7 +247,7 @@ func (s *Service) startSession(w http.ResponseWriter, r *http.Request, u User) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: s.cfg.cookie, Value: sessionPrefix + secret, Path: "/", Expires: sess.ExpiresAt,
 		HttpOnly: true, Secure: s.secureCookie(r), SameSite: http.SameSiteStrictMode})
-	writeJSON(w, http.StatusOK, s.profile(u))
+	writeJSON(w, http.StatusOK, s.profile(r.Context(), u))
 }
 
 func truncate(s string, n int) string {
@@ -249,8 +257,12 @@ func truncate(s string, n int) string {
 	return s
 }
 
-func (s *Service) profile(u User) map[string]any {
-	return map[string]any{"id": u.ID, "username": u.Username, "display_name": u.DisplayName, "email": u.Email, "scopes": u.Scopes}
+// profile is the signed-in answer: the scopes are the effective ones (the user's own and
+// their role's), which is what the guard checks.
+func (s *Service) profile(ctx context.Context, u User) map[string]any {
+	role, _ := s.db.roleOf(ctx, s.db.st, u.ID)
+	return map[string]any{"id": u.ID, "username": u.Username, "display_name": u.DisplayName, "email": u.Email,
+		"scopes": effectiveScopes(s.app.Name, u.Scopes, role), "role": role}
 }
 
 func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
@@ -327,7 +339,8 @@ func (s *Service) getProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": u.ID, "username": u.Username, "display_name": u.DisplayName,
-		"email": u.Email, "scopes": u.Scopes, "assurance": assuranceLocal,
+		"email": u.Email, "scopes": effectiveScopes(s.app.Name, u.Scopes, u.Role), "role": u.Role,
+		"assurance": assuranceLocal,
 	})
 }
 
@@ -366,7 +379,7 @@ func (s *Service) updateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	u, _ = s.db.userByID(r.Context(), u.ID)
-	writeJSON(w, http.StatusOK, s.profile(u))
+	writeJSON(w, http.StatusOK, s.profile(r.Context(), u))
 }
 
 // ---- sessions ----
@@ -414,6 +427,14 @@ func (s *Service) listUsers(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
+	roles, err := s.db.roles(r.Context())
+	if err != nil {
+		failed(w)
+		return
+	}
+	for i := range users {
+		users[i].Role = roles[users[i].ID]
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": orEmpty(users)})
 }
 
@@ -421,28 +442,39 @@ func (s *Service) createUser(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		credentials
 		Scopes []string `json:"scopes"`
+		Role   string   `json:"role"` // default "member" when no scopes are given
 	}
 	if !decode(w, r, &in) {
 		return
 	}
 	p, _ := caller(r)
-	if scopes, ok := grantable(p.Scopes, in.Scopes); !ok || len(in.Scopes) == 0 {
-		bad(w, "give scopes the caller itself holds")
-		return
-	} else {
-		in.Scopes = scopes
+	if in.Role == "" && len(in.Scopes) == 0 {
+		in.Role = RoleMember
 	}
-	u, err := s.newUser(in.credentials, in.Scopes)
+	if in.Role != "" && !s.mayGrantRole(p, in.Role) {
+		bad(w, "give a role whose scopes the caller itself holds (owner, admin, member or guest)")
+		return
+	}
+	// Only scopes actually asked for: grantable treats an empty list as "all the
+	// caller holds", which is right for narrowing a token and wrong for a new user.
+	if len(in.Scopes) > 0 {
+		if _, ok := grantable(p.Scopes, in.Scopes); !ok {
+			bad(w, "give scopes the caller itself holds")
+			return
+		}
+	}
+	u, err := s.newUser(in.credentials, orEmpty(in.Scopes))
 	if err != nil {
 		bad(w, err.Error())
 		return
 	}
-	switch err := s.db.createUser(r.Context(), u); {
+	switch err := s.db.createUser(r.Context(), u, in.Role); {
 	case errors.Is(err, ErrConflict):
 		apierr.Write(w, http.StatusConflict, "exists", "that username is taken", nil)
 	case err != nil:
 		failed(w)
 	default:
+		u.Role = in.Role
 		writeJSON(w, http.StatusCreated, u)
 	}
 }
@@ -453,6 +485,7 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		Disabled *bool     `json:"disabled"`
 		Scopes   *[]string `json:"scopes"`
 		Password *string   `json:"password"`
+		Role     *string   `json:"role"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -476,10 +509,15 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		set["disabled"] = d
 	}
 	if in.Scopes != nil {
-		scopes, ok := grantable(p.Scopes, *in.Scopes)
-		if !ok {
-			bad(w, "give scopes the caller itself holds")
-			return
+		// An empty list clears the user's own scopes (their role still applies);
+		// grantable would read it as "everything the caller holds".
+		scopes := []string{}
+		if len(*in.Scopes) > 0 {
+			var ok bool
+			if scopes, ok = grantable(p.Scopes, *in.Scopes); !ok {
+				bad(w, "give scopes the caller itself holds")
+				return
+			}
 		}
 		set["scopes"] = strings.Join(scopes, " ")
 	}
@@ -495,15 +533,39 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		set["password_hash"], set["password_changed_at"] = hash, time.Now().Unix()
 	}
+	if in.Role != nil && !s.mayGrantRole(p, *in.Role) {
+		bad(w, "give a role whose scopes the caller itself holds (owner, admin, member or guest)")
+		return
+	}
 	if err := s.db.updateUser(r.Context(), id, set); err != nil {
 		failed(w)
 		return
+	}
+	if in.Role != nil {
+		switch err := s.SetRole(r.Context(), id, *in.Role); {
+		case errors.Is(err, ErrLastOwner):
+			apierr.Write(w, http.StatusConflict, "last_owner", "the last owner cannot be given another role", nil)
+			return
+		case err != nil:
+			failed(w)
+			return
+		}
 	}
 	if in.Disabled != nil && *in.Disabled || in.Password != nil {
 		_ = s.db.revokeSessionsExcept(r.Context(), id, "", time.Now())
 	}
 	u, _ := s.db.userByID(r.Context(), id)
+	u.Role, _ = s.db.roleOf(r.Context(), s.db.st, id)
 	writeJSON(w, http.StatusOK, u)
+}
+
+// mayGrantRole: a valid role whose scopes the caller holds (nobody grants more than they have).
+func (s *Service) mayGrantRole(p libauth.Principal, role string) bool {
+	if !ValidRole(role) {
+		return false
+	}
+	_, ok := grantable(p.Scopes, RoleScopes(s.app.Name, role))
+	return ok
 }
 
 // ---- API keys and pairing (machines) ----
