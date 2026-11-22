@@ -207,6 +207,29 @@ The friendly first run, with the same rule as the offline bootstrap: only whoeve
 
 The link is single use and expires (`--ttl`, default 30 minutes, at most 7 days); only its hash is stored, and it is refused once an owner exists (no new link either). The token rides in the URL fragment, so it never reaches a server log or a referrer. The page reads it and sends `POST /api/setup` with `{setup_token, display_name, username, password}`, an `X-Requested-With` header and this app's `Origin`; that creates the owner and signs them in under either `identity.setup` setting (`offline` keeps refusing the form without a token). Wrong, used or expired tokens answer 403 `setup_link_invalid` and count toward the per-address limit. Without `--url` the command prints the token alone. Go: `Service.SetupLink(ctx, ttl)` and `identity.SetupURL(base, token)`, for an installer that prints the link itself.
 
+## Recovering a locked-out account
+
+For someone who can no longer sign in (a lost passkey, lost authenticator and recovery codes, a forgotten
+password) when no other admin can help, as for a sole owner. Recovery works like setup links: only whoever can run
+the binary against the data can do it.
+
+```sh
+<app> identity recover --user <name> --url https://app.example.com    # prints …/recover#r=recover_…
+```
+
+The link is single use and expires (`--ttl`, default 30 minutes, at most 24 hours). Only its hash is stored. The
+page asks `POST /api/recover/check` `{token}` what it is for (`{username, display_name, totp, passkeys,
+passkey_only}`). It then sends `POST /api/recover` `{token, new_password?, clear_passkeys, clear_totp}`, with
+`X-Requested-With` and this app's `Origin`. That spends the link, applies the changes in one transaction
+(clearing passkeys also turns passkey-only off), ends the user's other sessions, and signs them in (`sign_in`:
+`recovery`). Wrong, used or expired links answer 403 `recovery_link_invalid` and count toward the per-address
+limit. Minting and using a link are logged at warning level, with the user and what changed. Go:
+`Service.RecoveryLink(ctx, username, ttl)` and `identity.RecoverURL(base, token)`. Migration `0006`.
+
+A passkey sign-in with a passkey this app doesn't have answers 401 `passkey_unknown` rather than
+`invalid_login`, so the page can send the person to their password. That happens when its user or the passkey
+was removed, or it was saved for another install at the same name.
+
 ## Offline bootstrap
 
 There is never an open first-run setup over HTTP on a host where agents run: loopback is not a boundary (an agent on the same host reached an app's loopback setup first and became its owner). The owner and the first keys are created offline, before the service starts. When an app selects `identity` and `cli`, the cli root gets:

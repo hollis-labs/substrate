@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -257,7 +258,8 @@ func (s *Service) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var who User
-	handler := func(_, userHandle []byte) (webauthn.User, error) {
+	known := false // the passkey is one this app has for that user
+	handler := func(rawID, userHandle []byte) (webauthn.User, error) {
 		u, err := s.db.userByID(r.Context(), string(userHandle))
 		if err != nil || u.Disabled {
 			return nil, ErrNotFound
@@ -266,11 +268,24 @@ func (s *Service) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			return nil, err
 		}
+		for _, c := range creds {
+			if bytes.Equal(c.ID, rawID) {
+				known = true
+			}
+		}
 		who = u
 		return waUser{u: u, creds: creds}, nil
 	}
 	cred, err := wa.ValidateDiscoverableLogin(handler, sd, parsed)
 	if err != nil || who.ID == "" {
+		if !known {
+			// A passkey saved for this site that the app does not have (its user or the passkey
+			// was removed, or it was made for another install): say so, so the page can send the
+			// person to their password instead of retrying.
+			s.limiter.fail(key, now)
+			apierr.Write(w, http.StatusUnauthorized, "passkey_unknown", "this passkey isn't registered here. Sign in with your password, then add it again from Passkeys", nil)
+			return
+		}
 		fail()
 		return
 	}
