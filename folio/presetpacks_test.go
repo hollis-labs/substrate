@@ -64,9 +64,9 @@ func TestPresetPacksSplitPreservesSurfaceRendering(t *testing.T) {
 		if beforeErr != nil {
 			t.Fatal(beforeErr)
 		}
-		after, err := makeService(combined).Plan(opts)
-		if err != nil {
-			t.Fatal(err)
+		after, afterErr := makeService(combined).Plan(opts)
+		if afterErr != nil {
+			t.Fatal(afterErr)
 		}
 		if !reflect.DeepEqual(before, after) {
 			t.Fatalf("%s output changed across pack split", id)
