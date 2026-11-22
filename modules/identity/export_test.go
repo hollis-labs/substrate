@@ -25,3 +25,12 @@ func SetTerminalForTest(isTerminal func(io.Reader) (int, bool), readNoEcho func(
 func (s *Service) MintForTest(sub string) (string, error) {
 	return s.mint(s.newClaims(sub, "user", s.cfg.audience, []string{"*"}, time.Minute, time.Now()))
 }
+
+// TOTPCodeForTest is the authenticator code for a base32 secret at a time.
+func TOTPCodeForTest(secret string, at time.Time) string {
+	b, err := b32.DecodeString(secret)
+	if err != nil {
+		panic(err)
+	}
+	return totpAt(b, at.Unix()/totpPeriod)
+}

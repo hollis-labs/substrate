@@ -55,6 +55,7 @@ third_party:
   golang.org/x/sys: v0.49.0         # unix peer credentials on darwin (httphost.PeerCredentials); the version x/crypto requires
   github.com/go-webauthn/webauthn: v0.18.2   # passkeys (identity module: WebAuthn registration and sign-in)
   github.com/descope/virtualwebauthn: v1.0.5   # test only: a software authenticator for the identity passkey tests
+  rsc.io/qr: v0.2.0                 # the QR code of a TOTP enrollment link (identity module), drawn server side as SVG
 kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
   "@hollis-labs/design-tokens": 0.5.0
   "@hollis-labs/design-components": 0.5.1

@@ -35,6 +35,11 @@
     { "method": "GET",    "path": "/api/identity/invites",         "scope": "{app}.admin" },
     { "method": "DELETE", "path": "/api/identity/invites/",        "scope": "{app}.admin" },
     { "method": "POST",   "path": "/api/invite/check",             "scope": "public" },
-    { "method": "POST",   "path": "/api/invite/accept",            "scope": "public" }
+    { "method": "POST",   "path": "/api/invite/accept",            "scope": "public" },
+    { "method": "GET",    "path": "/api/identity/totp",            "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/identity/totp/begin",      "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/identity/totp/confirm",    "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/identity/totp/recovery-codes", "scope": "authenticated" },
+    { "method": "DELETE", "path": "/api/identity/totp",            "scope": "authenticated" }
   ]
 }

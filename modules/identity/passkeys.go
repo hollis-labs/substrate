@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -428,6 +429,11 @@ func (s *Service) passkeyDelete(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(r.URL.Path, "/api/identity/passkeys/")
 	if s.db.passkeyOnly(r.Context(), u.ID) && s.db.passkeyCount(r.Context(), u.ID) <= 1 {
 		apierr.Write(w, http.StatusConflict, "last_passkey", "this is your last passkey and the account is passkey-only: turn passkey-only off first", nil)
+		return
+	}
+	if role, _ := s.db.roleOf(r.Context(), s.db.st, u.ID); slices.Contains(s.cfg.requireSecondFactor, role) &&
+		!s.db.totpEnabled(r.Context(), u.ID) && s.db.passkeyCount(r.Context(), u.ID) <= 1 {
+		apierr.Write(w, http.StatusConflict, "second_factor_required", "your role needs a second factor: turn TOTP on before removing your last passkey", nil)
 		return
 	}
 	res, err := s.db.st.ExecContext(r.Context(), s.db.q(`DELETE FROM identity_passkeys WHERE id = ? AND user_id = ?`), id, u.ID)

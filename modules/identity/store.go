@@ -62,15 +62,17 @@ func (d db) migrate(ctx context.Context) error {
 
 // User is an account.
 type User struct {
-	ID          string    `json:"id"`
-	Username    string    `json:"username"`
-	DisplayName string    `json:"display_name"`
-	Email       string    `json:"email,omitempty"`
-	Scopes      []string  `json:"scopes"`
-	Role        string    `json:"role,omitempty"` // in the default space; not a column of identity_users
-	Disabled    bool      `json:"disabled"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID          string   `json:"id"`
+	Username    string   `json:"username"`
+	DisplayName string   `json:"display_name"`
+	Email       string   `json:"email,omitempty"`
+	Scopes      []string `json:"scopes"`
+	Role        string   `json:"role,omitempty"` // in the default space; not a column of identity_users
+	Disabled    bool     `json:"disabled"`
+	// TOTP says two-step sign-in is on; filled in the users listing only.
+	TOTP      bool      `json:"totp,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 
 	passwordHash      string
 	passwordChangedAt time.Time

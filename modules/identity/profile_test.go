@@ -38,7 +38,7 @@ func TestProfileGetReturnsTheSignedInPerson(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, []string{"assurance", "display_name", "email", "id", "role", "scopes", "sign_in", "username"}) {
+	if !reflect.DeepEqual(keys, []string{"assurance", "display_name", "email", "id", "role", "scopes", "second_factor_required", "sign_in", "totp", "username"}) {
 		t.Fatalf("fields = %v", keys)
 	}
 	for _, bad := range []string{"hash", "password", "secret", "$2a$", "$2b$", "disabled"} {

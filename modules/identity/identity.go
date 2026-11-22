@@ -62,6 +62,8 @@
 //	                 https is believed (cookies Secure). trusted_proxy: true is the
 //	                 loopback case. Nobody else's forwarded headers count.
 //	passkeys:        false turns passkeys off even with a secure public_url.
+//	require_second_factor: roles (e.g. [owner, admin]) whose accounts must have TOTP or a
+//	                 passkey; until they do, their sessions carry no scopes (totp.go).
 //
 // Signing-key rotation: POST /api/identity/signing-key/rotate (scope
 // "<app>.admin", body {"compromised": bool}) swaps the signing key in the
@@ -152,6 +154,8 @@ type config struct {
 	allowNewKey                   bool
 	retiredTTL                    time.Duration
 	setupHTTP                     bool // identity.setup: http
+	// requireSecondFactor are roles whose accounts must have TOTP or a passkey.
+	requireSecondFactor []string
 }
 
 const maxTokenTTL = time.Hour
@@ -274,6 +278,15 @@ func parseConfig(app *module.App) (config, error) {
 	if c.cost < 4 || c.cost > 14 {
 		return c, errors.New("identity: bcrypt_cost must be between 4 and 14")
 	}
+	if l, ok := m["require_second_factor"].([]any); ok {
+		for _, v := range l {
+			r, _ := v.(string)
+			if !ValidRole(r) {
+				return c, fmt.Errorf("identity: require_second_factor: %q is not a role (owner, admin, member, guest)", v)
+			}
+			c.requireSecondFactor = append(c.requireSecondFactor, r)
+		}
+	}
 	switch str("setup", "offline") {
 	case "offline":
 	case "http":
@@ -312,8 +325,12 @@ func (s *Service) Verify(ctx context.Context, token string) (libauth.Principal, 
 		if err != nil {
 			return libauth.Principal{}, err
 		}
+		scopes := effectiveScopes(s.app.Name, u.Scopes, role)
+		if s.secondFactorRequired(ctx, u.ID, role) {
+			scopes = []string{} // enough to enroll (the signed-in identity routes), nothing else
+		}
 		return libauth.Principal{Verified: true, ID: userPrincipal(u.ID), Kind: "user", Display: u.DisplayName,
-			Scopes: effectiveScopes(s.app.Name, u.Scopes, role), Audience: s.cfg.audience, SessionID: sess.ID, ExpiresAt: sess.ExpiresAt}, nil
+			Scopes: scopes, Audience: s.cfg.audience, SessionID: sess.ID, ExpiresAt: sess.ExpiresAt}, nil
 	case strings.HasPrefix(token, keyPrefix):
 		c, err := s.db.credentialByToken(ctx, strings.TrimPrefix(token, keyPrefix), now)
 		if err != nil {

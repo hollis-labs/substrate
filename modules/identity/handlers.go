@@ -51,6 +51,9 @@ func (s *Service) handlers() map[string]http.Handler {
 	for k, v := range s.inviteRoutes(h) {
 		m[k] = v
 	}
+	for k, v := range s.totpRoutes(h) {
+		m[k] = v
+	}
 	return m
 }
 
@@ -218,10 +221,14 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, http.StatusForbidden, "bad_origin", "the request did not come from this app", nil)
 		return
 	}
-	var c credentials
-	if !decode(w, r, &c) {
+	var in struct {
+		credentials
+		Code string `json:"code"` // TOTP or recovery code, when the account has TOTP
+	}
+	if !decode(w, r, &in) {
 		return
 	}
+	c := in.credentials
 	username := strings.ToLower(strings.TrimSpace(c.Username))
 	key := username + "|" + clientAddr(r)
 	now := time.Now()
@@ -239,12 +246,26 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, http.StatusUnauthorized, "invalid_login", "invalid username or password", nil)
 		return
 	}
-	s.limiter.clear(key)
-	if s.db.passkeyOnly(r.Context(), u.ID) {
+	if s.db.passkeyOnly(r.Context(), u.ID) || s.passkeyInsteadOfPassword(r.Context(), u.ID) {
+		s.limiter.clear(key)
 		apierr.Write(w, http.StatusForbidden, "passkey_required", "this account signs in with a passkey only", nil)
 		return
 	}
-	s.startSession(w, r, u, MethodPassword)
+	method := MethodPassword
+	if s.db.totpEnabled(r.Context(), u.ID) {
+		if strings.TrimSpace(in.Code) == "" {
+			// The password was right; the page asks for the code and sends both again.
+			apierr.Write(w, http.StatusUnauthorized, "totp_required", "enter the code from your authenticator app", nil)
+			return
+		}
+		if method, err = s.checkSecondStep(r.Context(), u.ID, in.Code); err != nil {
+			s.limiter.fail(key, now)
+			badCode(w)
+			return
+		}
+	}
+	s.limiter.clear(key)
+	s.startSession(w, r, u, method)
 }
 
 // startSession creates a session, sets the cookie and answers with the user.
@@ -272,8 +293,12 @@ func truncate(s string, n int) string {
 // their role's), which is what the guard checks.
 func (s *Service) profile(ctx context.Context, u User) map[string]any {
 	role, _ := s.db.roleOf(ctx, s.db.st, u.ID)
+	scopes, need := effectiveScopes(s.app.Name, u.Scopes, role), s.secondFactorRequired(ctx, u.ID, role)
+	if need {
+		scopes = []string{}
+	}
 	return map[string]any{"id": u.ID, "username": u.Username, "display_name": u.DisplayName, "email": u.Email,
-		"scopes": effectiveScopes(s.app.Name, u.Scopes, role), "role": role}
+		"scopes": scopes, "role": role, "totp": s.db.totpEnabled(ctx, u.ID), "second_factor_required": need}
 }
 
 func (s *Service) logout(w http.ResponseWriter, r *http.Request) {
@@ -343,16 +368,14 @@ func (s *Service) getProfile(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, http.StatusForbidden, "user_required", "this needs a signed-in user", nil)
 		return
 	}
-	u, err := s.User(r.Context(), strings.TrimPrefix(p.ID, "user:"))
+	u, err := s.db.userByID(r.Context(), strings.TrimPrefix(p.ID, "user:"))
 	if err != nil || u.Disabled {
 		apierr.Write(w, http.StatusForbidden, "user_required", "this needs a signed-in user", nil)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id": u.ID, "username": u.Username, "display_name": u.DisplayName,
-		"email": u.Email, "scopes": effectiveScopes(s.app.Name, u.Scopes, u.Role), "role": u.Role,
-		"assurance": assuranceLocal, "sign_in": s.db.sessionMethod(r.Context(), p.SessionID),
-	})
+	prof := s.profile(r.Context(), u)
+	prof["assurance"], prof["sign_in"] = assuranceLocal, s.db.sessionMethod(r.Context(), p.SessionID)
+	writeJSON(w, http.StatusOK, prof)
 }
 
 func (s *Service) updateProfile(w http.ResponseWriter, r *http.Request) {
@@ -443,8 +466,10 @@ func (s *Service) listUsers(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
+	totp := s.db.totpUsers(r.Context())
 	for i := range users {
 		users[i].Role = roles[users[i].ID]
+		users[i].TOTP = totp[users[i].ID]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": orEmpty(users)})
 }
@@ -497,6 +522,8 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		Scopes   *[]string `json:"scopes"`
 		Password *string   `json:"password"`
 		Role     *string   `json:"role"`
+		// ResetTOTP removes the user's TOTP and recovery codes (a lost authenticator).
+		ResetTOTP bool `json:"reset_totp"`
 	}
 	if !decode(w, r, &in) {
 		return
@@ -544,6 +571,10 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 		}
 		set["password_hash"], set["password_changed_at"] = hash, time.Now().Unix()
 	}
+	if in.ResetTOTP && p.ID == userPrincipal(target.ID) {
+		bad(w, "turn your own TOTP off from your account (it takes a code)")
+		return
+	}
 	if in.Role != nil && !s.mayGrantRole(p, *in.Role) {
 		bad(w, "give a role whose scopes the caller itself holds (owner, admin, member or guest)")
 		return
@@ -558,6 +589,12 @@ func (s *Service) updateUser(w http.ResponseWriter, r *http.Request) {
 			apierr.Write(w, http.StatusConflict, "last_owner", "the last owner cannot be given another role", nil)
 			return
 		case err != nil:
+			failed(w)
+			return
+		}
+	}
+	if in.ResetTOTP {
+		if err := s.db.resetTOTP(r.Context(), id); err != nil {
 			failed(w)
 			return
 		}
