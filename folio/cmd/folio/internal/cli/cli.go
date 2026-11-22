@@ -67,6 +67,7 @@ directory; ` + "`folio plan`" + ` previews the same render without writing.`,
 	// The pointer is shared by command services and populated after Cobra parses
 	// flags. No filesystem is mounted unless explicitly selected for this run.
 	var packDirs []string
+	basePresets := bundledFS
 	mounted := &selectedPresets{FS: bundledFS}
 	root.PersistentFlags().StringArrayVar(&packDirs, "preset-pack", nil, "Trusted catalog root containing presets/<id> (repeatable; duplicate IDs fail)")
 	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
@@ -74,7 +75,7 @@ directory; ` + "`folio plan`" + ` previews the same render without writing.`,
 		for _, dir := range packDirs {
 			packs = append(packs, os.DirFS(dir))
 		}
-		combined, err := folio.WithPresetPacks(bundledFS, packs...)
+		combined, err := folio.WithPresetPacks(basePresets, packs...)
 		if err != nil {
 			return err
 		}
