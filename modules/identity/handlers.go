@@ -466,8 +466,10 @@ func (s *Service) listUsers(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
+	totp := s.db.totpUsers(r.Context())
 	for i := range users {
 		users[i].Role = roles[users[i].ID]
+		users[i].TOTP = totp[users[i].ID]
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": orEmpty(users)})
 }

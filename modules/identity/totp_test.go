@@ -128,6 +128,18 @@ func TestAdminResetsTOTP(t *testing.T) {
 	enrollTOTP(t, a, cookie(w.cookie("demo_session")))
 	code(t, a.login("sam", password), 401)
 
+	var list struct {
+		Users []struct {
+			Username string `json:"username"`
+			TOTP     bool   `json:"totp"`
+		} `json:"users"`
+	}
+	a.do("GET", "/api/identity/users", nil, own).json(&list)
+	for _, u := range list.Users {
+		if u.TOTP != (u.Username == "sam") {
+			t.Fatalf("users listing totp %+v", list)
+		}
+	}
 	code(t, a.do("PUT", "/api/identity/users/"+sam.ID, map[string]any{"reset_totp": true}, own), 200)
 	code(t, a.login("sam", password), 200)
 	// Your own needs a code, not the admin route.

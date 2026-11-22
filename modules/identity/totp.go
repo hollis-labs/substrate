@@ -212,6 +212,23 @@ func (d db) replaceRecoveryCodes(ctx context.Context, tx store.Tx, userID string
 	return nil
 }
 
+// totpUsers is the set of users with TOTP on.
+func (d db) totpUsers(ctx context.Context) map[string]bool {
+	out := map[string]bool{}
+	rows, err := d.st.QueryContext(ctx, d.q(`SELECT user_id FROM identity_totp WHERE enabled_at <> 0`))
+	if err != nil {
+		return out
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id string
+		if rows.Scan(&id) == nil {
+			out[id] = true
+		}
+	}
+	return out
+}
+
 // resetTOTP removes a user's TOTP and recovery codes.
 func (d db) resetTOTP(ctx context.Context, userID string) error {
 	return d.st.WriteTx(ctx, func(ctx context.Context, tx store.Tx) error {
