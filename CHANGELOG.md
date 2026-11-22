@@ -12,6 +12,12 @@ minor releases may break APIs.
 
 ### Added
 
+- `identity`: self-service API keys. `GET/POST /api/identity/me/keys` and `DELETE /api/identity/me/keys/{id}`
+  let anyone signed in (a browser session, not a key) make keys for their own tools, with scopes they hold, up
+  to 366 days or no expiry, and list and revoke their own.
+- `identity`: a key a person made works only while they do. A disabled or removed maker's keys stop working,
+  and a key's scopes are cut to what the maker holds now. Keys made by a module or the CLI are unchanged.
+  Such a key's `Principal.Parent` is its maker (`user:<id>`).
 - `identity`: offline account recovery. `<app> identity recover --user <name> [--url URL] [--ttl 30m]` mints a
   single-use, short-lived link (`<url>/recover#r=…`, at most 24h, only its hash stored). Opening it signs that
   user in and lets them set a new password and clear their passkeys (passkey-only off) and TOTP. Their other

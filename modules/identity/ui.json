@@ -42,6 +42,9 @@
     { "method": "POST",   "path": "/api/identity/totp/recovery-codes", "scope": "authenticated" },
     { "method": "DELETE", "path": "/api/identity/totp",            "scope": "authenticated" },
     { "method": "POST",   "path": "/api/recover/check",            "scope": "public" },
-    { "method": "POST",   "path": "/api/recover",                  "scope": "public" }
+    { "method": "POST",   "path": "/api/recover",                  "scope": "public" },
+    { "method": "GET",    "path": "/api/identity/me/keys",         "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/identity/me/keys",         "scope": "authenticated" },
+    { "method": "DELETE", "path": "/api/identity/me/keys/",        "scope": "authenticated" }
   ]
 }
