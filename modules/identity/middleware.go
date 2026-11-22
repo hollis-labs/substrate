@@ -22,6 +22,12 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
 			if c, err := r.Cookie(s.cfg.cookie); err == nil && strings.HasPrefix(c.Value, sessionPrefix) {
+				// A WebSocket upgrade is a GET, so it would skip the write checks; a browser
+				// always sends Origin on one, and a cross-site page must not ride the cookie.
+				if isUpgrade(r) && (r.Header.Get("Origin") == "" || !s.sameOrigin(r)) {
+					http.Error(w, `{"code":"bad_origin","message":"the connection did not come from this app"}`, http.StatusForbidden)
+					return
+				}
 				if unsafeMethod(r.Method) && !s.sameOrigin(r) {
 					http.Error(w, `{"code":"bad_origin","message":"the request did not come from this app"}`, http.StatusForbidden)
 					return
@@ -36,6 +42,11 @@ func (s *Service) Middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// isUpgrade reports a connection upgrade (a WebSocket handshake).
+func isUpgrade(r *http.Request) bool {
+	return r.Header.Get("Upgrade") != "" || strings.Contains(strings.ToLower(r.Header.Get("Connection")), "upgrade")
 }
 
 func unsafeMethod(m string) bool {

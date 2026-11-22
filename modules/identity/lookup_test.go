@@ -97,7 +97,7 @@ func TestUserLookupViewHasNoSecretFields(t *testing.T) {
 	for i := range rt.NumField() {
 		names = append(names, rt.Field(i).Name)
 	}
-	if !reflect.DeepEqual(names, []string{"ID", "Username", "DisplayName", "Email", "Scopes", "Disabled"}) {
+	if !reflect.DeepEqual(names, []string{"ID", "Username", "DisplayName", "Email", "Scopes", "Role", "Disabled"}) {
 		t.Fatalf("PublicUser fields changed: %v", names)
 	}
 }

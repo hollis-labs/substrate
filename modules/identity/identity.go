@@ -5,7 +5,9 @@
 //
 // What it gives an app
 //
-//	people    first-run setup (the owner), users, password sign-in and sign-out,
+//	people    first-run setup (the owner: offline, or through a single-use setup
+//	          link), users with a role in a space (owner, admin, member, guest;
+//	          roles grant scopes, see roles.go), password sign-in and sign-out,
 //	          password change, profile, session list and revoke. Browsers keep a
 //	          session cookie; Middleware turns it into the bearer the guard reads.
 //	machines  API keys with scopes and audiences, pairing codes another app
@@ -260,8 +262,12 @@ func (s *Service) Verify(ctx context.Context, token string) (libauth.Principal, 
 			return libauth.Principal{}, libauth.ErrInvalidToken
 		}
 		s.db.touchSession(ctx, sess.ID, now)
+		role, err := s.db.roleOf(ctx, s.db.st, u.ID)
+		if err != nil {
+			return libauth.Principal{}, err
+		}
 		return libauth.Principal{Verified: true, ID: userPrincipal(u.ID), Kind: "user", Display: u.DisplayName,
-			Scopes: u.Scopes, Audience: s.cfg.audience, SessionID: sess.ID, ExpiresAt: sess.ExpiresAt}, nil
+			Scopes: effectiveScopes(s.app.Name, u.Scopes, role), Audience: s.cfg.audience, SessionID: sess.ID, ExpiresAt: sess.ExpiresAt}, nil
 	case strings.HasPrefix(token, keyPrefix):
 		c, err := s.db.credentialByToken(ctx, strings.TrimPrefix(token, keyPrefix), now)
 		if err != nil {
@@ -296,6 +302,7 @@ func (s *Service) sweep(ctx context.Context) {
 			cutoff := time.Now().Add(-24 * time.Hour).Unix()
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_sessions WHERE expires_at < ? OR (revoked_at <> 0 AND revoked_at < ?)`), cutoff, cutoff)
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_pairing_codes WHERE expires_at < ?`), cutoff)
+			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_setup_tokens WHERE expires_at < ?`), cutoff)
 		}
 	}
 }

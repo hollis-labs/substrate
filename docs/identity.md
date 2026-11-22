@@ -54,15 +54,28 @@ With `identity` selected, `enforce` needs no other verifier.
 
 ## People
 
-1. First run: the owner is created offline, before the service starts (see [Offline bootstrap](#offline-bootstrap)). `GET /api/setup` says `{"setup_required": true, "setup_over_http": false}` until then and `{"setup_required": false, ...}` after. `POST /api/setup` is refused (403 `setup_offline`) unless `identity.setup` is `http`, a local-development opt-in under which `{display_name, username, password}` creates the owner (scope `*`), closes setup for good, and signs in.
+1. First run: the owner is created by someone who can run the binary on the host, either offline (`<app> identity setup`, see [Offline bootstrap](#offline-bootstrap)) or in the browser through a **setup link** (see [Setup links](#setup-links)). `GET /api/setup` says `{"setup_required": true, "setup_over_http": false, "setup_link": true}` until then and `{"setup_required": false, ...}` after. `POST /api/setup` without a setup token is refused (403 `setup_offline`) unless `identity.setup` is `http`, a local-development opt-in under which `{display_name, username, password}` creates the owner (role `owner`), closes setup for good, and signs in.
 2. `POST /api/login`, `POST /api/logout`, `PUT /api/password` (ends every other session), `GET /api/identity/profile`, `PUT /api/identity/profile`, `GET /api/identity/sessions`, `DELETE /api/identity/sessions/{id}`.
-3. Administrators (`<app>.admin`, which the owner holds through `*`) manage users: `GET|POST /api/identity/users`, `PUT /api/identity/users/{id}` (disable, scopes, password). Nobody can grant a scope they do not hold.
+3. Administrators (`<app>.admin`, which the owner holds through `*`) manage users: `GET|POST /api/identity/users`, `PUT /api/identity/users/{id}` (disable, role, scopes, password). Nobody can grant a scope, or a role whose scopes, they do not hold. An empty `scopes` list clears the user's own scopes.
+
+### Roles and spaces
+
+People belong to a **space** with a **role**. There is one space, `default`, until an app needs more (an org, a team or a workspace later is another space, not a new model). The role grants scopes on top of the user's own stored scopes, and the guard checks the union, so routes and tools keep declaring scopes and need not know about roles:
+
+| role | scopes it grants |
+|---|---|
+| `owner` | `*` |
+| `admin` | `<app>.admin`, `<app>.use`, `<app>.read` |
+| `member` | `<app>.use`, `<app>.read` |
+| `guest` | `<app>.read` |
+
+The app decides what `<app>.use` and `<app>.read` allow. The first user is the `owner`; `POST /api/identity/users` makes a `member` unless it is given a `role` (or only `scopes`); `PUT` changes the role. The last owner cannot be given another role (409 `last_owner`). A role change applies to the user's live sessions on their next request. On upgrade from a release without roles, existing users join the default space as `owner` (scope `*`), `admin` (a `<app>.admin` scope) or `member`. The users list, the profile and the sign-in answer carry `role`; the profile's `scopes` are the effective ones. Go: `Service.Role`, `Service.SetRole`, `PublicUser.Role`, `identity.RoleScopes`.
 
 `GET /api/identity/profile` (scope `authenticated`) answers who the caller is: `{id, username, display_name, email, scopes, assurance}`, the same shape sign-in and `PUT /api/identity/profile` return plus `assurance`. `assurance` is `"local"` for every caller today (the module holds the credentials itself); `"verified"` is reserved for an external verifier and is never emitted. Answers: 200 for a signed-in person; 401 `unauthorized` with no or a bad credential (the guard's signed-out answer); 403 `user_required` when the credential is not a person, which is an API key, a token minted from a key, or a disabled or removed account. A machine caller does not get a principal back from this route: it already knows its own key and scopes, and `user_required` is what every other person-only route answers. A token minted from a person's session still names that person and gets the profile. `scopes` is the stored list (a copy); a UI shows `scopes` as the caller's capabilities.
 
 `GET /api/setup` answers `{"setup_required": bool, "setup_over_http": bool}`. `setup_over_http` is true only when `identity.setup` is `http` (the local-development opt-in), that is, when `POST /api/setup` can create the owner on an empty instance. It reflects the setting alone: false in the default `offline` setting, true under `http` even after an owner exists (then `POST /api/setup` answers 409 `setup_closed`, and `setup_required` is false). A UI must not show a "create the owner" form when `setup_over_http` is false: with `setup_required` true and `setup_over_http` false it shows instructions instead, "run `<app> identity setup` on the host" (naming the app's binary), and no form, because `POST /api/setup` would answer 403 `setup_offline`. With `setup_required` false it shows the sign-in.
 
-A browser keeps a `HttpOnly`, `SameSite=Strict` cookie. Wrap the app's final handler in `identity.From(app).Middleware(handler)`: it turns the cookie into the bearer the guard verifies, and requires an `X-Requested-With` header and a same-origin `Origin` on cookie-authenticated writes. Five wrong passwords for a username and address lock further attempts for five minutes.
+A browser keeps a `HttpOnly`, `SameSite=Strict` cookie. Wrap the app's final handler in `identity.From(app).Middleware(handler)`: it turns the cookie into the bearer the guard verifies, and requires an `X-Requested-With` header and a same-origin `Origin` on cookie-authenticated writes. A cookie-authenticated connection upgrade (a WebSocket handshake, which is a `GET`) needs a same-origin `Origin` too (403 `bad_origin` without one). Five wrong passwords for a username and address lock further attempts for five minutes.
 
 Passwords are bcrypt, 12 to 72 bytes. Passkeys, signed approvals and other strict-mode proofs are not part of this module; they would be a later opt-in layer on the same users and sessions.
 
@@ -113,6 +126,9 @@ Revoking the key at B ends A's access within the token lifetime.
 
 ## Keys and storage
 
+The `identity_*` tables are created by numbered migrations (`modules/identity/migrations/{sqlite,postgres}`, goose format through libs `core/store/migrate`) under their own version table, `identity_schema`, apart from the app's migrations. Migration `0001` is the schema as releases before versioning created it (`CREATE TABLE IF NOT EXISTS`), so their databases upgrade in place.
+
+
 The signing key (Ed25519, PEM) is created `0600` at `identity.key_file` on first start, beside a public `<key_file>.jwks.json`. Several processes starting at once on one new data directory share one key: the create is exclusive (a private temp file hard-linked to `key_file`), and the process that loses reads the winner's key. Losing it invalidates minted tokens, not sessions or keys. State lives in `identity_*` tables created at start in the app's database (SQLite or Postgres). See the next section to rotate the key without breaking live tokens.
 
 ### One issuer per database
@@ -138,6 +154,16 @@ curl -s https://app/api/identity/signing-key -H "Authorization: Bearer $ADMIN_KE
 - **Limits.** One process per `key_file`; several instances sharing the directory would need a reload signal and are not supported. The emergency path that needs no running app: delete `key_file` and restart with `identity.allow_new_signing_key: true` for that one start (the guard below otherwise refuses, because the database holds identity rows), which invalidates every minted token; remove the setting afterwards. Every rotation is logged at warn level with the caller.
 
 Go: `identity.From(app).RotateSigningKey(compromised)` and `.SigningKey()` do the same in process. Boot hooks must not register modules.
+
+## Setup links
+
+The friendly first run, with the same rule as the offline bootstrap: only whoever can run the binary against the data can make the owner.
+
+```sh
+<app> identity setup-link --url http://hub.example:8470     # prints http://…/setup#t=setup_…
+```
+
+The link is single use and expires (`--ttl`, default 30 minutes, at most 7 days); only its hash is stored, and it is refused once an owner exists (no new link either). The token rides in the URL fragment, so it never reaches a server log or a referrer. The page reads it and sends `POST /api/setup` with `{setup_token, display_name, username, password}`, an `X-Requested-With` header and this app's `Origin`; that creates the owner and signs them in under either `identity.setup` setting (`offline` keeps refusing the form without a token). Wrong, used or expired tokens answer 403 `setup_link_invalid` and count toward the per-address limit. Without `--url` the command prints the token alone. Go: `Service.SetupLink(ctx, ttl)` and `identity.SetupURL(base, token)`, for an installer that prints the link itself.
 
 ## Offline bootstrap
 

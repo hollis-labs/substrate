@@ -72,7 +72,7 @@ func readPassword(c *cobra.Command) (string, error) {
 // key file and the secrets directory are the server's.
 func (s *Service) cliCommand() *cobra.Command {
 	root := &cobra.Command{Use: "identity", Short: "Offline identity bootstrap (owner and API keys, no server)"}
-	root.AddCommand(s.setupCmd(), s.keyCmd())
+	root.AddCommand(s.setupCmd(), s.setupLinkCmd(), s.keyCmd())
 	return root
 }
 
