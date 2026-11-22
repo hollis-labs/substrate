@@ -155,6 +155,12 @@ curl -s https://app/api/identity/signing-key -H "Authorization: Bearer $ADMIN_KE
 
 Go: `identity.From(app).RotateSigningKey(compromised)` and `.SigningKey()` do the same in process. Boot hooks must not register modules.
 
+### Invites
+
+How more people join. An administrator makes an invite for a role, with a label to remember who it is for: `POST /api/identity/invites` `{role, label?, ttl_hours?}` answers `{id, code, role, label, expires_at}`; the code is shown once (only its hash is kept), and the app turns it into a link (`<app>/invite#c=<code>`; the fragment keeps it out of logs). `GET /api/identity/invites` lists the pending ones, `DELETE /api/identity/invites/{id}` revokes one. An invite works once and expires (7 days by default, at most 30). Nobody can invite to a role whose scopes they do not hold.
+
+The invited person's page asks `POST /api/invite/check` `{code}` what the invite is for (`{role, label, app, expires_at}`, or 404 `invite_invalid`) and accepts it with `POST /api/invite/accept` `{code, username, display_name, password}` (with `X-Requested-With` and this app's `Origin`): the account is created with the invite's role, the invite is spent in the same transaction, and they are signed in. Both public routes count failures toward the per-address limit. Go: `Service.CreateInvite`, `PendingInvites`, `RevokeInvite`.
+
 ## Passkeys
 
 Passkeys (WebAuthn) are on when `identity.public_url` is a secure context: `https://…`, or `http://localhost…` (`passkeys: false` turns them off). The relying party is that URL's host and the only accepted origin its own; a browser offers passkeys only in a secure context, so a page should also check `window.isSecureContext`.

@@ -350,6 +350,7 @@ func (s *Service) sweep(ctx context.Context) {
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_pairing_codes WHERE expires_at < ?`), cutoff)
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_setup_tokens WHERE expires_at < ?`), cutoff)
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_webauthn_challenges WHERE expires_at < ?`), time.Now().Unix())
+			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_invites WHERE expires_at < ? AND used_at = 0`), cutoff)
 		}
 	}
 }
