@@ -2,6 +2,7 @@ package identity_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/descope/virtualwebauthn"
@@ -102,8 +103,25 @@ func TestPasskeyRegisterSignInAndPasskeyOnly(t *testing.T) {
 	code(t, a.login("owner", password), 200)
 	code(t, a.do("PUT", "/api/identity/passkeys/"+list.Passkeys[0].ID, map[string]string{"name": "Old laptop"}, cookie(pk)), 204)
 	code(t, a.do("DELETE", "/api/identity/passkeys/"+list.Passkeys[0].ID, nil, cookie(pk)), 204)
-	// Gone, it no longer signs in.
-	code(t, signIn(), 401)
+	// Gone, it no longer signs in, and the page is told it is not registered here.
+	w = signIn()
+	code(t, w, 401)
+	if !strings.Contains(w.Body.String(), "passkey_unknown") {
+		t.Fatalf("a removed passkey: %s", w.Body)
+	}
+	// A passkey (and user) this app never had: the same.
+	stranger := virtualwebauthn.NewAuthenticatorWithOptions(virtualwebauthn.AuthenticatorOptions{UserHandle: []byte("usr_nobody")})
+	other := virtualwebauthn.NewCredential(virtualwebauthn.KeyTypeEC2)
+	stranger.AddCredential(other)
+	var lg begun
+	a.do("POST", "/api/passkey/begin", map[string]any{}, origin).json(&lg)
+	asOpts, _ := virtualwebauthn.ParseAssertionOptions(string(lg.Options))
+	as := virtualwebauthn.CreateAssertionResponse(rp, stranger, other, *asOpts)
+	w = a.do("POST", "/api/passkey/finish", map[string]any{"challenge_id": lg.ChallengeID, "credential": json.RawMessage(as)}, origin)
+	code(t, w, 401)
+	if !strings.Contains(w.Body.String(), "passkey_unknown") {
+		t.Fatalf("an unknown passkey: %s", w.Body)
+	}
 }
 
 func TestPasskeysOffWithoutASecurePublicURL(t *testing.T) {

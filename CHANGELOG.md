@@ -12,6 +12,14 @@ minor releases may break APIs.
 
 ### Added
 
+- `identity`: offline account recovery. `<app> identity recover --user <name> [--url URL] [--ttl 30m]` mints a
+  single-use, short-lived link (`<url>/recover#r=…`, at most 24h, only its hash stored). Opening it signs that
+  user in and lets them set a new password and clear their passkeys (passkey-only off) and TOTP. Their other
+  sessions end. Routes: `POST /api/recover/check` and `POST /api/recover`, both public, with this app's origin
+  and `X-Requested-With`, and rate-limited. Minting and use are logged. Go: `Service.RecoveryLink`,
+  `RecoverURL`. Migration `0006`.
+- `identity`: a passkey sign-in with a passkey the app doesn't have (removed, or another install's) answers 401
+  `passkey_unknown` with a plain message instead of `invalid_login`.
 - `identity`: TOTP, a second sign-in step (RFC 6238: SHA-1, 30 seconds, 6 digits). Enroll with `POST /api/identity/totp/begin` (`{secret, uri, qr_svg}`) and `POST /api/identity/totp/confirm` `{code}`, which answers ten recovery codes once (stored only as hashes). `POST /api/login` then answers 401 `totp_required` until `code` is sent; a recovery code also works, once. Each code step is used only once. Also: `GET /api/identity/totp`, `POST /api/identity/totp/recovery-codes` and `DELETE /api/identity/totp`, both of which take a code, and the admin reset `PUT /api/identity/users/{id}` `{reset_totp: true}` (the users listing marks `totp`). `identity.require_second_factor` (roles) keeps such accounts' sessions scopeless until they have TOTP or a passkey. The profile adds `totp` and `second_factor_required`, and `sign_in` can be `password+totp` or `password+recovery`. A passkey sign-in needs no code. Migration `0005`. New dependency `rsc.io/qr` draws the QR code.
 - `identity`: invites. An administrator makes a single-use, expiring invite for a role (`POST /api/identity/invites` `{role, label?, ttl_hours?}`, default 7 days, at most 30; the code is returned once and stored only as a hash), lists the pending ones (`GET`) and revokes one (`DELETE /api/identity/invites/{id}`); nobody invites to a role whose scopes they lack. The invited person's page checks the code (`POST /api/invite/check`, public, rate-limited) and accepts it (`POST /api/invite/accept` `{code, username, display_name, password}`, public, with `X-Requested-With` and this app's `Origin`), which creates the account with the invite's role and signs them in, atomically with spending the invite. Go: `Service.CreateInvite`, `PendingInvites`, `RevokeInvite`. Migration `0004`.
 

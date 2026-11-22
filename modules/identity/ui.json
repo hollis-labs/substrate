@@ -40,6 +40,8 @@
     { "method": "POST",   "path": "/api/identity/totp/begin",      "scope": "authenticated" },
     { "method": "POST",   "path": "/api/identity/totp/confirm",    "scope": "authenticated" },
     { "method": "POST",   "path": "/api/identity/totp/recovery-codes", "scope": "authenticated" },
-    { "method": "DELETE", "path": "/api/identity/totp",            "scope": "authenticated" }
+    { "method": "DELETE", "path": "/api/identity/totp",            "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/recover/check",            "scope": "public" },
+    { "method": "POST",   "path": "/api/recover",                  "scope": "public" }
   ]
 }
