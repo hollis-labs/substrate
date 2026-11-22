@@ -48,6 +48,9 @@ func (s *Service) handlers() map[string]http.Handler {
 	for k, v := range s.passkeyRoutes(h) {
 		m[k] = v
 	}
+	for k, v := range s.inviteRoutes(h) {
+		m[k] = v
+	}
 	return m
 }
 
