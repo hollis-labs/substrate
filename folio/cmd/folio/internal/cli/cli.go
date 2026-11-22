@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-
 	"os"
 
 	"github.com/spf13/cobra"
