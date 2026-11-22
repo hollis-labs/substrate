@@ -84,7 +84,16 @@ type Session struct {
 	ExpiresAt  time.Time `json:"expires_at"`
 	LastSeenAt time.Time `json:"last_seen_at"`
 	Current    bool      `json:"current,omitempty"`
+	// Method is how it was signed in: password, passkey or setup.
+	Method string `json:"method,omitempty"`
 }
+
+// Sign-in methods recorded on a session.
+const (
+	MethodPassword = "password"
+	MethodPasskey  = "passkey"
+	MethodSetup    = "setup"
+)
 
 // Credential is a long-lived API key held by a person's tool or another app.
 type Credential struct {
@@ -266,9 +275,20 @@ func (d db) updateUser(ctx context.Context, id string, set map[string]any) error
 // ---- sessions ----
 
 func (d db) createSession(ctx context.Context, s Session, userID, secret string) error {
-	_, err := d.st.ExecContext(ctx, d.q(`INSERT INTO identity_sessions (id, user_id, token_hash, created_at, expires_at, last_seen_at, user_agent) VALUES (?,?,?,?,?,?,?)`),
-		s.ID, userID, hashToken(secret), unix(s.CreatedAt), unix(s.ExpiresAt), unix(s.LastSeenAt), s.UserAgent)
+	method := s.Method
+	if method == "" {
+		method = MethodPassword
+	}
+	_, err := d.st.ExecContext(ctx, d.q(`INSERT INTO identity_sessions (id, user_id, token_hash, created_at, expires_at, last_seen_at, user_agent, method) VALUES (?,?,?,?,?,?,?,?)`),
+		s.ID, userID, hashToken(secret), unix(s.CreatedAt), unix(s.ExpiresAt), unix(s.LastSeenAt), s.UserAgent, method)
 	return err
+}
+
+// sessionMethod is how a session was signed in ("" when unknown).
+func (d db) sessionMethod(ctx context.Context, id string) string {
+	var m string
+	_ = d.st.QueryRowContext(ctx, d.q(`SELECT method FROM identity_sessions WHERE id = ?`), id).Scan(&m)
+	return m
 }
 
 // sessionByToken returns the live session and its user for a session secret.

@@ -38,7 +38,7 @@ func TestProfileGetReturnsTheSignedInPerson(t *testing.T) {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	if !reflect.DeepEqual(keys, []string{"assurance", "display_name", "email", "id", "role", "scopes", "username"}) {
+	if !reflect.DeepEqual(keys, []string{"assurance", "display_name", "email", "id", "role", "scopes", "sign_in", "username"}) {
 		t.Fatalf("fields = %v", keys)
 	}
 	for _, bad := range []string{"hash", "password", "secret", "$2a$", "$2b$", "disabled"} {
@@ -57,6 +57,7 @@ func TestProfileGetMatchesTheShapeOfPut(t *testing.T) {
 	a.do("PUT", "/api/identity/profile", map[string]string{"display_name": "Chris"}, cookie(owner)).json(&viaPut)
 	a.do("GET", "/api/identity/profile", nil, cookie(owner)).json(&viaGet)
 	delete(viaGet, "assurance")
+	delete(viaGet, "sign_in") // about the request's session, not the account
 	if !reflect.DeepEqual(viaPut, viaGet) {
 		t.Fatalf("PUT %v vs GET %v", viaPut, viaGet)
 	}

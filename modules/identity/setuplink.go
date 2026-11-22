@@ -129,7 +129,7 @@ func (s *Service) setupWithToken(w http.ResponseWriter, r *http.Request, in setu
 		return
 	}
 	s.limiter.clear(key)
-	s.startSession(w, r, u)
+	s.startSession(w, r, u, MethodSetup)
 }
 
 type setupInput struct {

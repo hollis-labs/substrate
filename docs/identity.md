@@ -155,6 +155,21 @@ curl -s https://app/api/identity/signing-key -H "Authorization: Bearer $ADMIN_KE
 
 Go: `identity.From(app).RotateSigningKey(compromised)` and `.SigningKey()` do the same in process. Boot hooks must not register modules.
 
+## Passkeys
+
+Passkeys (WebAuthn) are on when `identity.public_url` is a secure context: `https://…`, or `http://localhost…` (`passkeys: false` turns them off). The relying party is that URL's host and the only accepted origin its own; a browser offers passkeys only in a secure context, so a page should also check `window.isSecureContext`.
+
+- **Add one** (signed in): `POST /api/identity/passkeys/register/begin` answers `{challenge_id, options}`; pass `options` to `navigator.credentials.create` and send the result as `POST /api/identity/passkeys/register/finish` `{challenge_id, credential, name}` (201 with the passkey). Resident keys are required, so the passkey can sign in without a username.
+- **Sign in**: `POST /api/passkey/begin` (public) answers `{challenge_id, options}` for `navigator.credentials.get`; `POST /api/passkey/finish` `{challenge_id, credential}` signs in (the session cookie, as `/api/login`). Failures answer 401 `invalid_login` and count toward the per-address limit.
+- **Manage**: `GET /api/identity/passkeys` (`{passkeys, passkey_only, enabled}`), `PUT /api/identity/passkeys/{id}` `{name}`, `DELETE /api/identity/passkeys/{id}`.
+- **Passkey-only**: `PUT /api/identity/passkey-only` `{enabled}` makes the account refuse its password (403 `passkey_required`, given only after the password checked out). It needs a passkey first, and while it is on the last passkey cannot be deleted (409 `last_passkey`).
+
+Each ceremony's server half (the challenge) is stored for 5 minutes and used once. A session records how it was signed in (`password`, `passkey` or `setup`); the profile reports it as `sign_in`.
+
+### Behind a proxy, or on HTTPS
+
+Set `public_url` to the address people use. An https `public_url` makes the session cookie `Secure`. A TLS-terminating proxy (a tunnel, `tailscale serve`, Caddy) is believed only from the peers listed in `trusted_proxies` (CIDRs; `trusted_proxy: true` is loopback): exactly one `X-Forwarded-Proto: https` from one of them makes the cookie `Secure` when `public_url` is not set; anyone else's forwarded headers are ignored.
+
 ## Setup links
 
 The friendly first run, with the same rule as the offline bootstrap: only whoever can run the binary against the data can make the owner.

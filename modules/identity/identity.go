@@ -53,6 +53,15 @@
 //	                 first-run setup over HTTP, for local development only.
 //	allowed_origins: extra exact origins whose cookie-authenticated writes are
 //	                 accepted; the request's own origin always is.
+//	public_url:      where people reach the app ("https://app.example.com"): its origin
+//	                 is accepted like the request's own, an https one makes cookies
+//	                 Secure, and its host is the WebAuthn relying party for passkeys
+//	                 (passkeys need https, or http on localhost). Behind a TLS proxy set
+//	                 it to the proxy's public address.
+//	trusted_proxies: CIDRs of TLS-terminating proxies whose single X-Forwarded-Proto:
+//	                 https is believed (cookies Secure). trusted_proxy: true is the
+//	                 loopback case. Nobody else's forwarded headers count.
+//	passkeys:        false turns passkeys off even with a secure public_url.
 //
 // Signing-key rotation: POST /api/identity/signing-key/rotate (scope
 // "<app>.admin", body {"compromised": bool}) swaps the signing key in the
@@ -72,6 +81,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -79,6 +90,7 @@ import (
 
 	libauth "github.com/hollis-labs/libs/security/auth"
 
+	"github.com/hollis-labs/substrate/forwarded"
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/auth"
 	"github.com/hollis-labs/substrate/modules/cli"
@@ -130,11 +142,16 @@ type config struct {
 	minPassword, cost        int
 	secure                   string
 	trustedProxy             bool
+	proxies                  []netip.Prefix // trusted_proxies (and trusted_proxy: loopback)
 	origins                  map[string]bool
-	keyFile                  string
-	allowNewKey              bool
-	retiredTTL               time.Duration
-	setupHTTP                bool // identity.setup: http
+	// publicURL is where people reach the app (public_url), "" when not set: its origin is
+	// accepted, an https one makes cookies Secure, and its host is the WebAuthn RP ID.
+	publicURL, publicOrigin, rpID string
+	passkeys                      bool // WebAuthn is on (public_url set, a secure context, passkeys not false)
+	keyFile                       string
+	allowNewKey                   bool
+	retiredTTL                    time.Duration
+	setupHTTP                     bool // identity.setup: http
 }
 
 const maxTokenTTL = time.Hour
@@ -208,6 +225,35 @@ func parseConfig(app *module.App) (config, error) {
 		origins: map[string]bool{},
 	}
 	c.trustedProxy, _ = m["trusted_proxy"].(bool)
+	if c.trustedProxy {
+		c.proxies = append(c.proxies, forwarded.Loopback...)
+	}
+	if l, ok := m["trusted_proxies"].([]any); ok {
+		var list []string
+		for _, v := range l {
+			if s, ok := v.(string); ok {
+				list = append(list, s)
+			}
+		}
+		ps, err := forwarded.ParsePrefixes(list)
+		if err != nil {
+			return c, fmt.Errorf("identity: trusted_proxies: %w", err)
+		}
+		c.proxies = append(c.proxies, ps...)
+	}
+	if pu := strings.TrimRight(str("public_url", ""), "/"); pu != "" {
+		u, err := url.Parse(pu)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || u.Path != "" {
+			return c, fmt.Errorf("identity: public_url %q must be http(s)://host[:port], with no path", pu)
+		}
+		c.publicURL, c.publicOrigin, c.rpID = pu, u.Scheme+"://"+u.Host, u.Hostname()
+		c.origins[c.publicOrigin] = true
+		// WebAuthn needs a secure context: https, or http on localhost.
+		c.passkeys = u.Scheme == "https" || u.Hostname() == "localhost"
+		if v, ok := m["passkeys"].(bool); ok && !v {
+			c.passkeys = false
+		}
+	}
 	c.allowNewKey, _ = m["allow_new_signing_key"].(bool)
 	var err error
 	if c.sessionTTL, err = dur("session_ttl", "720h"); err != nil {
@@ -303,6 +349,7 @@ func (s *Service) sweep(ctx context.Context) {
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_sessions WHERE expires_at < ? OR (revoked_at <> 0 AND revoked_at < ?)`), cutoff, cutoff)
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_pairing_codes WHERE expires_at < ?`), cutoff)
 			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_setup_tokens WHERE expires_at < ?`), cutoff)
+			_, _ = s.db.st.ExecContext(ctx, s.db.q(`DELETE FROM identity_webauthn_challenges WHERE expires_at < ?`), time.Now().Unix())
 		}
 	}
 }

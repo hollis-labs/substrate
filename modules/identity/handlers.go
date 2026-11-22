@@ -22,7 +22,7 @@ var usernameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{1,63}$`)
 
 func (s *Service) handlers() map[string]http.Handler {
 	h := func(f http.HandlerFunc) http.Handler { return f }
-	return map[string]http.Handler{
+	m := map[string]http.Handler{
 		"GET /api/setup":                        h(s.setupStatus),
 		"POST /api/setup":                       h(s.setup),
 		"POST /api/login":                       h(s.login),
@@ -45,6 +45,10 @@ func (s *Service) handlers() map[string]http.Handler {
 		"POST /api/identity/signing-key/rotate": h(s.rotateSigningKey),
 		"GET /api/identity/signing-key":         h(s.signingKeyState),
 	}
+	for k, v := range s.passkeyRoutes(h) {
+		m[k] = v
+	}
+	return m
 }
 
 // ---- small helpers ----
@@ -137,7 +141,7 @@ func (s *Service) setupStatus(w http.ResponseWriter, r *http.Request) {
 	// the owner is created offline ("<app> identity setup").
 	// setup_link says POST /api/setup takes a setup_token (a link "<app> identity
 	// setup-link" printed), whatever identity.setup says.
-	writeJSON(w, http.StatusOK, map[string]any{"setup_required": !exists, "setup_over_http": s.cfg.setupHTTP, "setup_link": true})
+	writeJSON(w, http.StatusOK, map[string]any{"setup_required": !exists, "setup_over_http": s.cfg.setupHTTP, "setup_link": true, "passkeys": s.cfg.passkeys})
 }
 
 type credentials struct {
@@ -203,7 +207,7 @@ func (s *Service) setup(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
-	s.startSession(w, r, u)
+	s.startSession(w, r, u, MethodSetup)
 }
 
 func (s *Service) login(w http.ResponseWriter, r *http.Request) {
@@ -233,14 +237,18 @@ func (s *Service) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.limiter.clear(key)
-	s.startSession(w, r, u)
+	if s.db.passkeyOnly(r.Context(), u.ID) {
+		apierr.Write(w, http.StatusForbidden, "passkey_required", "this account signs in with a passkey only", nil)
+		return
+	}
+	s.startSession(w, r, u, MethodPassword)
 }
 
 // startSession creates a session, sets the cookie and answers with the user.
-func (s *Service) startSession(w http.ResponseWriter, r *http.Request, u User) {
+func (s *Service) startSession(w http.ResponseWriter, r *http.Request, u User, method string) {
 	now := time.Now().UTC()
 	secret := randomString(32)
-	sess := Session{ID: newID("ss_"), UserAgent: truncate(r.UserAgent(), 200), CreatedAt: now, ExpiresAt: now.Add(s.cfg.sessionTTL), LastSeenAt: now}
+	sess := Session{ID: newID("ss_"), UserAgent: truncate(r.UserAgent(), 200), CreatedAt: now, ExpiresAt: now.Add(s.cfg.sessionTTL), LastSeenAt: now, Method: method}
 	if err := s.db.createSession(r.Context(), sess, u.ID, secret); err != nil {
 		failed(w)
 		return
@@ -340,7 +348,7 @@ func (s *Service) getProfile(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": u.ID, "username": u.Username, "display_name": u.DisplayName,
 		"email": u.Email, "scopes": effectiveScopes(s.app.Name, u.Scopes, u.Role), "role": u.Role,
-		"assurance": assuranceLocal,
+		"assurance": assuranceLocal, "sign_in": s.db.sessionMethod(r.Context(), p.SessionID),
 	})
 }
 
