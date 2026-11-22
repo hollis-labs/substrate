@@ -336,8 +336,18 @@ func (s *Service) Verify(ctx context.Context, token string) (libauth.Principal, 
 		if err != nil {
 			return libauth.Principal{}, libauth.ErrInvalidToken
 		}
+		scopes, live := s.boundByCreator(ctx, c)
+		if !live {
+			return libauth.Principal{}, libauth.ErrInvalidToken
+		}
+		// Parent is the person a key acts for ("user:<id>"), when a person made it: an app
+		// attributes the key's work to them.
+		var parent string
+		if strings.HasPrefix(c.CreatedBy, "user:") {
+			parent = c.CreatedBy
+		}
 		return libauth.Principal{Verified: true, ID: "key:" + c.ID, Kind: "service", Display: c.Name,
-			Scopes: c.Scopes, Audience: s.cfg.audience, TokenID: c.ID, ExpiresAt: c.ExpiresAt}, nil
+			Scopes: scopes, Audience: s.cfg.audience, TokenID: c.ID, ExpiresAt: c.ExpiresAt, Parent: parent}, nil
 	}
 	return s.current().jwt.Verify(ctx, token)
 }

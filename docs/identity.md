@@ -99,6 +99,25 @@ A tool or another app holds an **API key** or a **short-lived token**.
 - `POST /api/token` trades any credential the caller holds (a session, a key, a token) for an EdDSA JWT: `{scopes?, audience?, ttl_seconds?}` returns `{token, expires_at, ttl_seconds, scopes, audience}`. Scopes can only narrow. A token for another **audience** is allowed only if the key lists that audience (or the caller is an administrator). Tokens last 15 minutes by default and at most an hour.
 - The reply has the shape Tether's mint endpoint has, so a client app configures it as its own token source: `auth.mint_url: https://issuer/api/token`, `auth.mint_credential_file: <file holding the key>`, and `auth.mint_body: {audience: "the-callee"}`. The auth module refreshes the token and attaches it to outbound calls (`auth.HTTPClient`).
 
+### Your own keys
+
+Anyone signed in can make keys for their own tools, such as an agent on their laptop or a script. They need a
+signed-in browser session; a key can't make keys.
+
+- `GET /api/identity/me/keys` lists the caller's keys that aren't revoked.
+- `POST /api/identity/me/keys` `{name, scopes, ttl_hours}` makes one, with scopes the caller holds. `ttl_hours`
+  is at most 366 days, and 0 means no expiry. The secret is returned once.
+- `DELETE /api/identity/me/keys/{id}` revokes one of the caller's own keys.
+
+Administrators see and revoke everyone's keys on `GET`/`DELETE /api/identity/keys`, where `created_by` names the
+maker.
+
+A key someone made works only while they do. If they are disabled or removed, it stops working (401). It also
+never has more than they hold now: after a demotion, scopes they no longer hold are dropped at the next request.
+Keys a module or the CLI made are not affected. The key's
+principal is `key:<id>`, and its `Parent` is the maker (`user:<id>`), so an app can attribute the key's work to
+that person.
+
 ### What a revoke ends
 
 A revoke takes effect at once for what is looked up in the database, and not at all for what has already been verified.

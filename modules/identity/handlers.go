@@ -57,6 +57,9 @@ func (s *Service) handlers() map[string]http.Handler {
 	for k, v := range s.recoverRoutes(h) {
 		m[k] = v
 	}
+	for k, v := range s.myKeysRoutes(h) {
+		m[k] = v
+	}
 	return m
 }
 
