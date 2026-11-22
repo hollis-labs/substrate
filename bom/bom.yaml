@@ -53,6 +53,8 @@ third_party:
   golang.org/x/term: v0.47.0        # no-echo password prompt (identity offline bootstrap); the version x/crypto requires
   github.com/modelcontextprotocol/go-sdk: v1.8.0   # MCP stdio transport (go-mcp wraps it)
   golang.org/x/sys: v0.49.0         # unix peer credentials on darwin (httphost.PeerCredentials); the version x/crypto requires
+  github.com/go-webauthn/webauthn: v0.18.2   # passkeys (identity module: WebAuthn registration and sign-in)
+  github.com/descope/virtualwebauthn: v1.0.5   # test only: a software authenticator for the identity passkey tests
 kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
   "@hollis-labs/design-tokens": 0.5.0
   "@hollis-labs/design-components": 0.5.1

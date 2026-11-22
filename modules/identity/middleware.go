@@ -78,8 +78,8 @@ func (s *Service) secureCookie(r *http.Request) bool {
 	case "never":
 		return false
 	}
-	if r.TLS != nil {
+	if r.TLS != nil || strings.HasPrefix(s.cfg.publicURL, "https://") {
 		return true
 	}
-	return s.cfg.trustedProxy && forwarded.HTTPS(r)
+	return forwarded.HTTPSFrom(r, s.cfg.proxies)
 }

@@ -181,7 +181,9 @@ func TestUnversionedDatabaseUpgrades(t *testing.T) {
 	code(t, a.do("POST", "/api/identity/users", map[string]any{"username": "ops", "password": password, "scopes": []string{"demo.admin"}}, cookie(own)), 201)
 	code(t, a.do("POST", "/api/identity/users", map[string]any{"username": "viewer", "password": password, "scopes": []string{"demo.read"}}, cookie(own)), 201)
 	st := database.From(a.running.App)
-	for _, q := range []string{`DROP TABLE identity_schema`, `DROP TABLE identity_memberships`, `DROP TABLE identity_spaces`, `DROP TABLE identity_setup_tokens`} {
+	for _, q := range []string{`DROP TABLE identity_schema`, `DROP TABLE identity_memberships`, `DROP TABLE identity_spaces`, `DROP TABLE identity_setup_tokens`,
+		`DROP TABLE identity_passkeys`, `DROP TABLE identity_webauthn_challenges`,
+		`ALTER TABLE identity_users DROP COLUMN passkey_only`, `ALTER TABLE identity_sessions DROP COLUMN method`} {
 		if _, err := st.ExecContext(context.Background(), q); err != nil {
 			t.Fatal(err)
 		}

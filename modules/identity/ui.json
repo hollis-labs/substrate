@@ -22,6 +22,14 @@
     { "method": "DELETE", "path": "/api/identity/keys/",           "scope": "{app}.admin" },
     { "method": "POST",   "path": "/api/identity/pairing-codes",   "scope": "{app}.admin" },
     { "method": "POST",   "path": "/api/identity/signing-key/rotate", "scope": "{app}.admin" },
-    { "method": "GET",    "path": "/api/identity/signing-key",     "scope": "{app}.admin" }
+    { "method": "GET",    "path": "/api/identity/signing-key",     "scope": "{app}.admin" },
+    { "method": "POST",   "path": "/api/passkey/begin",            "scope": "public" },
+    { "method": "POST",   "path": "/api/passkey/finish",           "scope": "public" },
+    { "method": "GET",    "path": "/api/identity/passkeys",        "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/identity/passkeys/register/begin",  "scope": "authenticated" },
+    { "method": "POST",   "path": "/api/identity/passkeys/register/finish", "scope": "authenticated" },
+    { "method": "PUT",    "path": "/api/identity/passkeys/",       "scope": "authenticated" },
+    { "method": "DELETE", "path": "/api/identity/passkeys/",       "scope": "authenticated" },
+    { "method": "PUT",    "path": "/api/identity/passkey-only",    "scope": "authenticated" }
   ]
 }
