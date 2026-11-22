@@ -6,6 +6,11 @@ on:
     inputs:
       app:           { type: string,  required: true,  description: "artifact/tarball name, e.g. basalisk" }
       version:       { type: string, required: false, default: "", description: "explicit v-prefixed SemVer for release builds; empty preserves git-derived version" }
+      build_runner:
+        type: string
+        required: false
+        default: '["self-hosted","build-1"]'
+        description: 'JSON runs-on selector; use "ubuntu-latest" for a hosted build.'
       main_pkg:      { type: string,  required: true,  description: "go package to build, e.g. ./cmd/basalisk" }
       binary:        { type: string,  required: false, default: "" , description: "file name inside the tarball (default: app)" }
       targets:       { type: string,  required: false, default: '["linux/amd64","darwin/arm64"]' }
@@ -54,7 +59,7 @@ jobs:
     needs: test
     # A fork PR never reaches build-1; same-repo branches and pushes do.
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, build-1]
+    runs-on: ${{ fromJSON(inputs.build_runner) }}
     timeout-minutes: 30
     outputs:
       version:  ${{ steps.ver.outputs.version }}
