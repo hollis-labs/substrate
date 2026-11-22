@@ -176,6 +176,27 @@ Each ceremony's server half (the challenge) is stored for 5 minutes and used onc
 
 Set `public_url` to the address people use. An https `public_url` makes the session cookie `Secure`. A TLS-terminating proxy (a tunnel, `tailscale serve`, Caddy) is believed only from the peers listed in `trusted_proxies` (CIDRs; `trusted_proxy: true` is loopback): exactly one `X-Forwarded-Proto: https` from one of them makes the cookie `Secure` when `public_url` is not set; anyone else's forwarded headers are ignored.
 
+## Two-step sign-in (TOTP)
+
+Authenticator-app codes (RFC 6238: SHA-1, 30 seconds, 6 digits) as a second step after the password. People move up when they choose to: password, then password and TOTP, then a passkey, then passkey-only.
+
+- **Turn it on** (signed in): `POST /api/identity/totp/begin` answers `{secret, uri, qr_svg}`. The page shows the QR code (an SVG of the `otpauth://` link) and the secret for typing. `POST /api/identity/totp/confirm` `{code}` proves the app has it, turns TOTP on and answers ten `recovery_codes`, shown once. Starting again before confirming replaces the pending secret; once it is on, `begin` answers 409 `totp_enabled`.
+- **Sign in**: `POST /api/login` with the right password and no `code` answers 401 `totp_required`. The page asks for the code and sends `{username, password, code}` again. A wrong code answers 401 `invalid_code` and counts toward the sign-in limit. A recovery code works in place of a code, once (case, spaces and dashes don't matter). The session's `sign_in` is `password+totp` or `password+recovery`. A passkey sign-in asks for no code.
+- **Manage**: `GET /api/identity/totp` (`{enabled, pending, recovery_codes_left, required}`). `POST /api/identity/totp/recovery-codes` `{code}` replaces the recovery codes with a new set. `DELETE /api/identity/totp` `{code}` turns TOTP off. Both take a current code or a recovery code, and the per-person limit counts wrong ones.
+- **Lost the app and the codes**: an administrator resets it with `PUT /api/identity/users/{id}` `{"reset_totp": true}`, but not for themselves.
+
+A code is accepted for the step before and after the current one, and each step only once. The secret is stored as is, because an authenticator secret cannot be hashed; the recovery codes are stored only as hashes. The profile adds `totp`. Migration `0005`.
+
+### Requiring a second factor
+
+`identity.require_second_factor: [owner, admin]` lists roles whose accounts must have TOTP, or a passkey when passkeys are on. Until such an account has one:
+
+- its sessions carry no scopes, so only the signed-in identity routes answer, which is enough to enroll;
+- the profile says `second_factor_required: true` (and `scopes: []`);
+- the page sends the person to set one up.
+
+The restriction lifts on the next request after enrolling. Such an account can't turn TOTP off without a passkey, or delete its last passkey without TOTP (409 `second_factor_required`). With a passkey and no TOTP, it signs in with the passkey: a password alone answers 403 `passkey_required`.
+
 ## Setup links
 
 The friendly first run, with the same rule as the offline bootstrap: only whoever can run the binary against the data can make the owner.
