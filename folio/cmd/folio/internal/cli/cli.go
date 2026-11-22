@@ -9,11 +9,11 @@ import (
 	"fmt"
 	"io/fs"
 
-	"github.com/hollis-labs/tools/folio"
 	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/hollis-labs/tools/folio"
 	"github.com/hollis-labs/tools/folio/service"
 )
 

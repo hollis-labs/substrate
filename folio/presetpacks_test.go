@@ -51,8 +51,8 @@ func TestPresetPacksSplitPreservesSurfaceRendering(t *testing.T) {
 	for name := range surface {
 		files = append(files, name)
 	}
-	if err := fstest.TestFS(combined, files...); err != nil {
-		t.Fatal(err)
+	if fsErr := fstest.TestFS(combined, files...); fsErr != nil {
+		t.Fatal(fsErr)
 	}
 	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
 	makeService := func(catalog fs.FS) *service.Service {
@@ -60,9 +60,9 @@ func TestPresetPacksSplitPreservesSurfaceRendering(t *testing.T) {
 	}
 	for _, id := range []string{"surface-app", "surface-desk"} {
 		opts := service.NewOptions{PresetID: id, TargetDir: "example", Inputs: map[string]any{"repo_name": "pack-check"}}
-		before, err := makeService(folio.BundledPresets).Plan(opts)
-		if err != nil {
-			t.Fatal(err)
+		before, beforeErr := makeService(folio.BundledPresets).Plan(opts)
+		if beforeErr != nil {
+			t.Fatal(beforeErr)
 		}
 		after, err := makeService(combined).Plan(opts)
 		if err != nil {
