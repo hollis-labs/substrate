@@ -331,3 +331,25 @@ FOLIO_NANITE=/tmp/folio-nanite/embed-host go test -run TestAgentDir -v .
 
 When `FOLIO_NANITE` is unset the loader check logs a skip; render and resolver tests
 still run. Folio's generator module has no runtime Nanite dependency.
+
+
+## Preset packs
+
+`folio --preset-pack /path/to/catalog preset list` adds a trusted catalog to
+this invocation. A catalog contains `presets/<id>/preset.yaml` and its files;
+the flag is repeatable. Built-in presets remain available. Duplicate preset
+directory names fail before the command runs, so packs cannot silently replace
+framework scaffolding. Local user-preset lookup keeps its existing precedence.
+
+Packs share the virtual `presets/` root with built-ins. Existing relative
+composition paths, declared IDs and version constraints are checked across that
+root. This lets Surface own its three `surface-*` presets while `surface-desk`
+composes Substrate's single `agent-dir` layer. The API equivalent is
+`folio.WithPresetPacks(bundledFS, packFS...)`; pass the result as `BundledFS`.
+
+Use a pinned checkout or an extracted, verified release pack. Folio does not
+fetch packs, execute installers, resolve remote versions or change application
+pins. Treat templates as trusted code. The manifest retains each preset's
+ID/version and the existing logical `bundled:presets/...` paths; it does not yet
+record pack repository revisions. Keep the selected catalog revision with your
+build inputs. Physical source relocation is a separate cleanup step.

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+
+	"github.com/hollis-labs/tools/folio"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -62,6 +64,25 @@ directory; ` + "`folio plan`" + ` previews the same render without writing.`,
 		DisableAutoGenTag: true,
 	}
 
+	// The pointer is shared by command services and populated after Cobra parses
+	// flags. No filesystem is mounted unless explicitly selected for this run.
+	var packDirs []string
+	mounted := &selectedPresets{FS: bundledFS}
+	root.PersistentFlags().StringArrayVar(&packDirs, "preset-pack", nil, "Trusted catalog root containing presets/<id> (repeatable; duplicate IDs fail)")
+	root.PersistentPreRunE = func(_ *cobra.Command, _ []string) error {
+		packs := make([]fs.FS, 0, len(packDirs))
+		for _, dir := range packDirs {
+			packs = append(packs, os.DirFS(dir))
+		}
+		combined, err := folio.WithPresetPacks(bundledFS, packs...)
+		if err != nil {
+			return err
+		}
+		mounted.FS = combined
+		return nil
+	}
+	bundledFS = mounted
+
 	root.AddCommand(newCmd(bundledFS, version))
 	root.AddCommand(makeCmd(bundledFS, version))
 	root.AddCommand(planCmd(bundledFS, version))
@@ -103,4 +124,14 @@ func fprintln(cmd *cobra.Command, msg string) {
 		return
 	}
 	fmt.Fprintln(os.Stderr, msg)
+}
+
+// selectedPresets defers filesystem selection until persistent flags are parsed.
+type selectedPresets struct{ fs.FS }
+
+func (s *selectedPresets) Open(name string) (fs.File, error) {
+	if s.FS == nil {
+		return nil, &fs.PathError{Op: "open", Path: name, Err: fs.ErrNotExist}
+	}
+	return s.FS.Open(name)
 }
