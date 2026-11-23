@@ -33,7 +33,7 @@ the recorded original. Generated projects are separate files and are not rolled 
 
 ## Release separately
 
-Modules use `folio/vX.Y.Z` tags in `hollis-labs/tools`. A future release updates the changelog, runs the
+Modules use `folio/vX.Y.Z` tags in `hollis-labs/substrate` (historical tools tags remain in their original repository). A future release updates the changelog, runs the
 repository's release dry run, and follows the maintainer's release authorization. Never infer a release
 number from an old cutover note or retag an existing release. The driver owns the final installation
 report; this document does not claim installation has already happened.

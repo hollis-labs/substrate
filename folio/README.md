@@ -55,6 +55,8 @@ Folio itself never installs, builds or runs a rendered project. See [architectur
 
 ## Surface apps
 
+These presets are owned by [Surface’s catalog](https://github.com/hollis-labs/surface/tree/main/scaffolding) and require its explicit `--preset-pack`; they are not embedded in Folio.
+
 `surface-app` (a plain web app: the app frame and views) and `surface-desk` (a Go server on Surface with
 windows, the agent panel and cards) scaffold an app whose interface is built from Surface's `@surface`
 registry at a pinned release: the theme, the raw-control lint rule, `npx surface-ui verify` in CI, agent

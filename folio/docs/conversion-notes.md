@@ -1,6 +1,6 @@
 # Conversion notes
 
-Folio itself remains a local command-line tool in `hollis-labs/tools/folio`. Its own `project.yaml`
+Folio itself remains a local command-line tool in `hollis-labs/substrate/folio`. Its own `project.yaml`
 records class 2, the CLI interface and ownership. It currently has no Substrate runtime, authentication
 or policy gate; the caller's OS permissions govern its operations. This is a documented gap relative
 to the runtime class bar, not a claim that Folio already implements its generated presets' runtime.

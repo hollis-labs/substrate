@@ -8,7 +8,7 @@ lifecycle: active
 visibility: public
 owner: user:chrispian
 org: hollis-labs
-repo: https://github.com/hollis-labs/tools
+repo: https://github.com/hollis-labs/substrate
 location: folio
 interfaces:
   - { type: cli, name: folio, auth: none }
