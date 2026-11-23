@@ -62,6 +62,7 @@ import (
 	"time"
 
 	apphost "github.com/hollis-labs/libs/app/app-host/host"
+	"github.com/hollis-labs/libs/core/panics"
 	libauth "github.com/hollis-labs/libs/security/auth"
 
 	"github.com/hollis-labs/substrate/apierr"
@@ -420,11 +421,7 @@ func checkMount(m Mount) error {
 
 // handle registers on mux and reports a conflicting pattern as an error rather than a panic.
 func handle(mux *http.ServeMux, pattern string, h http.Handler) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("httphost: mount %q: %v", pattern, r)
-		}
-	}()
+	defer panics.Recover("httphost mount", &err)
 	mux.Handle(pattern, h)
 	return nil
 }

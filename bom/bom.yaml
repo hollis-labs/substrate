@@ -21,12 +21,12 @@ libs:
   github.com/hollis-labs/libs/core/panics: v0.1.0   # httphost.Harden panic recovery (httpguard); apps use it too (Conduit)
   github.com/hollis-labs/libs/core/store: v0.1.0
   github.com/hollis-labs/libs/core/util: v0.11.1  # queue, scheduler, router, classify, decide and embed packages
-  github.com/hollis-labs/libs/mcp/plugin-mcp: v0.6.0   # apps are on v0.3-v0.6; v0.6.0 is the train
-  github.com/hollis-labs/libs/security/auth: v0.3.1
+  github.com/hollis-labs/libs/mcp/plugin-mcp: v0.10.0  # explicit trusted hosts; loopback/same-origin defaults
+  github.com/hollis-labs/libs/security/auth: v0.4.0
   github.com/hollis-labs/libs/security/policy: v0.1.0
   github.com/hollis-labs/libs/security/secrets: v0.1.0
   github.com/hollis-labs/libs/security/redact: v0.2.0
-  github.com/hollis-labs/libs/ui/ui-go: v0.4.0   # v0.2 to v0.4 add streamhub event ids, epochs, logkit and retention; nothing removed
+  github.com/hollis-labs/libs/ui/ui-go: v0.5.0   # adds Codex app-server chatstream adapter
 app_libs:                 # libs an app may import that Substrate itself does not require
   github.com/hollis-labs/libs/agent/core: v0.5.0   # context and tool selection (Tradecraft and standalone MCP gateway)
   github.com/hollis-labs/libs/agent/host: v0.1.1   # embedded agent host (Folio app-ade preset, chess tutor; v0.1.1: stream keepalive)

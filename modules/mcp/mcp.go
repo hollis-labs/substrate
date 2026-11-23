@@ -14,7 +14,8 @@
 //	version:         server version string (default "0.0.0-dev").
 //	scope:           scope required on /mcp when the auth module is started
 //	                 (default "<app>.mcp").
-//	allowed_origins: Origin allowlist for browser clients (default: all).
+//	allowed_origins: Origin allowlist for browser clients (default: same-origin).
+//	allowed_hosts: trusted HTTP authorities (default: localhost/loopback only).
 //	stdio_token_file: file holding the token ServeStdio presents (default none).
 //
 // Over stdio (an agent launching the app as a subprocess) call
@@ -58,6 +59,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/hollis-labs/libs/core/panics"
 	gmcp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/server"
 	mcphttp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/transport/http"
 	libauth "github.com/hollis-labs/libs/security/auth"
@@ -153,6 +155,14 @@ func (mod) Start(_ context.Context, app *module.App) (err error) {
 			}
 		}
 	}
+	var hosts []string
+	if l, ok := cfg["allowed_hosts"].([]any); ok {
+		for _, h := range l {
+			if v, ok := h.(string); ok {
+				hosts = append(hosts, v)
+			}
+		}
+	}
 	filterMu.Lock()
 	f, extra := toolFilter, serverOptions
 	filterMu.Unlock()
@@ -164,13 +174,13 @@ func (mod) Start(_ context.Context, app *module.App) (err error) {
 	// An option may panic while it is applied (WithInstructions past its length limit); that is
 	// an app configuration error, so Start reports it rather than crashing boot.
 	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("mcp: a server option was refused: %v", r)
+		if v := recover(); v != nil {
+			err = fmt.Errorf("mcp: a server option was refused: %w", panics.Capture("mcp server option", v))
 		}
 	}()
 	srv := gmcp.NewServer(app.Name, str("version", "0.0.0-dev"), opts...)
 	app.Set(ServerKey, srv)
-	app.Set(MountKey, &mount{app: app, srv: srv, scope: str("scope", app.Name+".mcp"), origins: origins})
+	app.Set(MountKey, &mount{app: app, srv: srv, scope: str("scope", app.Name+".mcp"), origins: origins, hosts: hosts})
 	return nil
 }
 
@@ -183,11 +193,12 @@ type mount struct {
 	srv     *gmcp.Server
 	scope   string
 	origins []string
+	hosts   []string
 }
 
 // MCPHandler is read by httphost through an interface.
 func (m *mount) MCPHandler() http.Handler {
-	h := http.Handler(mcphttp.NewHandler(m.srv, mcphttp.HandlerOptions{AllowedOrigins: m.origins}))
+	h := http.Handler(mcphttp.NewHandler(m.srv, mcphttp.HandlerOptions{AllowedOrigins: m.origins, AllowedHosts: m.hosts}))
 	if g := guard(m.app); g != nil {
 		if t := scopes(m.app); t != nil {
 			for _, method := range []string{"GET", "POST", "DELETE"} {

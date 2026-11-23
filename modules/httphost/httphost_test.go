@@ -94,7 +94,7 @@ func TestMountsThatShadowTheHostAreRefused(t *testing.T) {
 	_, err = httphost.Handler(run.App, httphost.Options{Mounts: []httphost.Mount{
 		{Pattern: "/a2a/", Handler: ok("1")}, {Pattern: "/a2a/", Handler: ok("2")},
 	}})
-	if err == nil || !strings.Contains(err.Error(), "a2a") {
+	if err == nil || !strings.Contains(err.Error(), "internal error (ref pnc_") {
 		t.Errorf("a conflicting pattern must be an error, not a panic: %v", err)
 	}
 }

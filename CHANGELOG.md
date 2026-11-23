@@ -7,10 +7,15 @@ minor releases may break APIs.
 
 ### Breaking
 
+- MCP HTTP defaults now permit only localhost/loopback Hosts and same-origin browser requests, following `mcp/plugin-mcp` v0.10.0. Configure `mcp.allowed_hosts` with trusted HTTP authorities for public/proxy listeners and `mcp.allowed_origins` for cross-origin browser clients. Lists replace library defaults; include loopback explicitly when needed. No-Origin CLI clients remain supported.
+- Recovered startup option/mount panics return a shared panic reference rather than raw panic detail. Database OnChange callback panics log only their reference and boundary; callback processing remains contained.
+
 - `identity`: the first-run setup over HTTP is closed by default. New config `identity.setup`: `offline` (the default) or `http`. Under `offline`, `POST /api/setup` is always refused, 403 `setup_offline`, with a message naming `<app> identity setup`; before, the first caller to reach an empty instance became its owner (an agent on the same host did exactly that through the loopback setup). `GET /api/setup` still answers, now also with `setup_over_http`. Why a default and not an opt-in: loopback is not a boundary, and a service started before its bootstrap must not be claimable. An app, a test or a script that relied on `POST /api/setup` either creates the owner offline (below) or opts back in with `identity: {setup: http}` in its manifest config or `SUBSTRATE_CONFIG`, for local development only. Under `http` nothing changes (`setup_closed` 409 once an owner exists). (migration: none; set `identity.setup: http` where the HTTP first-run is still wanted, otherwise run `<app> identity setup` before the first start)
 - The `sqlite` module is now `database`, on libs `core/store` with a `driver` of `sqlite` (default) or `postgres`. Config moves from `sqlite.*` to `database.sqlite.*`; `sqlite.UseMigrations` and `sqlite.From` become `database.UseMigrations` and `database.From`. Postgres connection strings are secrets: `dsn_file`/`dsn_env` (and `migrate_dsn_*`), never written in config. (migration: none; pre-release, no consumers)
 
 ### Added
+
+- Framework BOM adopts `security/auth` v0.4.0 (rotating parent credentials and preserved claims), `ui/ui-go` v0.5.0 (Codex app-server chatstream adapter), and `mcp/plugin-mcp` v0.10.0. Consumer application pins and archived frontend kit adoption remain separate.
 
 - `identity`: `Service.WatchKeys(fn)` reports each API key made (admin route, self-service route, a redeemed
   pairing code, `CreateKey`) and each key revoked while live (revoking twice reports once): a `KeyEvent` with
