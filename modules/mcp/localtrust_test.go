@@ -128,7 +128,7 @@ func TestHTTPMCPStaysEnforcedBesideLocalTrust(t *testing.T) {
 	mnt, _ := app.Value(mcp.MountKey)
 	handler := mnt.(interface{ MCPHandler() http.Handler }).MCPHandler()
 	rec := httptest.NewRecorder()
-	handler.ServeHTTP(rec, httptest.NewRequest("POST", "/mcp", strings.NewReader("{}")))
+	handler.ServeHTTP(rec, httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader("{}")))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("HTTP /mcp without credentials: %d", rec.Code)
 	}

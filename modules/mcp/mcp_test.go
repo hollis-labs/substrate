@@ -38,7 +38,7 @@ func setup(t *testing.T, mods []string, cfg string) (http.Handler, *module.App) 
 
 func call(h http.Handler, bearer string) *httptest.ResponseRecorder {
 	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`
-	r := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	r := httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json, text/event-stream")
 	if bearer != "" {
@@ -78,7 +78,7 @@ func TestAuthorizeAllowsWithoutAuthModule(t *testing.T) {
 }
 
 func list(h http.Handler) string {
-	r := httptest.NewRequest("POST", "/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	r := httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Accept", "application/json, text/event-stream")
 	w := httptest.NewRecorder()
@@ -116,5 +116,43 @@ func TestNoFilterListsEverything(t *testing.T) {
 	h, _ := setup(t, []string{"health", "httphost", "mcp"}, "")
 	if got := list(h); !strings.Contains(got, `"ping"`) {
 		t.Fatalf("tools/list: %s", got)
+	}
+}
+
+func TestHTTPAuthorityAndOriginDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		name, cfg, host, origin string
+		want                    int
+	}{
+		{"loopback", "", "localhost", "", 200},
+		{"untrusted host", "", "untrusted.example", "", 403},
+		{"cross origin", "", "localhost", "https://untrusted.example", 403},
+		{"same origin", "", "localhost", "http://localhost", 200},
+		{"explicit authorities", `{"mcp":{"allowed_hosts":["app.example"],"allowed_origins":["https://ui.example"]}}`, "app.example", "https://ui.example", 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := setup(t, []string{"health", "httphost", "mcp"}, tc.cfg)
+			r := httptest.NewRequest("POST", "http://localhost/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ping","arguments":{}}}`))
+			r.Host = tc.host
+			r.Header.Set("Content-Type", "application/json")
+			r.Header.Set("Accept", "application/json, text/event-stream")
+			if tc.origin != "" {
+				r.Header.Set("Origin", tc.origin)
+			}
+			w := httptest.NewRecorder()
+			h.ServeHTTP(w, r)
+			if w.Code != tc.want {
+				t.Fatalf("got %d, want %d: %s", w.Code, tc.want, w.Body)
+			}
+		})
+	}
+}
+
+func TestServerOptionPanicReturnsOnlyReference(t *testing.T) {
+	mcp.UseServerOptions(gmcp.WithInstructions(strings.Repeat("private-option-marker", 100000)))
+	t.Cleanup(func() { mcp.UseServerOptions() })
+	_, err := boot.Start(context.Background(), "t", []string{"health", "httphost", "mcp"}, "")
+	if err == nil || !strings.Contains(err.Error(), "ref pnc_") || strings.Contains(err.Error(), "private-option-marker") {
+		t.Fatalf("unsafe option panic error: %v", err)
 	}
 }

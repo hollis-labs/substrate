@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hollis-labs/libs/core/panics"
 	"github.com/hollis-labs/libs/core/store"
 	"github.com/hollis-labs/libs/core/store/migrate"
 	"github.com/hollis-labs/libs/security/redact"
@@ -321,11 +322,12 @@ func (h *Handle) OnChange(fn func(Status)) {
 }
 
 func callHook(fn func(Status), s Status, log *slog.Logger) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error("store OnChange hook panicked", "panic", fmt.Sprint(r))
-		}
-	}()
+	guard := panics.New(panics.Config{
+		Reporter: panics.ReporterFunc(func(rec panics.Record) {
+			log.Error("store OnChange hook panicked", "ref", rec.Ref, "where", rec.Where)
+		}),
+	})
+	defer guard.Recover("database OnChange", nil)
 	fn(s)
 }
 
