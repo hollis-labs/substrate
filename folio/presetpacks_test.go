@@ -1,10 +1,11 @@
 package folio_test
 
 import (
-	"github.com/hollis-labs/substrate/folio"
 	"io/fs"
 	"testing"
 	"testing/fstest"
+
+	"github.com/hollis-labs/substrate/folio"
 )
 
 func TestPresetPacksFilesystem(t *testing.T) {
