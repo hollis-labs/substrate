@@ -420,22 +420,19 @@ func (d db) listCredentials(ctx context.Context) ([]Credential, error) {
 	return out, rows.Err()
 }
 
-func (d db) revokeCredential(ctx context.Context, id string, now time.Time) error {
+// revokeCredential revokes the key and returns it as it was, with changed false when it was
+// already revoked (nothing to do) and ErrNotFound when there is no such key.
+func (d db) revokeCredential(ctx context.Context, id string, now time.Time) (Credential, bool, error) {
 	res, err := d.st.ExecContext(ctx, d.q(`UPDATE identity_credentials SET revoked_at = ? WHERE id = ? AND revoked_at = 0`), now.Unix(), id)
 	if err != nil {
-		return err
+		return Credential{}, false, err
 	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		// Nothing changed: either the key was already revoked (success, the state the
-		// caller asked for) or there is no such key.
-		var one int
-		err := d.st.QueryRowContext(ctx, d.q(`SELECT 1 FROM identity_credentials WHERE id = ?`), id).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNotFound
-		}
-		return err
+	n, _ := res.RowsAffected()
+	c, _, err := scanCredential(d.st.QueryRowContext(ctx, d.q(`SELECT `+credCols+` FROM identity_credentials WHERE id = ?`), id))
+	if errors.Is(err, ErrNotFound) || errors.Is(err, sql.ErrNoRows) {
+		return Credential{}, false, ErrNotFound
 	}
-	return nil
+	return c, n > 0, err
 }
 
 // ---- pairing ----

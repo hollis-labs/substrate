@@ -101,6 +101,7 @@ func (s *Service) myKeysCreate(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
+	s.emitKey(KeyCreated, c, principal)
 	writeJSON(w, http.StatusCreated, map[string]any{"key": keyPrefix + secret, "credential": c})
 }
 

@@ -88,6 +88,7 @@ func (s *Service) CreateKey(ctx context.Context, in KeyInput) (string, Credentia
 	if err := s.db.createCredential(ctx, c, secret); err != nil {
 		return "", Credential{}, err
 	}
+	s.emitKey(KeyCreated, c, firstNonEmptyStr(actor(ctx), by))
 	return keyPrefix + secret, c, nil
 }
 
@@ -113,7 +114,20 @@ func (s *Service) RevokeKey(ctx context.Context, id string) error {
 	if strings.TrimSpace(id) == "" {
 		return ErrNotFound
 	}
-	return s.db.revokeCredential(ctx, id, time.Now())
+	c, changed, err := s.db.revokeCredential(ctx, id, time.Now())
+	if err == nil && changed {
+		s.emitKey(KeyRevoked, c, actor(ctx))
+	}
+	return err
+}
+
+func firstNonEmptyStr(v ...string) string {
+	for _, s := range v {
+		if s != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // ListKeys returns the API keys that are not revoked, oldest first, with no secret (the
