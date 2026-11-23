@@ -15,9 +15,7 @@ interfaces:
   - { type: daemon, name: {{ .inputs.repo_name }}, auth: enforce }
   - { type: api, name: {{ .inputs.repo_name }} API, auth: enforce }
   - { type: mcp, name: {{ .inputs.repo_name }} MCP, auth: enforce }
-{{- if .inputs.with_frontend }}
-  - { type: gui, name: {{ .inputs.repo_name }} UI, auth: enforce }
-{{- end }}
+
 substrate: { variant: app-host, profile: agentic, version: {{ .inputs.substrate_version }} }
 deploy: { fleet: deploy.yaml, cerberus: {{ .inputs.repo_name }}.cerberus.yaml }
 release: { tagging: semver }

@@ -323,45 +323,19 @@ Map every old environment variable to a config key (or drop it on purpose) and w
 
 ## 8. The frontend
 
-The frontend reads the flat `{code, message}` error body, which is why `httphost` flattens every error by default.
-A path that relays a third-party protocol opts out with `RawPrefixes` or `Mount.Raw` (section 5, step 4); the UI
-must not call such a path expecting the flat shape.
+New UI apps use Surface and its versioned package set and explicit Folio preset pack.
+The former app-shell, ADE and design-kit frontend scaffolds are retired. Do not extend
+legacy backends or frontends; complete portfolio cleanup before migrating apps to
+Substrate/Surface. Existing app sources, pins and deployments are not changed here.
 
-- The UI is built on app-shell and the BOM-pinned kits (`bom/bom.yaml` `kits:`, exact versions, no `^`). Run
-  `substrate frontend -f cmd/myapp/substrate.yaml` to generate the frontend manifest and use the pinned versions.
-- Serve the built SPA with `httphost.Options{Assets: fsys}` from an `internal/webui` package that embeds
-  `all:dist` (keep `dist/.gitkeep` so an unbuilt tree still compiles).
-- The app's own UI goes in a contribution file named in the manifest (`frontend: {contributions: ui/app.json}`, a
-  path relative to the manifest). It has the shape of a module `ui.json` (`schema_version`, `module`, `contributions`,
-  `package`, `envelopes`) with `module` equal to the manifest's `app`, and `substrate frontend` validates it against
-  the same vocabulary and merges it with the modules' items under the same rules (nav groups exist, surface routes
-  are unique and not backend paths, regions are declared, actions resolve); its items carry the app name as their
-  `module`, and its `package` and the base kits are pinned like a module's. `routes` are refused: an app mounts its
-  routes through httphost, so there is nothing for the builder to wire, and only modules declare backend paths. The
-  app name must not be a catalogue module name. Do not hand-merge a fragment in the SPA.
-- Known limits today, each a framework task: the identity module has no UI, so setup, sign-in and password screens are
-  app-owned until a shared kit exists; app-shell has no user-menu region (sign-out is a page); kit-settings still
-  depends on the previous design-system version. Check the open Substrate tasks before building around one.
-- Frontend work is a separate track from the backend port. Agree the API contract first (paths, the flat
-  `{code, message, details?}` error body, the CSRF header) and build against it.
+Agree the API contract during migration, including paths, errors and CSRF handling.
+Substrate remains the backend framework; Surface owns UI app scaffolding.
 
 ## 9. Pins, CI and hygiene
 
 - Pins are edited only in `bom/bom.yaml` in Substrate. `go run github.com/hollis-labs/substrate/cmd/substrate pins
   check --app .` must pass in the app; `pins sync` rewrites `go.mod` and the CI workflow. A lib the BOM does not
   list is a one-line Substrate PR, not a local `go.mod` exception.
-- Frontend: `go run github.com/hollis-labs/substrate/cmd/substrate pins check --app . --frontend` (add
-  `--frontend-dir DIR` if it is not `frontend`) also reads `package.json` and the committed `package-lock.json` and fails
-  when (1) a pinned `@hollis-labs` kit in `package.json` or at the lockfile's top level is not the BOM's exact version;
-  (2) any package in the tree asks for a pinned kit in a range the copy node would resolve does not meet, or cannot find it
-  (what `npm ls` calls invalid and missing); (3) a pinned kit is installed a second time, nested, at another version (every
-  path is listed, for example a stale `kit-code/node_modules/@hollis-labs/design-tokens` 0.4.0 left by an old lockfile; the
-  top-level check alone passes that); and (4) `npm ls --all --package-lock-only` reports a problem for a pinned kit. Steps
-  1 to 3 are pure Go and need no network and no `node_modules`; step 4 needs `npm` on `PATH` and fails when it is not
-  there (use `--no-npm-ls` to skip it on a machine without node; CI should not). The BOM's `kit_exceptions` (today
-  kit-settings' nested design-tokens and design-components 0.4) are honoured and printed as `accepted:`. Fix a finding by
-  moving `package.json` to the BOM versions and regenerating the lockfile (`rm package-lock.json && npm install`, not a
-  partial update), then run it again. Add it to the app's CI beside the Go pins check.
 - CI: `go vet`, the pins check, `go test -race`, `golangci-lint`, the frontend typecheck/lint/build (built before
   `go test` so the embed has assets) and `go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD`.
   Copy the workflow from a ported app.

@@ -1,5 +1,7 @@
 # Conversion notes
 
+> Legacy app-ade, app-chat, app-dashboard, substrate-frontend and sysop-ui references below are historical. These scaffolds are retired; new UI apps use Surface.
+
 Folio itself remains a local command-line tool in `hollis-labs/substrate/folio`. Its own `project.yaml`
 records class 2, the CLI interface and ownership. It currently has no Substrate runtime, authentication
 or policy gate; the caller's OS permissions govern its operations. This is a documented gap relative

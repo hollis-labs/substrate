@@ -6,6 +6,14 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## Unreleased
 
+### Removed
+
+- Archived and retired app-ade, app-chat, app-dashboard, substrate-frontend and sysop-ui.
+- Removed ADE/chat/frontend branches in the generic backend template; historical BOM pins remain compatibility data for the existing manifest assembler.
+- New UI apps use Surface presets; generic Substrate and shared agent-dir scaffolding remain.
+- Existing generated apps, published package versions and deployments are unchanged.
+
+
 ### Added
 
 - `app-ade` and `surface-desk` generate `agents.dir` and a starter

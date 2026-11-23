@@ -24,23 +24,7 @@ jobs:
         with:
           go-version-file: {{ .computed.workflow_directory }}go.mod
           cache-dependency-path: {{ .computed.workflow_directory }}go.sum
-{{- if .inputs.with_frontend }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Frontend lock file is committed
-        working-directory: {{ .computed.workflow_directory }}frontend
-        run: |
-          test -f package-lock.json || { echo "frontend/package-lock.json is missing: run npm install in frontend/ and commit package-lock.json" >&2; exit 1; }
-      # The UI is built first: internal/webui embeds the frontend output and the Go tests need it.
-      - name: Frontend (install, typecheck, lint, build)
-        working-directory: {{ .computed.workflow_directory }}frontend
-        run: |
-          npm ci
-          npm run typecheck
-          npm run lint
-          npm run build
-{{- end }}
+
       - run: go vet ./...
       - name: pins match the Substrate BOM
         run: go run github.com/hollis-labs/substrate/cmd/substrate pins check --app .
