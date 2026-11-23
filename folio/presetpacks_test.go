@@ -85,14 +85,14 @@ func TestPresetPacksSplitPreservesSurfaceRendering(t *testing.T) {
 	}
 	// A Surface-only catalog cannot quietly omit the shared agent layer.
 	isolated := makeService(surface)
-	if _, err := isolated.Plan(service.NewOptions{PresetID: "surface-desk", Inputs: map[string]any{"repo_name": "pack-check"}}); err == nil {
-		t.Fatal("missing cross-owner agent-dir dependency was accepted")
+	if _, err := isolated.Plan(service.NewOptions{PresetID: "surface-desk", TargetDir: "example", Inputs: map[string]any{"repo_name": "pack-check"}}); err == nil || !strings.Contains(err.Error(), "agent-dir") {
+		t.Fatalf("expected missing agent-dir dependency error, got %v", err)
 	}
 	// Version constraints still apply across owners.
 	entry := generic["presets/agent-dir/preset.yaml"]
 	entry.Data = []byte(strings.Replace(string(entry.Data), "version: 0.1.0", "version: 9.0.0", 1))
-	if _, err := makeService(combined).Plan(service.NewOptions{PresetID: "surface-desk", Inputs: map[string]any{"repo_name": "pack-check"}}); err == nil {
-		t.Fatal("incompatible cross-owner agent-dir version was accepted")
+	if _, err := makeService(combined).Plan(service.NewOptions{PresetID: "surface-desk", TargetDir: "example", Inputs: map[string]any{"repo_name": "pack-check"}}); err == nil || !strings.Contains(err.Error(), "does not satisfy constraint") {
+		t.Fatalf("expected incompatible dependency version error, got %v", err)
 	}
 }
 
