@@ -33,3 +33,5 @@ python3 scripts/scan-public --ref HEAD     # secrets / hosts / private paths, tr
 - This repo reuses the name of an older libs-era `substrate` repo that was deleted in the 2026-10-19 reorg; stale `github.com/hollis-labs/substrate/<mesh|agent|harness|llm-core>` paths elsewhere are that old code and are not this module.
 
 - Folio owns generic scaffolding. Surface owns `scaffolding/presets/surface-*`; use Folio’s explicit `--preset-pack` with a pinned Surface checkout. Do not copy those presets or the shared agent-dir layer between owners. Run Folio checks from `folio/`; its module does not participate in root framework builds.
+
+- `conformance/connect-matrix/` is an independent auth interoperability probe module. Its CI uses local mock issuers/targets only; live matrix runs are operator actions. It is not linked into framework runtime or a replacement for the shared auth library.

@@ -1,0 +1,40 @@
+name: connect-matrix
+on:
+  push:
+    branches: [main]
+    paths: ["conformance/connect-matrix/**", ".github/workflows/connect-matrix.yml", "scan-public.allow.d/connect-matrix.allow"]
+  pull_request:
+    paths: ["conformance/connect-matrix/**", ".github/workflows/connect-matrix.yml", "scan-public.allow.d/connect-matrix.allow"]
+permissions:
+  contents: read
+concurrency:
+  group: connect-matrix-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  GOWORK: "off"
+defaults:
+  run:
+    working-directory: conformance/connect-matrix
+jobs:
+  test:
+    name: auth conformance
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: conformance/connect-matrix/go.mod
+          cache-dependency-path: conformance/connect-matrix/go.sum
+      - run: go vet ./...
+      - name: mock issuer and target contract tests
+        run: go test -race ./...
+      - name: standalone CLI build
+        run: go build -o "$RUNNER_TEMP/connect-matrix" ./cmd/connect-matrix
+      - name: tests leave the repository clean
+        working-directory: .
+        run: test -z "$(git status --porcelain)"
+      - name: public history and source
+        working-directory: .
+        run: python3 scripts/scan-public --ref HEAD

@@ -2,9 +2,9 @@ name: ci
 on:
   push:
     branches: [main]
-    paths-ignore: ["folio/**", ".github/workflows/folio-checks.yml", "scan-public.allow.d/folio.allow"]
+    paths-ignore: ["folio/**", ".github/workflows/folio-checks.yml", "scan-public.allow.d/folio.allow", "conformance/connect-matrix/**", ".github/workflows/connect-matrix.yml", "scan-public.allow.d/connect-matrix.allow"]
   pull_request:
-    paths-ignore: ["folio/**", ".github/workflows/folio-checks.yml", "scan-public.allow.d/folio.allow"]
+    paths-ignore: ["folio/**", ".github/workflows/folio-checks.yml", "scan-public.allow.d/folio.allow", "conformance/connect-matrix/**", ".github/workflows/connect-matrix.yml", "scan-public.allow.d/connect-matrix.allow"]
 permissions:
   contents: read
 concurrency:
