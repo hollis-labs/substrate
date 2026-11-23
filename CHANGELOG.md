@@ -5,6 +5,14 @@ minor releases may break APIs.
 
 ## [Unreleased]
 
+### Removed
+
+- Archived and retired app-ade, app-chat, app-dashboard, substrate-frontend and sysop-ui.
+- Removed ADE/chat/frontend branches in the generic backend template; historical BOM pins remain compatibility data for the existing manifest assembler.
+- New UI apps use Surface presets; generic Substrate and shared agent-dir scaffolding remain.
+- Existing generated apps, published package versions and deployments are unchanged.
+
+
 ### Breaking
 
 - MCP HTTP defaults now permit only localhost/loopback Hosts and same-origin browser requests, following `mcp/plugin-mcp` v0.10.0. Configure `mcp.allowed_hosts` with trusted HTTP authorities for public/proxy listeners and `mcp.allowed_origins` for cross-origin browser clients. Lists replace library defaults; include loopback explicitly when needed. No-Origin CLI clients remain supported.

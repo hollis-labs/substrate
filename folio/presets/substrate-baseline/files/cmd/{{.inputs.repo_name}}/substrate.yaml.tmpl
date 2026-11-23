@@ -1,16 +1,12 @@
 # {{ .inputs.repo_name }} on Substrate. The manifest is the shell: modules and config.
 app: {{ .inputs.repo_name }}
 variant: app-host
-{{- if .inputs.with_frontend }}
-frontend: { contributions: ui/app.json }
-{{- end }}
+
 profiles: [agentic]
 modules:
   add: [database, identity, cli]
 config:
-{{- if .inputs.with_ade }}
-  agents: { dir: agents/ }
-{{- end }}
+
   logging: { level: info, format: text }
   httphost: { addr: "127.0.0.1:{{ .inputs.http_port }}" }
   database:
@@ -21,7 +17,3 @@ config:
   # The app's own block (internal/settings); the SUBSTRATE_CONFIG file overrides it key by key.
   {{ .inputs.repo_name }}:
     allowed_hosts: []
-{{- if .inputs.with_ade }}
-    # The agent's model (internal/settings). None set: the app runs and the panel says no model is connected.
-    # agent: { model: "", base_url: "", key_file: "" }
-{{- end }}

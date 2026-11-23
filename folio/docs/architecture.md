@@ -1,5 +1,7 @@
 # Architecture: Substrate presets
 
+> Legacy app-ade, app-chat, app-dashboard, substrate-frontend and sysop-ui references below are historical. These scaffolds are retired; new UI apps use Surface.
+
 Folio renders typed presets, records a `.folio.yaml` breadcrumb, and leaves the application
 independent of Folio. `project.yaml` is authored project metadata; Folio never rewrites it.
 Existing removed-preset breadcrumbs fail explicitly, rather than silently selecting a new preset.

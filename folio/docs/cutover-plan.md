@@ -1,5 +1,7 @@
 # Cutover and installed CLI verification
 
+> Legacy app-ade, app-chat, app-dashboard, substrate-frontend and sysop-ui references below are historical. These scaffolds are retired; new UI apps use Surface.
+
 The preset conversion is code and a local CLI replacement, not a live application migration.
 Chrispian and the driver review and land the slices. No tag, release publication, service cutover,
 Cerberus apply or fleet install is part of this completion assignment.

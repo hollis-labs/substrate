@@ -29,7 +29,7 @@ libs:
   github.com/hollis-labs/libs/ui/ui-go: v0.5.0   # adds Codex app-server chatstream adapter
 app_libs:                 # libs an app may import that Substrate itself does not require
   github.com/hollis-labs/libs/agent/core: v0.5.0   # context and tool selection (Tradecraft and standalone MCP gateway)
-  github.com/hollis-labs/libs/agent/host: v0.1.1   # embedded agent host (Folio app-ade preset, chess tutor; v0.1.1: stream keepalive)
+  github.com/hollis-labs/libs/agent/host: v0.1.1   # embedded agent host (legacy consumer compatibility; v0.1.1: stream keepalive)
   github.com/hollis-labs/libs/agent/agentdir: v0.6.0   # shared agent directory format and loader (v0.6.0: identity.tether)
   github.com/hollis-labs/libs/agent/chat: v0.1.0   # conversation wire: handler, runner port, conformance suite (Surface chat, Nanite chatrunner)
   github.com/hollis-labs/libs/agent/trace: v0.2.0   # per-turn trace record and run evidence recorder (Nanite traces, evals)
@@ -56,7 +56,9 @@ third_party:
   github.com/go-webauthn/webauthn: v0.18.2   # passkeys (identity module: WebAuthn registration and sign-in)
   github.com/descope/virtualwebauthn: v1.0.5   # test only: a software authenticator for the identity passkey tests
   rsc.io/qr: v0.2.0                 # the QR code of a TOTP enrollment link (identity module), drawn server side as SVG
-kits:                     # npm packages (public registry, @hollis-labs); exact versions, all verified published
+# Historical compatibility pins for the remaining manifest assembler; not new-app defaults.
+# Legacy scaffolds and package source are retired. Remove this compatibility data with app migrations.
+kits:                     # existing published packages; no further legacy releases planned
   "@hollis-labs/design-tokens": 0.5.0
   "@hollis-labs/design-components": 0.5.1
   "@hollis-labs/design-app-runtime": 0.6.0

@@ -30,28 +30,14 @@ sources, and Folio’s own MCP / HTTP surfaces are deliberately deferred; see
 
 ## Substrate apps
 
-`substrate-app`, `app-dashboard` and `app-chat` render class 1 Substrate `app-host`
-apps with the agentic profile, enforced auth, own offline-created identity, SQLite,
-scoped routes and authenticated MCP. Dashboard adds an app-shell list UI; chat adds
-owner-isolated conversations and messages using the published kit-chat and kit-identity.
-Chat starts with no assistant provider connected; its service layer offers a provider hook.
-`app-ade` puts a person and an agent over the same surface with the ADE packages: the agent host
-at `/api/agent` (owner from the verified principal, model from operator configuration), a
-workspace page (surface, guide bar, agent panel, attention layer) and a starter notes board. The
-domain, the agent's prompt and the README are the person's and `folio sync` never writes them
-(sync policy `skip`); the shell is the preset's and sync keeps it current. See
-[`docs/app-ade.md`](./docs/app-ade.md).
+`substrate-app` renders a generic Substrate app-host backend with enforced auth,
+offline-created identity, SQLite, scoped routes and authenticated MCP. Supply an explicit
+`substrate_version` from the selected framework and follow the generated README.
 
-Each app includes a project descriptor, fleet deployment and native Cerberus supervision,
-a runbook, full checks, build artifacts and a SemVer release workflow. Managed runs work
-from installed binaries with XDG configuration/data/state, independent of the checkout.
-Release workflows accept only correctly prefixed SemVer tags whose commit is on main.
-
-`substrate_version` and the applicable `kit_*` versions have no defaults: take them from
-the selected framework’s `bom/bom.yaml`. Chat additionally requires `kit_chat`, `kit_cards`,
-`kit_identity` and `kit_account`; ADE requires `ade_agenthost`, `ade_core`, `ade_agent` and `ade_react`. After rendering, follow the generated README: tidy Go,
-sync pins, tidy again; for UI apps install frontend packages and commit the lockfile.
-Folio itself never installs, builds or runs a rendered project. See [architecture](./docs/architecture.md).
+Legacy frontend scaffolds `app-ade`, `app-chat`, `app-dashboard`, their
+`substrate-frontend` layer and the `sysop-ui` alias are retired. Their source and
+tests are preserved in Git history. New UI apps use Surface's preset pack below.
+Existing generated apps are not rewritten or migrated by this retirement.
 
 ## Surface apps
 
@@ -250,27 +236,6 @@ conformance script's floor, or (with `--checklist FILE`) the ratified lib
 checklist — disagrees with the manifest. `--self-test` breaks one value at a time
 in a scratch copy and requires exactly that check to fail.
 
-## Dashboard apps and the former sysop-ui preset
-
-```sh
-folio new app-dashboard /tmp/my-dashboard \
-  --input repo_name=my-dashboard \
-  --input substrate_version=<framework version> \
-  --input kit_app_shell=<from bom.yaml> ... \
-  --non-interactive
-```
-
-`app-dashboard` 3.0 renders a Substrate app (see above) with a React frontend on app-shell and the
-kit-dashboard theme: an app-owned sign-in screen and one list surface. It replaces the go-webui and
-Chimera dashboard of 2.x (clean break: `project_name`, `gui_host`, `chimera_*`, `design_kit_version`,
-`go_webui_version` and `base_path` are gone; a Substrate app serves at the root).
-
-`sysop-ui` remains a deprecated alias: `new`, `plan`, `preset show` and `inspect` resolve it to
-`app-dashboard`, and new breadcrumbs record `app-dashboard`. Supported breadcrumbs remain readable by `inspect`, which reports drift without updating
-the app or its breadcrumb. Removed presets and pre-3.0 dashboard breadcrumbs fail explicitly. `folio sync` applies a preset's updates file by file but
-nothing migrates an already generated app to a different preset. Removed `chat-app` breadcrumbs still fail with `preset_removed`; fresh chat projects use
-`app-chat`. There is no automatic migration or alias between the two.
-
 ## License
 
 MIT — see [LICENSE](../LICENSE).
@@ -302,37 +267,9 @@ Plan output uses paths relative to that root. This is new-project generation; `f
 
 ## Starter agent directory
 
-`app-ade` and `surface-desk` generate `agents.dir: agents/` in app config and
-`agents/assistant/agent.md` (agentdef v2, durable continuity) and `host.yaml`
-(embedded, application lifetime, the app's name). `folio sync` never writes `agents/**`.
-No Nanite built-in tool group is enabled. `app-chat`, `surface-app` and the other
-presets generate neither the directory nor the config key.
-
-The generated app uses Substrate's `agents.Resolve` after operator config merges,
-publishing `agent-directory.layout` on the Substrate app. Relative `agents.dir`
-paths are beside `SUBSTRATE_CONFIG` when set; with embedded config, they are beside
-`substrate.yaml` in the working directory, so a generated checkout uses `./agents/`.
-For an installed app, set an absolute path or install the directory beside the
-operator config. Runtime paths resolve separately under
-`$XDG_STATE_HOME/<app>/agents/<name>` (default `~/.local/state/<app>/agents/<name>`).
-Resolution creates no files and opens no agents.
-
-**Nothing in the app opens these files yet.** They become live when chat wiring
-lands; app-ade continues to use libs/agent/host and surface-desk uses Surface's Engine.
-The Substrate helper requires `v0.1.1-0.20261119145946-6a4bb696c942` or newer;
-surface-desk pins it directly, and app-ade's explicit `substrate_version` input must
-include the helper.
-
-The loader proof is test-only and shells out to Nanite's offline embedding example,
-which calls `agent.Open` with a scripted provider on a copy of each generated directory:
-
-```sh
-GOBIN=/tmp/folio-nanite go install github.com/hollis-labs/nanite/examples/embed-host@3f3eaed
-FOLIO_NANITE=/tmp/folio-nanite/embed-host go test -run TestAgentDir -v .
-```
-
-When `FOLIO_NANITE` is unset the loader check logs a skip; render and resolver tests
-still run. Folio's generator module has no runtime Nanite dependency.
+The shared `agent-dir` layer remains available for composition. Surface owns the
+`surface-desk` preset that composes it; see the pinned Surface pack's documentation.
+Legacy ADE/chat scaffolds and their backend switches are retired.
 
 
 ## Preset packs

@@ -69,13 +69,31 @@ func TestFolioInspect_RemovedPresetBreadcrumb(t *testing.T) {
 	}
 }
 
-// The current app-dashboard breadcrumb (3.x) is not caught by the rule.
-func TestFolioInspect_CurrentAppDashboardIsNotRemoved(t *testing.T) {
-	isolateHome(t)
-	dir := writeBreadcrumb(t, "app-dashboard", "3.0.0")
-	_, _, err := runCLI(t, "inspect", dir)
-	if err != nil && strings.Contains(err.Error(), "preset_removed") {
-		t.Fatalf("app-dashboard 3.0.0 must not be reported as removed: %v", err)
+// Retired frontend breadcrumbs and commands fail explicitly and write no files.
+func TestFolio_RetiredFrontendPresets(t *testing.T) {
+	for _, id := range []string{"app-ade", "app-chat", "app-dashboard", "substrate-frontend", "sysop-ui"} {
+		t.Run(id, func(t *testing.T) {
+			isolateHome(t)
+			dir := writeBreadcrumb(t, id, "3.0.0")
+			original, err := os.ReadFile(filepath.Join(dir, manifest.ManifestFilename))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, args := range [][]string{{"inspect", dir}, {"new", id, filepath.Join(dir, "new"), "--non-interactive"}, {"plan", id, filepath.Join(dir, "new"), "--non-interactive"}} {
+				_, _, err = runCLI(t, args...)
+				if err == nil || !strings.Contains(err.Error(), "preset_removed") || !strings.Contains(err.Error(), "2bf3f4951c219") {
+					t.Fatalf("%v: want retired preset recovery error, got %v", args, err)
+				}
+			}
+			after, err := os.ReadFile(filepath.Join(dir, manifest.ManifestFilename))
+			if err != nil || string(after) != string(original) {
+				t.Fatal("retirement check changed breadcrumb")
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 1 {
+				t.Fatal("retirement check wrote files")
+			}
+		})
 	}
 }
 

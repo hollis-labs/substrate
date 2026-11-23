@@ -24,27 +24,39 @@ var removedPresets = map[string]bool{
 
 // removedPreset reports whether the preset id and version recorded in a breadcrumb (or asked for on the
 // command line, with an empty version) name a preset this folio no longer ships. app-dashboard and its
-// old alias sysop-ui are removed below 3.0.0: 3.0.0 is a different preset (a Substrate app) with other
-// inputs, so a 2.x breadcrumb is never re-rendered onto it.
-func removedPreset(id, version string) bool {
-	if removedPresets[id] {
+// old alias sysop-ui are now retired at every version. Pre-3.0 breadcrumbs retain
+// their older recovery guidance; no project is re-rendered onto a replacement.
+func removedPreset(id, _ string) bool {
+	return retiredFrontendPreset(id) || removedPresets[id]
+}
+
+// retiredFrontendPreset includes the old dashboard alias. Retired IDs cannot be
+// revived accidentally by a user preset directory or an external pack.
+func retiredFrontendPreset(id string) bool {
+	switch id {
+	case "app-ade", "app-chat", "app-dashboard", "substrate-frontend", "sysop-ui":
 		return true
-	}
-	if (id == "app-dashboard" || id == "sysop-ui") && version != "" {
-		major, _, _ := strings.Cut(strings.TrimPrefix(version, "v"), ".")
-		if n, err := strconv.Atoi(major); err == nil && n < 3 {
-			return true
-		}
 	}
 	return false
 }
 
-// errPresetRemoved is the error for a removed preset: it names the preset, the version when known and the
-// folio release that last had it, never a stack trace and never a silent re-render onto another preset.
 func errPresetRemoved(id, version string) *Error {
 	what := fmt.Sprintf("preset %q", id)
 	if version != "" {
 		what = fmt.Sprintf("preset %q %s", id, version)
+	}
+	// Keep the original recovery guidance for pre-3 dashboard breadcrumbs.
+	legacyDashboard := false
+	if id == "app-dashboard" || id == "sysop-ui" {
+		major, _, _ := strings.Cut(strings.TrimPrefix(version, "v"), ".")
+		n, err := strconv.Atoi(major)
+		legacyDashboard = err == nil && n < 3
+	}
+	if retiredFrontendPreset(id) && !legacyDashboard {
+		return newErr(ErrPresetRemoved, fmt.Sprintf(
+			"%s was retired with the legacy frontend scaffolds. Historical source is preserved at "+
+				"https://github.com/hollis-labs/substrate/tree/2bf3f4951c219c6a921c26276f1dbe251d6efe48/folio. "+
+				"Use the Surface preset pack for new UI apps; existing projects are not rewritten.", what), nil)
 	}
 	return newErr(ErrPresetRemoved, fmt.Sprintf(
 		"%s was removed from folio: folio %s (tag folio/%s) is the last release that has it. "+

@@ -12,8 +12,7 @@ import (
 	"github.com/hollis-labs/substrate/module"
 	"github.com/hollis-labs/substrate/modules/database"
 
-{{ if .inputs.with_ade }}	"{{ .computed.module_path }}/internal/agentdir"
-{{ end }}	"{{ .computed.module_path }}/internal/storage"
+	"{{ .computed.module_path }}/internal/storage"
 )
 
 // dataDirEnv overrides persistent application data. Operator config comes from
@@ -122,10 +121,7 @@ func start(ctx context.Context, pl runPlan) (*boot.Running, error) {
 			place(app, dir, "database", "sqlite", "path")
 			place(app, dir, "identity", "key_file")
 			place(app, state, "secrets", "state_dir")
-{{ if .inputs.with_ade }}			if err := agentdir.Resolve(app); err != nil {
-				return err
-			}
-{{ end }}
+
 			return nil
 		}
 	}

@@ -15,21 +15,11 @@ func TestParse(t *testing.T) {
 	if err != nil || len(s.AllowedHosts) != 1 {
 		t.Fatalf("good block: %v %+v", err, s)
 	}
-{{- if .inputs.with_ade }}
-	s, err = settings.Parse(map[string]any{"agent": map[string]any{"model": "m", "base_url": "https://gateway.example.test", "key_file": "/run/key"}})
-	if err != nil || s.Agent.Model != "m" || s.Agent.BaseURL != "https://gateway.example.test" || s.Agent.KeyFile != "/run/key" {
-		t.Fatalf("agent block: %v %+v", err, s.Agent)
-	}
-{{- end }}
+
 	for name, raw := range map[string]any{
 		"unknown key": map[string]any{"allowed_host": []any{}},
 		"not a list":  map[string]any{"allowed_hosts": "a"},
 		"empty entry": map[string]any{"allowed_hosts": []any{" "}},
-{{- if .inputs.with_ade }}
-		"agent not a map":   map[string]any{"agent": "x"},
-		"agent unknown key": map[string]any{"agent": map[string]any{"temperature": "x"}},
-		"agent no model":    map[string]any{"agent": map[string]any{"base_url": "https://gateway.example.test"}},
-{{- end }}
 	} {
 		if _, err := settings.Parse(raw); err == nil || !strings.Contains(err.Error(), "{{ .inputs.repo_name }}") {
 			t.Errorf("%s: want an error naming the block, got %v", name, err)

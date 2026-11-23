@@ -62,9 +62,6 @@ jobs:
         env:
           FOLIO_REQUIRE_TOOLS: "1"
           FOLIO_SUBSTRATE_VERSION: v0.1.1-0.20261119145946-6a4bb696c942
-          # The ADE release app-ade is proved against: libs agent/host and the @hollis-labs/ade-* packages.
-          FOLIO_ADE_AGENTHOST: v0.1.0
-          FOLIO_ADE_PACKAGES: 0.1.0
         run: go test -race ./...
 
   lint:

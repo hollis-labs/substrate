@@ -42,10 +42,7 @@ jobs:
       targets: '["{{ .inputs.target_os }}/{{ .inputs.target_arch }}"]'
       app: {{ .inputs.repo_name }}
       main_pkg: ./cmd/{{ .inputs.repo_name }}
-{{- if .inputs.with_frontend }}
-      node_version: "24"
-      ui_cmd: "cd frontend && test -f package-lock.json && npm ci && npm run build"
-{{- end }}
+
       test_cmd: "go vet ./... && go test -race -count=1 ./..."
       extra_files: deploy.yaml project.yaml {{ .inputs.repo_name }}.cerberus.yaml
   publish:

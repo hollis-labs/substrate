@@ -6,7 +6,7 @@ author: hollis-labs
 license: MIT
 layer_only: true
 
-# A LAYER, composed by the presets whose apps have an agent (app-ade, surface-desk). It renders the
+# A LAYER, composed by the presets whose apps have an agent (Surface pack: surface-desk). It renders the
 # convention in github.com/hollis-labs/nanite docs/embedding.md: one directory per agent under agents/,
 # named for the agent, holding its authored files. agent.md is a thin agentdef v2 (who the agent is, how it
 # uses the app's tools, durable continuity); host.yaml says kind embedded, lifetime application and the
