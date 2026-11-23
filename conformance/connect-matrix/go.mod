@@ -1,4 +1,4 @@
-module github.com/hollis-labs/tools/connect-matrix
+module github.com/hollis-labs/substrate/conformance/connect-matrix
 
 go 1.26.10
 

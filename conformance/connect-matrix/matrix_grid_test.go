@@ -13,7 +13,7 @@ import (
 
 	"github.com/hollis-labs/libs/security/auth"
 
-	cm "github.com/hollis-labs/tools/connect-matrix"
+	cm "github.com/hollis-labs/substrate/conformance/connect-matrix"
 )
 
 func gridRunner(t *testing.T, iss *httptest.Server, targets []cm.Pair, callers []string) *cm.Runner {

@@ -63,3 +63,8 @@ Moving an existing app onto Substrate: [`docs/adopting-substrate.md`](docs/adopt
 [Folio](folio/README.md) lives in the independent `folio/` Go module. It owns
 the generator and generic presets; Surface owns its own preset pack. Folio
 checks run separately from the root framework and keep generated-app conformance.
+
+
+[connect-matrix](conformance/connect-matrix/README.md) is an independent auth
+conformance probe. It checks admission, audience isolation and revocation using
+local mocks in CI; it is not part of framework runtime boot.

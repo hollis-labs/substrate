@@ -17,7 +17,7 @@ import (
 
 	"github.com/hollis-labs/libs/security/auth"
 
-	cm "github.com/hollis-labs/tools/connect-matrix"
+	cm "github.com/hollis-labs/substrate/conformance/connect-matrix"
 )
 
 const issName = "mock-test"

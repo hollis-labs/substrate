@@ -13,7 +13,7 @@ Proves that one app can call another app's API with a service token, and that re
 `wrong_audience` and `revoked` only mean something when the target is enforcing. Set `"enforcing": false` for a target that admits anonymous callers and those two checks are skipped; claiming `enforcing` on a target that is not fails with a hint. Tokens and credentials are never printed or written to the JSON report. Every minted token is revoked before a pair finishes, on every exit path, and a failed revoke is a failing `cleanup` / `cleanup_other` check. The issuer client refuses redirects that leave its origin (scheme, host and port), so the issuer credential is never forwarded.
 
 ```sh
-go install github.com/hollis-labs/tools/connect-matrix/cmd/connect-matrix@latest
+go install github.com/hollis-labs/substrate/conformance/connect-matrix/cmd/connect-matrix@latest
 
 # 1. a stand-in issuer: JWKS, deny-list, mint and revoke (loopback or tailnet only)
 connect-matrix mock-issuer -listen 127.0.0.1:9100 -iss mock -pub-key-out /tmp/mock.pub.pem
@@ -58,3 +58,13 @@ See `examples/pairs.json`. Unknown fields are rejected. Targets and issuer URLs 
 ## Development
 
 `go vet ./... && go test -race ./...` in this directory. The tests run a go-auth guard as the target and the mock issuer as the issuer, so they exercise the real verifier and deny-list poller.
+
+
+## Source ownership
+
+This independent module lives at `substrate/conformance/connect-matrix`. It
+proves the shared auth contract without becoming part of Substrate runtime
+boot or owning an issuer. Run checks from this directory. CI uses mock issuers,
+local test targets and a temporary fake CLI, not the fleet configuration. Live
+probes remain an explicit operator action. Existing auth-library versions,
+consumer pins and installed copies are adopted after the portfolio reorganization.

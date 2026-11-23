@@ -17,7 +17,7 @@ import (
 	"syscall"
 	"time"
 
-	cm "github.com/hollis-labs/tools/connect-matrix"
+	cm "github.com/hollis-labs/substrate/conformance/connect-matrix"
 )
 
 func main() {
