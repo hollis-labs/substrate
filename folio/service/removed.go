@@ -49,6 +49,6 @@ func errPresetRemoved(id, version string) *Error {
 	return newErr(ErrPresetRemoved, fmt.Sprintf(
 		"%s was removed from folio: folio %s (tag folio/%s) is the last release that has it. "+
 			"This folio does not re-render it onto another preset; use that release to inspect the project "+
-			"(go install github.com/hollis-labs/substrate/folio/cmd/folio@%s)",
+			"(go install github.com/hollis-labs/tools/folio/cmd/folio@%s)",
 		what, lastReleaseWithRemoved, lastReleaseWithRemoved, lastReleaseWithRemoved), nil)
 }
