@@ -1,0 +1,59 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.14/schema.json",
+  "files": {
+    "ignoreUnknown": true,
+    "includes": ["src/**", "vite.config.ts", "!src/components/ui", "!src/components/surface.css"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 120
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "asNeeded"
+    }
+  },
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/**", "!src/components/ui"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noRestrictedElements": {
+              "level": "error",
+              "options": {
+                "elements": {
+                  "button": "Use Button from @/components/ui/button: views are built from @surface components, never raw controls.",
+                  "input": "Use Input from @/components/ui/input: views are built from @surface components, never raw controls.",
+                  "select": "Use Select from @/components/ui/select: views are built from @surface components, never raw controls.",
+                  "textarea": "Use Textarea from @/components/ui/textarea: views are built from @surface components, never raw controls."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

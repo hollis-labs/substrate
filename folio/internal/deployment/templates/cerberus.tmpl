@@ -1,0 +1,39 @@
+# Generated from project.yaml settings.runtime; regenerate with folio deploy render.
+kind: cerberus-project/v1
+owner: {{ .ID }}
+namespace: local
+project:
+  id: {{ .ID }}
+  name: {{ .Name | yaml }}
+resources:
+  - id: {{ .ID }}
+    name: {{ .Name | yaml }}
+    type: process
+    project: {{ .ID }}
+    connector: local
+    config:
+      # Fleet-install provisions this stable directory before service activation.
+      dir: {{ .Runtime.InstallRoot | yaml }}
+      command:
+        - {{ .Runtime.Link | yaml }}
+        - serve
+        - --managed
+        - --addr
+        - 127.0.0.1:{{ .Runtime.Port }}
+      mode: os_service
+      # Credentials come from operator config or the app's own identity provider.
+      # env_file, when set, is a reference to an owner-only file outside the repository.
+{{- if .Runtime.EnvFile }}
+      env_file: {{ .Runtime.EnvFile | yaml }}
+{{- end }}
+      port: {{ .Runtime.Port }}
+      run_from: workspace
+      supervisor: auto
+      url: http://127.0.0.1:{{ .Runtime.Port }}/healthz
+      health_check:
+        url: http://127.0.0.1:{{ .Runtime.Port }}/healthz
+    tags:
+      - api
+      - go
+      - daemon
+      - {{ .ID }}

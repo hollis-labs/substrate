@@ -1,0 +1,82 @@
+# {{ .inputs.repo_name }}
+
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A hollis-labs class 2 Substrate service.{{ end }}
+
+Class 2 tool (project/1 class model, RC1): `project.yaml` is the descriptor, `deploy.yaml` is read by `fleet-install`.
+
+## Build
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+./{{ .inputs.repo_name }} serve
+```
+
+## Deploy
+
+`fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first. Render with `target_os=darwin target_arch=arm64` for an Apple Silicon Mac (defaults: linux/amd64); Cerberus `supervisor: auto` selects the native supervisor. The installed PATH binary runs independently of the source checkout; keep operator config/credentials outside the repository.
+
+## Run under Cerberus
+
+Fleet-install provisions `settings.runtime.install_root` while placing the binary. The generated
+Cerberus `config.dir` uses that stable directory, so startup needs no source checkout and survives
+release pruning. Install before the first resource apply; keep app data/config in their XDG paths.
+Cerberus only supervises the installed binary (`{{ .inputs.repo_name }}.cerberus.yaml`, no build, no artifact path):
+
+```sh
+cerberus validate {{ .inputs.repo_name }}.cerberus.yaml
+cerberus register {{ .inputs.repo_name }}.cerberus.yaml
+cerberus resource apply {{ .inputs.repo_name }} --ack
+```
+
+## Auth
+
+Default `{{ .inputs.auth }}`. `enforce` needs a bearer token in `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN`. `{{ upper (replace "-" "_" .inputs.repo_name) }}_AUTH=loopback_open` requires `serve --dev` on a loopback bind; the service refuses to start otherwise. `/healthz` names the active mode. The generated Cerberus command uses `serve --managed`, which defaults to enforce and refuses an explicit loopback_open override or `--dev`, even on loopback.
+
+The token never goes in a file of this repository. Under Cerberus an `enforce` service exits at start without it, so before `cerberus resource apply` put `{{ upper (replace "-" "_" .inputs.repo_name) }}_TOKEN` where the unit reads it: a Cerberus secret reference in the manifest's `config.env`, or an owner-only env file named by `config.env_file` (an absolute path outside this repository). The commented lines in `{{ .inputs.repo_name }}.cerberus.yaml` show where.
+
+## After a deploy
+
+`deploy.yaml` restarts through Cerberus (`restart: {via: cerberus, resource: {{ .inputs.repo_name }}}`). fleet-install runs that restart itself only when the step has `run: true` and the deploy is run by the local user on that host; otherwise it prints a request for a human to approve and the deploy stays pending until `--restart-done`.
+
+Health 200 is not proof of the new build: the manifest must keep `command[0]` on the fleet-installed path, otherwise Cerberus can restart an older copy. After a deploy check that the running executable is the new version (on Linux, `readlink /proc/<pid>/exe`; on macOS, inspect the running executable with `lsof -p <pid>` and compare it with the fleet-installed binary). deploy.yaml has no `health.version_json`: this service's `/healthz` does not report a version, so the check would always fail; add the key once the service exposes one.
+
+## Installed configuration
+
+The binary reads `$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml` when present (fallback
+`~/.config/{{ .inputs.repo_name }}/config.yaml`). `SUBSTRATE_CONFIG` explicitly selects another file.
+Config discovery creates nothing and does not read from the checkout. Store credentials in an
+operator-owned environment file or secret provider outside the repository.
+
+{{ if .inputs.with_mcp }}
+## MCP
+
+This scaffold selects Substrate's agentic profile. Set `{{ .computed.env_prefix }}_TOKEN` through your
+operator environment (or configure a Substrate verifier in the XDG config) before serving MCP.
+The environment credential grants `{{ .inputs.repo_name }}.mcp` and `{{ .inputs.repo_name }}.read`;
+no credential is rendered or stored by Folio. Help and print-only commands need no credentials.
+
+`{{ .inputs.repo_name }} mcp --token-file <credential-file>` serves stdio. For an explicitly trusted
+local caller, `mcp --local-trust` grants only endpoint/read scopes; it does not bypass a bad supplied
+token or the per-tool scope check. The configured server verifier is still required. Local trust
+is never read from config or used for HTTP. Add scopes deliberately when you add operations.
+{{ if eq .inputs.tool_kind "service" }}
+`serve` also exposes `/mcp` behind both the outer service guard and Substrate endpoint/tool scopes.
+MCP-enabled services always require enforced auth, including development runs. The outer guard uses
+the same Substrate verifier and scope table as the MCP endpoint and tool handlers.
+{{ end }}
+`ping` is a scoped read-only example. Replace its implementation with calls into the tool's service layer;
+register every new tool's scope and call `mcp.Authorize` in its handler. Registry registration waits for
+the catalog owner's agreed interface; this scaffold invents no registry endpoint.
+{{ end }}
+
+## Regenerate deployment descriptors
+
+Edit `project.yaml` → `settings.runtime`, then run `folio deploy render . --plan` and review the result.
+`folio deploy render . --write` updates generated descriptors and their tracking digests. It refuses
+local edits to those outputs unless you explicitly add `--overwrite` after review. It never rewrites
+`project.yaml`, starts a service or installs a binary. `env_file`, if set, references operator-owned
+configuration outside the repository; no credentials belong in the descriptor. Changing runtime
+target OS/architecture also requires updating CI build targets. Application auth/code are not rewritten.

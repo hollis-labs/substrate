@@ -1,0 +1,57 @@
+# {{ .inputs.repo_name }}
+
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A hollis-labs class 2 Substrate CLI tool.{{ end }}
+
+Class 2 tool (project/1 class model, RC1): `project.yaml` is the descriptor, `deploy.yaml` is read by `fleet-install`.
+
+## Build
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+./{{ .inputs.repo_name }} hello
+```
+
+## Deploy
+
+`fleet-install deploy {{ .inputs.repo_name }} --commit <sha> --dry-run`, then without `--dry-run`. Set the host alias in `deploy.yaml` first.
+
+## Installed configuration
+
+The binary reads `$XDG_CONFIG_HOME/{{ .inputs.repo_name }}/config.yaml` when present (fallback
+`~/.config/{{ .inputs.repo_name }}/config.yaml`). `SUBSTRATE_CONFIG` explicitly selects another file.
+Config discovery creates nothing and does not read from the checkout. Store credentials in an
+operator-owned environment file or secret provider outside the repository.
+
+{{ if .inputs.with_mcp }}
+## MCP
+
+This scaffold selects Substrate's agentic profile. Set `{{ .computed.env_prefix }}_TOKEN` through your
+operator environment (or configure a Substrate verifier in the XDG config) before serving MCP.
+The environment credential grants `{{ .inputs.repo_name }}.mcp` and `{{ .inputs.repo_name }}.read`;
+no credential is rendered or stored by Folio. Help and print-only commands need no credentials.
+
+`{{ .inputs.repo_name }} mcp --token-file <credential-file>` serves stdio. For an explicitly trusted
+local caller, `mcp --local-trust` grants only endpoint/read scopes; it does not bypass a bad supplied
+token or the per-tool scope check. The configured server verifier is still required. Local trust
+is never read from config or used for HTTP. Add scopes deliberately when you add operations.
+{{ if eq .inputs.tool_kind "service" }}
+`serve` also exposes `/mcp` behind both the outer service guard and Substrate endpoint/tool scopes.
+MCP-enabled services always require enforced auth, including development runs. The outer guard uses
+the same Substrate verifier and scope table as the MCP endpoint and tool handlers.
+{{ end }}
+`ping` is a scoped read-only example. Replace its implementation with calls into the tool's service layer;
+register every new tool's scope and call `mcp.Authorize` in its handler. Registry registration waits for
+the catalog owner's agreed interface; this scaffold invents no registry endpoint.
+{{ end }}
+
+## Regenerate deployment descriptors
+
+Edit `project.yaml` → `settings.runtime`, then run `folio deploy render . --plan` and review the result.
+`folio deploy render . --write` updates generated descriptors and their tracking digests. It refuses
+local edits to those outputs unless you explicitly add `--overwrite` after review. It never rewrites
+`project.yaml`, starts a service or installs a binary. `env_file`, if set, references operator-owned
+configuration outside the repository; no credentials belong in the descriptor. Changing runtime
+target OS/architecture also requires updating CI build targets. Application auth/code are not rewritten.

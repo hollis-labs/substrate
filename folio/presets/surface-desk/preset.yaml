@@ -1,0 +1,79 @@
+folio_version: "0.1"
+id: surface-desk
+version: 0.1.0
+description: A Surface desk app — a Go server on github.com/hollis-labs/surface and its page on @hollis-labs/surface-page (windows, the agent panel, cards), with a starter module
+author: hollis-labs
+license: MIT
+
+# A desk app: the Surface core and the app's own modules in one Go binary (main.go, modules/<id>/), and the
+# page built with @hollis-labs/surface-page drawing with the app's installed registry components. The
+# Components window (the gallery) is in the apps menu. Everything is one Surface release: the registry ref,
+# the npm packages and the Go module.
+#
+# `make setup` installs the packages, every registry item (the gallery draws them all) and tidies go.mod;
+# `make check` is what CI runs; `make serve` builds and serves on 127.0.0.1:<port>.
+#
+# The modules (modules/**, src/modules/**) are the person's once generated: folio sync never writes them.
+
+composes:
+  - id: surface-ui
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../surface-ui
+    vars:
+      kind: desk
+  - id: agent-dir
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../agent-dir
+
+inputs:
+  - name: kind
+    type: enum
+    values: [desk]
+    default: desk
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary and app name (lowercase, hyphens allowed)
+  - name: title
+    type: string
+    default: ""
+    pattern: "^[^\\x00-\\x1f\\x7f]*$"
+    description: How a person reads the app's name (default from repo_name)
+  - name: surface_version
+    type: string
+    default: "0.1.0"
+    pattern: "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    description: The Surface release. The registry is read at the tag v<this>; @hollis-labs/surface-* and github.com/hollis-labs/surface are pinned to it exactly
+  - name: github_owner
+    type: string
+    default: hollis-labs
+    pattern: "^[A-Za-z0-9][A-Za-z0-9-]*$"
+    description: GitHub owner, for the Go module path github.com/<owner>/<repo_name>
+  - name: port
+    type: string
+    default: "8300"
+    pattern: "^[0-9]{4,5}$"
+    description: The server's loopback port
+
+computed:
+  app_title: '{{ if .inputs.title }}{{ .inputs.title }}{{ else }}{{ title (replace "-" " " .inputs.repo_name) }}{{ end }}'
+  module_path: "github.com/{{ .inputs.github_owner }}/{{ .inputs.repo_name }}"
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: "modules/**"
+      policy: skip
+    - glob: "src/modules/**"
+      policy: skip
+    - glob: "go.mod"
+      policy: skip
+    - glob: "go.sum"
+      policy: skip

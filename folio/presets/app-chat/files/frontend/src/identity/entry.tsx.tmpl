@@ -1,0 +1,36 @@
+import { SetupOfflineScreen, SignInScreen } from "@hollis-labs/kit-identity"
+import type { LoginInput } from "@hollis-labs/kit-identity/client"
+import { useState } from "react"
+import { ApiError, request } from "../api/request"
+import { APP_CMD } from "./forms"
+
+export function SetupOffline() {
+  return <SetupOfflineScreen appName={APP_CMD} />
+}
+
+export function Entry({ onReady }: { onReady: (name: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  async function submit(input: LoginInput) {
+    if (busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const profile = await request<{ display_name?: string; username: string }>(
+        "login",
+        "POST",
+        input,
+      )
+      onReady(profile.display_name || profile.username)
+    } catch (e) {
+      const retry =
+        e instanceof ApiError && e.status === 429 && e.retryAfter > 0
+          ? ` Try again in ${Math.ceil(e.retryAfter / 60)} minutes.`
+          : ""
+      setError((e instanceof Error ? e.message : "Could not sign in.") + retry)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return <SignInScreen onSubmit={(input) => void submit(input)} busy={busy} error={error} />
+}

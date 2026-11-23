@@ -1,0 +1,71 @@
+folio_version: "0.1"
+id: go-lib
+version: 0.3.0
+description: Importable Go shared library — one package (subdirectory or module root), no cmd/ or internal/, composed on go-baseline
+author: hollis-labs
+license: MIT
+
+# Composes `go-baseline` (CI, lint config, hooks, LICENSE, CHANGELOG, AGENTS.md)
+# and adds what is specific to an importable library: go.mod, the package, a
+# runnable example, README and the release workflow. NOT composed on `base`:
+# that preset is binary-oriented (cmd/<project>/main.go + a build Makefile) and
+# its project_name input forbids hyphens, so it cannot express a `go-*` name.
+# A shared library is a distinct atom: an importable package, no cmd/, no
+# internal/, no Makefile.
+#
+# The CLI prompts only for THIS preset's inputs, so the required ones are
+# redeclared here; optional shared inputs (go_version, description, ...) are
+# declared once in go-baseline and flow through.
+
+composes:
+  - id: go-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../go-baseline
+    vars:
+      agents_start_here: |-
+        - `{{ .inputs.package_name }}` package — the importable API; its `doc.go` is the package documentation.
+        - `examples/hello/main.go` — the runnable example; the README `## Usage` fence must stay identical to it.
+        - `.github/workflows/check.yml` — the full CI gate; `release.yml` refuses a tag with no CHANGELOG heading.
+      agents_boundaries: |-
+        - No `replace` directive in `go.mod` and no committed `go.work`: consumers cannot resolve either.
+        - TODO(author): what a competent agent will get wrong here — invariants, the test that guards each by name, what must never happen.
+
+inputs:
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository / Go module name (lowercase, hyphens allowed, e.g. go-apppaths)
+  - name: package_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9]*$"
+    description: Go package identifier (lowercase, no separators, e.g. paths)
+  - name: stability
+    type: enum
+    values: [pre-1.0, stable]
+    default: pre-1.0
+    description: Shapes the README `## Compatibility` paragraph (pre-1.0 = minor releases may break; stable = v1 promise)
+  - name: package_layout
+    type: enum
+    values: [subdir, root]
+    default: subdir
+    description: >-
+      subdir = the package lives in <package_name>/ (import path
+      <module>/<package_name>); root = the package sits at the module root
+      (import path is the module path, package name is still package_name).
+
+computed:
+  import_path: '{{ if eq .inputs.package_layout "root" }}{{ .computed.module_path }}{{ else }}{{ .computed.module_path }}/{{ .inputs.package_name }}{{ end }}'
+  import_line: '{{ if eq .inputs.package_layout "root" }}{{ .inputs.package_name }} "{{ .computed.module_path }}"{{ else }}"{{ .computed.module_path }}/{{ .inputs.package_name }}"{{ end }}'
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: ".github/workflows/release.yml"
+      policy: overwrite

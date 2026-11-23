@@ -1,0 +1,110 @@
+{{- if .inputs.with_mcp -}}
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	gmcp "github.com/hollis-labs/libs/mcp/plugin-mcp/go-mcp/server"
+	libauth "github.com/hollis-labs/libs/security/auth"
+	"github.com/spf13/cobra"
+
+	"github.com/hollis-labs/substrate/module"
+	"github.com/hollis-labs/substrate/modules/auth"
+	"github.com/hollis-labs/substrate/modules/mcp"
+)
+
+// Help and print-only commands never need credentials or secret-store modules.
+func commandModules(args []string) []string {
+	if len(args) == 0 || slices.Contains(args, "--help") || slices.Contains(args, "-h") || (args[0] != "mcp" && args[0] != "serve") {
+		return []string{"config", "logging", "health", "cli"}
+	}
+	return substrateModules
+}
+
+// configureMCP runs after the operator config is loaded, before auth starts.
+// The environment token is optional when the operator has configured another
+// Substrate verifier; it grants only the scaffold's endpoint/read scopes.
+func configureMCP(_ context.Context, app *module.App) error {
+	cfg, _ := app.Config["auth"].(map[string]any)
+	if cfg == nil {
+		cfg = map[string]any{}
+		app.Config["auth"] = cfg
+	}
+	if mode, _ := cfg["mode"].(string); mode != "" && mode != "enforce" {
+		return fmt.Errorf("MCP requires auth.mode enforce")
+	}
+	cfg["mode"] = "enforce"
+	if token := os.Getenv("{{ .computed.env_prefix }}_TOKEN"); token != "" {
+		if strings.TrimSpace(token) == "" {
+			return fmt.Errorf("MCP token must not be blank")
+		}
+		keys, _ := cfg["api_keys"].([]any)
+		cfg["api_keys"] = append(keys, map[string]any{"id": "service", "hash": libauth.HashKey(token), "scopes": []any{app.Name + ".mcp", app.Name + ".read"}})
+	}
+	// A managed secret backend must never resolve a relative directory against the checkout.
+	secrets, _ := app.Config["secrets"].(map[string]any)
+	if secrets == nil {
+		secrets = map[string]any{}
+		app.Config["secrets"] = secrets
+	}
+	if dir, _ := secrets["state_dir"].(string); !filepath.IsAbs(dir) {
+		base := os.Getenv("XDG_STATE_HOME")
+		if base == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return err
+			}
+			base = filepath.Join(home, ".local", "state")
+		}
+		base, err := filepath.Abs(base)
+		if err != nil {
+			return err
+		}
+		secrets["state_dir"] = filepath.Join(base, app.Name, "secrets", dir)
+	}
+	return nil
+}
+
+func registerMCP(app *module.App) {
+	server := mcp.Server(app)
+	if server == nil {
+		return
+	}
+	auth.ScopeTable(app).Tool("ping", app.Name+".read")
+	auth.ScopeTable(app).Route("GET", "/api/ping", app.Name+".read")
+	server.RegisterChecked(gmcp.Tool{
+		Name: "ping", Description: "Check this tool is reachable", InputSchema: gmcp.EmptyObjectSchema(),
+		Handler: func(ctx context.Context, _ map[string]any) (any, error) {
+			if err := mcp.Authorize(ctx, app, "ping"); err != nil {
+				return nil, err
+			}
+			return map[string]any{"message": "pong"}, nil
+		},
+	}, gmcp.Reads("returns a constant"))
+}
+
+func mcpCmd(ctx context.Context, app *module.App) *cobra.Command {
+	var local bool
+	var tokenFile string
+	cmd := &cobra.Command{
+		Use: "mcp", Short: "Serve scoped MCP over stdio", Args: cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			return mcp.ServeStdio(ctx, app, localStdioOptions(app, tokenFile, local))
+		},
+	}
+	cmd.Flags().BoolVar(&local, "local-trust", false, "Trust this local stdio caller with endpoint/read scopes")
+	cmd.Flags().StringVar(&tokenFile, "token-file", "", "Credential file for the stdio caller")
+	return cmd
+}
+
+// When adding a write operation, register its scope and explicitly extend the
+// credential and local scope lists only for callers intended to hold it.
+func localStdioOptions(app *module.App, tokenFile string, local bool) mcp.StdioOptions {
+	return mcp.StdioOptions{TokenFile: tokenFile, LocalTrust: local, LocalScopes: []string{app.Name + ".mcp", app.Name + ".read"}}
+}
+{{- end }}

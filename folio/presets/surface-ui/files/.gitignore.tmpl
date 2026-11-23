@@ -1,0 +1,9 @@
+node_modules/
+dist/
+{{- if eq .inputs.kind "desk" }}
+/{{ .inputs.repo_name }}
+webui/dist/*
+!webui/dist/.gitkeep
+{{- end }}
+.DS_Store
+*.log

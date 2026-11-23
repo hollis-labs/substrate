@@ -1,0 +1,29 @@
+# Identity bootstrap
+
+{{ .inputs.repo_name }} is its own identity provider (the Substrate `identity` module). There is no open
+first-run setup over HTTP: `POST /api/setup` is refused (`setup_offline`). The owner and the first
+machine keys are created on the host, before the service starts.
+
+```sh
+export SUBSTRATE_CONFIG=/path/to/{{ .inputs.repo_name }}.yaml   # your override file; never committed
+
+# 1. the owner: the password is typed twice at the terminal and not echoed
+{{ .inputs.repo_name }} identity setup --username owner --display-name "Owner"
+
+# 2. one key per machine caller, written once to a new 0600 file
+{{ .inputs.repo_name }} identity key create --name my-caller --scope {{ .inputs.repo_name }}.read --out /path/to/my-caller.key
+
+# MCP callers also need the endpoint scope, plus each tool’s operation scopes
+{{ .inputs.repo_name }} identity key create --name my-mcp-caller --scope {{ .inputs.repo_name }}.mcp --scope {{ .inputs.repo_name }}.read --out /path/to/my-mcp-caller.key
+
+# 3. start, then check
+{{ .inputs.repo_name }} serve --managed # foreground check; use the runbook for Cerberus supervision
+curl -s http://127.0.0.1:{{ .inputs.http_port }}/api/setup    # {"setup_over_http":false,"setup_required":false}
+```
+
+For automation only, `identity setup` reads the password from the first line of stdin when stdin is not a
+terminal; supply it from your secret store, never from a shell variable, the command line or shell history.
+
+The data directory is `${{ .computed.env_prefix }}_DATA_DIR`, else `$XDG_DATA_HOME/{{ .inputs.repo_name }}`, else
+`~/.local/share/{{ .inputs.repo_name }}`: the database and identity signing key (never lose or commit it).
+Secret backend state uses `$XDG_STATE_HOME/{{ .inputs.repo_name }}` or `~/.local/state/{{ .inputs.repo_name }}`. Details: Substrate `docs/identity.md`.

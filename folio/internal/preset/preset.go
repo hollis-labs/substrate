@@ -1,0 +1,114 @@
+// Package preset parses and validates folio preset manifests (preset.yaml).
+//
+// A preset declares: identity (id, version), the inputs schema agents/users
+// fill, computed variables derived from inputs, the file tree to render, and
+// optional composition / post-render / sync metadata. Post-render hooks are
+// deferred; sync rules are applied by `folio sync` (service.Sync).
+package preset
+
+import "gopkg.in/yaml.v3"
+
+// Preset is the in-memory representation of a parsed preset.yaml.
+//
+// Field order mirrors the design doc §2 schema. composes is parsed and
+// shape-validated at parse time; cross-preset rules and execution run in
+// internal/compose. post_render is parsed but ignored (validation emits a
+// warning). sync rules decide what `folio sync` may write (service.Sync). layer_only is informational: it marks a preset meant to be composed
+// by others rather than rendered directly, is surfaced by `folio preset list`
+// and `show`, and never changes what a render produces.
+type Preset struct {
+	FolioVersion string            `yaml:"folio_version"`
+	ID           string            `yaml:"id"`
+	Version      string            `yaml:"version"`
+	Description  string            `yaml:"description,omitempty"`
+	Author       string            `yaml:"author,omitempty"`
+	LayerOnly    bool              `yaml:"layer_only,omitempty"`
+	License      string            `yaml:"license,omitempty"`
+	Composes     []ComposeEntry    `yaml:"composes,omitempty"`
+	Inputs       []Input           `yaml:"inputs,omitempty"`
+	Computed     map[string]string `yaml:"computed,omitempty"`
+	Files        Files             `yaml:"files"`
+	PostRender   *PostRender       `yaml:"post_render,omitempty"`
+	Sync         *Sync             `yaml:"sync,omitempty"`
+
+	// sourceFile is the absolute path the preset was loaded from. Empty when
+	// parsed from an in-memory byte slice.
+	sourceFile string
+
+	// rootNode preserves the parsed YAML tree so validation errors can report
+	// file:line:col. It is populated by Parse and ParseBytes.
+	rootNode *yaml.Node
+}
+
+// SourceFile returns the absolute path the preset was loaded from, or the
+// empty string if the preset was parsed from a byte slice without a path.
+func (p *Preset) SourceFile() string { return p.sourceFile }
+
+// Input declares one user-facing or agent-facing input the preset expects.
+type Input struct {
+	Name        string   `yaml:"name"`
+	Type        string   `yaml:"type"`
+	Required    bool     `yaml:"required,omitempty"`
+	Default     any      `yaml:"default,omitempty"`
+	Pattern     string   `yaml:"pattern,omitempty"`
+	Description string   `yaml:"description,omitempty"`
+	Values      []string `yaml:"values,omitempty"`
+	Min         *float64 `yaml:"min,omitempty"`
+	Max         *float64 `yaml:"max,omitempty"`
+	MinLength   *int     `yaml:"min_length,omitempty"`
+	MaxLength   *int     `yaml:"max_length,omitempty"`
+	Multiline   bool     `yaml:"multiline,omitempty"`
+}
+
+// Files describes how preset content maps to the rendered target tree.
+type Files struct {
+	Source            string   `yaml:"source"`
+	TemplateSuffix    string   `yaml:"template_suffix,omitempty"`
+	Ignore            []string `yaml:"ignore,omitempty"`
+	BinaryExtensions  []string `yaml:"binary_extensions,omitempty"`
+	LargeFilesAllowed bool     `yaml:"large_files_allowed,omitempty"`
+}
+
+// ComposeEntry references another preset to be applied as a layer.
+//
+// Parse-time validation (preset.Validate) checks per-entry shape; compose-time
+// rules (vars key must name a declared input on the composed preset, DAG
+// cycles, depth cap) run in internal/compose.
+type ComposeEntry struct {
+	ID      string            `yaml:"id"`
+	Version string            `yaml:"version,omitempty"`
+	Source  string            `yaml:"source,omitempty"`
+	Path    string            `yaml:"path,omitempty"`
+	Vars    map[string]string `yaml:"vars,omitempty"`
+}
+
+// PostRender declares a Hadron blueprint to invoke after rendering. v0
+// validation emits a warning if present and the field is otherwise ignored.
+type PostRender struct {
+	Blueprint string            `yaml:"blueprint"`
+	Inputs    map[string]string `yaml:"inputs,omitempty"`
+}
+
+// Sync declares the per-file sync policy applied by `folio sync`.
+type Sync struct {
+	Default string     `yaml:"default,omitempty"`
+	Rules   []SyncRule `yaml:"rules,omitempty"`
+}
+
+// SyncRule applies a sync Policy to files matching Glob.
+type SyncRule struct {
+	Glob   string `yaml:"glob"`
+	Policy string `yaml:"policy"`
+}
+
+// Default template suffix used when files.template_suffix is unset.
+const DefaultTemplateSuffix = ".tmpl"
+
+// TemplateSuffix returns the suffix used to mark templated files, falling
+// back to DefaultTemplateSuffix when the preset doesn't override it.
+func (f Files) TemplateSuffixOrDefault() string {
+	if f.TemplateSuffix == "" {
+		return DefaultTemplateSuffix
+	}
+	return f.TemplateSuffix
+}

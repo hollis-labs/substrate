@@ -1,0 +1,10 @@
+{
+  "schema_version": 0,
+  "module": "{{ .inputs.repo_name }}",
+  "contributions": [
+    { "kind": "nav.item", "key": "items", "label": "Items", "icon": "list", "route": "/", "priority": 1 },
+    { "kind": "surface", "key": "items", "label": "Items", "title": "Items", "route": "/", "layout": "list" },
+    { "kind": "nav.item", "key": "sign-out", "label": "Sign out", "icon": "log-out", "route": "/sign-out", "region": "nav.footer" },
+    { "kind": "surface", "key": "sign-out", "label": "Sign out", "title": "Sign out", "route": "/sign-out", "layout": "form" }
+  ]
+}

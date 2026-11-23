@@ -1,0 +1,79 @@
+package agentdir
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/hollis-labs/substrate/agents"
+	"github.com/hollis-labs/substrate/boot"
+	"github.com/hollis-labs/substrate/module"
+	_ "github.com/hollis-labs/substrate/modules/config"
+)
+
+func TestResolveMergedConfig(t *testing.T) {
+	root := t.TempDir()
+	configFile := filepath.Join(root, "operator.yaml")
+	if err := os.WriteFile(configFile, []byte("agents:\n  dir: custom-agents/\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("SUBSTRATE_CONFIG", configFile)
+	state := filepath.Join(root, "state")
+	t.Setenv("XDG_STATE_HOME", state)
+	running, err := boot.StartWith(context.Background(), "{{ .inputs.repo_name }}", []string{"config"}, `{"agents":{"dir":"agents/"}}`, boot.Options{AfterConfig: func(_ context.Context, app *module.App) error { return Resolve(app) }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = running.Stop(context.Background()) }()
+	value, _ := running.App.Value("agent-directory.layout")
+	layout, ok := value.(agents.Layout)
+	if !ok {
+		t.Fatalf("layout = %T", value)
+	}
+	if want := filepath.Join(root, "custom-agents"); layout.Dir() != want {
+		t.Fatalf("dir = %s, want %s", layout.Dir(), want)
+	}
+	data, err := layout.DataDir("assistant")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(state, "{{ .inputs.repo_name }}", "agents", "assistant"); data != want {
+		t.Fatalf("data = %s, want %s", data, want)
+	}
+	if _, err := os.Stat(state); !os.IsNotExist(err) {
+		t.Fatalf("resolution created state: %v", err)
+	}
+}
+
+func TestResolveEmbeddedAndAbsolute(t *testing.T) {
+	// Resolve beside the runtime manifest, independent of the build/source directory.
+	t.Chdir(t.TempDir())
+	t.Setenv("SUBSTRATE_CONFIG", "")
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	app := &module.App{Config: map[string]any{"agents": map[string]any{"dir": "agents/"}}, Values: map[string]any{}}
+	if err := Resolve(app); err != nil {
+		t.Fatal(err)
+	}
+	value, _ := app.Value("agent-directory.layout")
+	want, err := filepath.Abs("agents")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := value.(agents.Layout).Dir(); got != want {
+		t.Fatalf("dir = %s, want %s", got, want)
+	}
+	absolute := filepath.Join(t.TempDir(), "authored")
+	app.Config["agents"].(map[string]any)["dir"] = absolute
+	if err := Resolve(app); err != nil {
+		t.Fatal(err)
+	}
+	value, _ = app.Value("agent-directory.layout")
+	if got := value.(agents.Layout).Dir(); got != absolute {
+		t.Fatalf("dir = %s, want %s", got, absolute)
+	}
+	app.Config["agents"].(map[string]any)["dir"] = ""
+	if err := Resolve(app); err == nil {
+		t.Fatal("accepted empty agents.dir")
+	}
+}

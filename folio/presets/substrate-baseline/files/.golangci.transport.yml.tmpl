@@ -1,0 +1,40 @@
+# .golangci.transport.yml: the SECOND lint config. Transports call the service layer, never the store.
+# Run from the module root:
+#
+#   GOWORK=off golangci-lint run --config .golangci.transport.yml ./...
+#
+# It is not merged into .golangci.yml on purpose (one rule set per run keeps a finding attributable).
+# CI requirements: setup-go with `go-version-file: go.mod`, and golangci-lint >= v2.11.4.
+#
+# The rule (depguard): a transport package must not import the app's storage package, the Substrate
+# database module or database/sql. internal/service is the boundary: it takes the read pool and the
+# write handle from the composition root (cmd/{{ .inputs.repo_name }}) and is the only code that runs SQL.
+# Tests are excluded. A new transport directory (internal/mcp, internal/cli) is already covered; add
+# any other one to `files` below.
+version: "2"
+
+run:
+  tests: false
+  relative-path-mode: gomod
+
+linters:
+  default: none
+  enable: [depguard]
+  settings:
+    depguard:
+      rules:
+        transports-not-store:
+          files:
+            - "**/internal/api/**"
+            - "**/internal/mcp/**"
+            - "**/internal/cli/**"
+            - "!$test"
+          deny:
+            - pkg: "{{ .computed.module_path }}/internal/storage"
+              desc: "transport-boundary: transports call the service layer, not the storage package"
+            - pkg: "github.com/hollis-labs/substrate/modules/database"
+              desc: "transport-boundary: transports call the service layer, not the database module"
+            - pkg: "database/sql"
+              desc: "transport-boundary: no raw SQL in a transport"
+  exclusions:
+    generated: lax

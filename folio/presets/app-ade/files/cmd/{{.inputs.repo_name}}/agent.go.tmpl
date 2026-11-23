@@ -1,0 +1,89 @@
+package main
+
+// The agent host: the server's side of the conversation between the workspace page and the model
+// (github.com/hollis-labs/libs/agent/host). The page declares its tools with each message and runs
+// them itself; the host runs the model, keeps one thread per signed-in person, and relays each tool
+// call to the page and its answer back.
+//
+// This file is the preset's (folio sync keeps it current). The agent's prompt is yours: prompt.go.
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"path/filepath"
+	"strings"
+
+	agenthost "github.com/hollis-labs/libs/agent/host"
+	libauth "github.com/hollis-labs/libs/security/auth"
+
+	"{{ .computed.module_path }}/internal/api"
+	"{{ .computed.module_path }}/internal/settings"
+)
+
+// agentRoutes are the agent host's routes with the scope each needs. They go on the guard's scope
+// table beside the API's, so the same enforcement covers them.
+var agentRoutes = []api.Route{
+	{Method: http.MethodGet, Pattern: "/api/agent", Scope: api.ScopeRead},
+	{Method: http.MethodGet, Pattern: "/api/agent/thread", Scope: api.ScopeRead},
+	{Method: http.MethodDelete, Pattern: "/api/agent/thread", Scope: api.ScopeWrite},
+	{Method: http.MethodPost, Pattern: "/api/agent/turns", Scope: api.ScopeWrite},
+	{Method: http.MethodGet, Pattern: "/api/agent/runs/{run}/events", Scope: api.ScopeRead},
+	{Method: http.MethodPost, Pattern: "/api/agent/runs/{run}/tool-results", Scope: api.ScopeWrite},
+	{Method: http.MethodPost, Pattern: "/api/agent/runs/{run}/tool-alive", Scope: api.ScopeWrite},
+	{Method: http.MethodPost, Pattern: "/api/agent/runs/{run}/approvals", Scope: api.ScopeWrite},
+	{Method: http.MethodPost, Pattern: "/api/agent/runs/{run}/cancel", Scope: api.ScopeWrite},
+}
+
+// mountedAgent is the running host and its store.
+type mountedAgent struct {
+	host  *agenthost.Host
+	store *agenthost.SQLite
+}
+
+// Close stops every run, then closes the conversation store.
+func (m *mountedAgent) Close() {
+	m.host.Close()
+	_ = m.store.Close()
+}
+
+// mountAgent opens the conversation store (agent.db in the data directory, beside the app's
+// database), starts the host with the configured model, and puts its routes on mux and their scopes
+// on the guard's table. With no model configured the app runs and the panel says so.
+func mountAgent(ctx context.Context, scopes *libauth.ScopeTable, mux *http.ServeMux, cfg settings.Agent) (*mountedAgent, error) {
+	if scopes == nil {
+		return nil, errors.New("the auth module's scope table is not available")
+	}
+	dir, err := dataDir()
+	if err != nil {
+		return nil, err
+	}
+	store, err := agenthost.OpenSQLite(ctx, filepath.Join(dir, "agent.db"))
+	if err != nil {
+		return nil, fmt.Errorf("the agent's conversation store: %w", err)
+	}
+	host := agenthost.New(agenthost.Config{
+		Model:   cfg.Model,
+		BaseURL: cfg.BaseURL,
+		KeyFile: cfg.KeyFile,
+		System:  agentPrompt,
+	}, store)
+	for _, rt := range agentRoutes {
+		scopes.Route(rt.Method, rt.Pattern, rt.Scope)
+	}
+	h := host.Handler("/api/agent", agentOwner)
+	mux.Handle("/api/agent", h)
+	mux.Handle("/api/agent/", h)
+	return &mountedAgent{host: host, store: store}, nil
+}
+
+// agentOwner is the verified principal's subject, as the API's handlers take it: a thread belongs to
+// whoever is signed in, never to a request field.
+func agentOwner(r *http.Request) (string, error) {
+	p, ok := libauth.FromContext(r.Context())
+	if !ok || !p.Verified || strings.TrimSpace(p.ID) == "" {
+		return "", errors.New("sign in required")
+	}
+	return p.ID, nil
+}

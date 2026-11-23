@@ -1,0 +1,117 @@
+// Package settings reads the app's own "{{ .inputs.repo_name }}" block from the manifest config. The shell modules
+// read theirs; this block holds what only this app has.
+//
+//	{{ .inputs.repo_name }}:
+//	  allowed_hosts: []   # extra Host names served (a local TLS proxy forwarding a public name)
+{{- if .inputs.with_ade }}
+//	  agent:              # the model the agent panel talks to; none set: the app runs, the panel says no model
+//	    model: ""         # the model's name, or the gateway's alias for it
+//	    base_url: ""      # an Anthropic-compatible base URL: requests go to <base_url>/v1/messages
+//	    key_file: ""      # a file holding the key; read per request, never logged or sent to the page
+{{- end }}
+package settings
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+)
+
+// Key is the name of the config block.
+const Key = "{{ .inputs.repo_name }}"
+
+// Settings are the parsed block.
+type Settings struct {
+	AllowedHosts []string
+{{- if .inputs.with_ade }}
+	Agent        Agent
+{{- end }}
+}
+{{- if .inputs.with_ade }}
+
+// Agent is where the agent's model is. All empty: no model is connected.
+type Agent struct {
+	Model, BaseURL, KeyFile string
+}
+{{- end }}
+
+// Parse reads the block (nil for a missing one). An unknown key or a bad value is an error naming
+// the key, so a typo is found at startup instead of silently turning a protection off.
+func Parse(raw any) (Settings, error) {
+	var s Settings
+	if raw == nil {
+		return s, nil
+	}
+	block, ok := raw.(map[string]any)
+	if !ok {
+		return s, fmt.Errorf("%s: the config block must be a map", Key)
+	}
+	var unknown []string
+	for k := range block {
+		if k != "allowed_hosts"{{ if .inputs.with_ade }} && k != "agent"{{ end }} {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return s, fmt.Errorf("%s: unknown key(s) %s", Key, strings.Join(unknown, ", "))
+	}
+	if v, present := block["allowed_hosts"]; present && v != nil {
+		list, ok := v.([]any)
+		if !ok {
+			return s, fmt.Errorf("%s.allowed_hosts: must be a list of host names", Key)
+		}
+		for _, item := range list {
+			name, ok := item.(string)
+			if !ok || strings.TrimSpace(name) == "" {
+				return s, fmt.Errorf("%s.allowed_hosts: every entry must be a non-empty string", Key)
+			}
+			s.AllowedHosts = append(s.AllowedHosts, strings.TrimSpace(name))
+		}
+	}
+{{- if .inputs.with_ade }}
+	if v, present := block["agent"]; present && v != nil {
+		agent, err := parseAgent(v)
+		if err != nil {
+			return s, err
+		}
+		s.Agent = agent
+	}
+{{- end }}
+	return s, nil
+}
+{{- if .inputs.with_ade }}
+
+func parseAgent(raw any) (Agent, error) {
+	var a Agent
+	block, ok := raw.(map[string]any)
+	if !ok {
+		return a, fmt.Errorf("%s.agent: must be a map", Key)
+	}
+	fields := map[string]*string{"model": &a.Model, "base_url": &a.BaseURL, "key_file": &a.KeyFile}
+	var unknown []string
+	for k, v := range block {
+		dst, known := fields[k]
+		if !known {
+			unknown = append(unknown, k)
+			continue
+		}
+		if v == nil {
+			continue
+		}
+		str, ok := v.(string)
+		if !ok {
+			return a, fmt.Errorf("%s.agent.%s: must be a string", Key, k)
+		}
+		*dst = strings.TrimSpace(str)
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return a, fmt.Errorf("%s.agent: unknown key(s) %s", Key, strings.Join(unknown, ", "))
+	}
+	if (a.BaseURL != "" || a.KeyFile != "") && a.Model == "" {
+		return a, fmt.Errorf("%s.agent.model: required when base_url or key_file is set", Key)
+	}
+	return a, nil
+}
+{{- end }}

@@ -1,0 +1,50 @@
+{{- if and .inputs.with_mcp (eq .inputs.auth "loopback_open") -}}
+{{ fail "with_mcp requires auth=enforce" }}
+{{- end -}}
+# project.yaml — the project descriptor (project/1, release candidate 1: fields may change without a version bump
+# until 1.0). Written once by Folio and never overwritten; edit it by hand. `internal/descriptor` validates it
+# and checks that deploy.yaml{{ if eq .inputs.tool_kind "service" }}, {{ .inputs.repo_name }}.cerberus.yaml{{ end }} and the code agree with it.
+schema: project/1
+id: {{ .inputs.repo_name }}
+name: {{ .computed.app_title }}
+description: {{ if .inputs.description }}{{ .inputs.description | quote }}{{ else }}"TODO(author): one line"{{ end }}
+class: 2
+lifecycle: experimental
+visibility: public
+owner: {{ .inputs.owner }}
+org: {{ .inputs.github_owner }}
+repo: https://github.com/{{ .inputs.github_owner }}/{{ .computed.repository_slug }}
+location: {{ .inputs.repository_location }}
+interfaces:
+{{- if eq .inputs.tool_kind "service" }}
+  - type: daemon
+    name: {{ .inputs.repo_name }}
+    auth: {{ .inputs.auth }}
+{{- else }}
+  - type: cli
+    name: {{ .inputs.repo_name }}
+    auth: none
+{{- end }}
+{{- if .inputs.with_mcp }}
+  - type: mcp
+    name: {{ .inputs.repo_name }} mcp
+    auth: enforce
+{{- end }}
+substrate: { variant: {{ if eq .inputs.tool_kind "service" }}microservice{{ else }}cli{{ end }}, profile: {{ if .inputs.with_mcp }}agentic{{ else }}minimal{{ end }}, version: {{ .inputs.substrate_version }} }
+deploy:
+  fleet: deploy.yaml
+{{- if eq .inputs.tool_kind "service" }}
+  cerberus: {{ .inputs.repo_name }}.cerberus.yaml
+{{- end }}
+release: { tagging: ci-artifact-only }
+settings:
+  # Folio-owned deployment projection; credentials belong in operator config.
+  runtime:
+    target_os: {{ .inputs.target_os }}
+    target_arch: {{ .inputs.target_arch }}
+    host: {{ .inputs.deploy_host }}
+{{- if eq .inputs.tool_kind "service" }}
+    http_port: {{ .inputs.http_port }}
+{{- end }}
+    binary_link: ~/.local/bin/{{ .inputs.repo_name }}
+    install_root: ~/.local/share/fleet/releases/{{ .inputs.repo_name }}
