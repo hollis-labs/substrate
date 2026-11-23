@@ -20,7 +20,6 @@ func TestParse(t *testing.T) {
 		"unknown key": map[string]any{"allowed_host": []any{}},
 		"not a list":  map[string]any{"allowed_hosts": "a"},
 		"empty entry": map[string]any{"allowed_hosts": []any{" "}},
-
 	} {
 		if _, err := settings.Parse(raw); err == nil || !strings.Contains(err.Error(), "{{ .inputs.repo_name }}") {
 			t.Errorf("%s: want an error naming the block, got %v", name, err)

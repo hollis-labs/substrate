@@ -18,9 +18,7 @@ const Key = "{{ .inputs.repo_name }}"
 // Settings are the parsed block.
 type Settings struct {
 	AllowedHosts []string
-
 }
-
 
 // Parse reads the block (nil for a missing one). An unknown key or a bad value is an error naming
 // the key, so a typo is found at startup instead of silently turning a protection off.
