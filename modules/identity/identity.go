@@ -133,9 +133,10 @@ type Service struct {
 	now   func() time.Time
 	fault func(point string) error // test hook at rotation steps; nil in production
 
-	limiter *limiter
-	cancel  context.CancelFunc
-	wg      sync.WaitGroup
+	limiter  *limiter
+	keyWatch keyWatchers // see WatchKeys
+	cancel   context.CancelFunc
+	wg       sync.WaitGroup
 }
 
 type config struct {

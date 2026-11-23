@@ -662,6 +662,7 @@ func (s *Service) createKey(w http.ResponseWriter, r *http.Request) {
 		failed(w)
 		return
 	}
+	s.emitKey(KeyCreated, c, p.ID)
 	writeJSON(w, http.StatusCreated, map[string]any{"key": keyPrefix + secret, "credential": c})
 }
 
@@ -750,6 +751,7 @@ func (s *Service) pair(w http.ResponseWriter, r *http.Request) {
 		apierr.Write(w, http.StatusUnauthorized, "invalid_code", "the pairing code is not valid", nil)
 		return
 	}
+	s.emitKey(KeyCreated, cred, cred.CreatedBy) // redeemed by an app with no principal; the code's maker
 	writeJSON(w, http.StatusCreated, map[string]any{"key": keyPrefix + secret, "credential": cred, "token_url": "/api/token", "jwks_url": "/api/identity/jwks"})
 }
 

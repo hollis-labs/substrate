@@ -12,6 +12,10 @@ minor releases may break APIs.
 
 ### Added
 
+- `identity`: `Service.WatchKeys(fn)` reports each API key made (admin route, self-service route, a redeemed
+  pairing code, `CreateKey`) and each key revoked while live (revoking twice reports once): a `KeyEvent` with
+  the action, the key's metadata (never the secret), who did it, and when. For an app's activity feed or audit
+  log.
 - `identity`: self-service API keys. `GET/POST /api/identity/me/keys` and `DELETE /api/identity/me/keys/{id}`
   let anyone signed in (a browser session, not a key) make keys for their own tools, with scopes they hold, up
   to 366 days or no expiry, and list and revoke their own.
