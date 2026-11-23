@@ -1,0 +1,185 @@
+{{- if and (eq .inputs.tool_kind "service") (not .inputs.with_mcp) -}}
+package main
+
+import (
+	"context"
+	"io"
+	"net"
+	"net/http"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/hollis-labs/substrate/boot"
+)
+
+// mcpStub satisfies the interface httphost reads from the "mcp.mount" value.
+type mcpStub struct{}
+
+func (mcpStub) MCPHandler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("mcp")) })
+}
+
+func startApp(t *testing.T, addr string) (context.Context, *boot.Running) {
+	t.Helper()
+	cfg := `{"httphost":{"addr":"` + addr + `"},"logging":{"format":"text","level":"error"}}`
+	// serve blocks until ctx ends when it (wrongly) starts; the timeout turns that into a failure, not a hang.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	t.Cleanup(cancel)
+	run, err := boot.Start(ctx, substrateApp, substrateModules, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = run.Stop(context.Background()) })
+	return ctx, run
+}
+
+// TestLoopbackOpenRefusesNonLoopback: loopback_open on a wildcard or non-loopback bind must not start.
+func TestLoopbackOpenRefusesNonLoopback(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	for _, addr := range []string{"0.0.0.0:0", ":0", "192.0.2.1:0", "[::]:0"} {
+		ctx, run := startApp(t, addr)
+		err := serveWith(ctx, run.App, nil, true, false)
+		if err == nil || !strings.Contains(err.Error(), "loopback_open") {
+			t.Errorf("addr %s: want a loopback_open refusal, got %v", addr, err)
+		}
+	}
+}
+
+func TestAddressFlagRetainsBindPolicy(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	cmd := serveCmd(ctx, run.App)
+	cmd.SetArgs([]string{"--dev", "--addr", "0.0.0.0:0"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "non-loopback") {
+		t.Fatalf("address override bypassed bind policy: %v", err)
+	}
+}
+
+func TestEnforceNeedsToken(t *testing.T) {
+	t.Setenv(modeEnv, "enforce")
+	t.Setenv(tokenEnv, "")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	if err := serve(ctx, run.App, nil); err == nil {
+		t.Fatal("enforce without a token must not start")
+	}
+}
+
+func TestManagedAndNonDevelopmentRunsRefuseLoopbackOpen(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	for _, flags := range [][]string{nil, {"--managed"}, {"--managed", "--dev"}} {
+		cmd := serveCmd(ctx, run.App)
+		cmd.SetArgs(flags)
+		if err := cmd.Execute(); err == nil || (!strings.Contains(err.Error(), "loopback_open") && !strings.Contains(err.Error(), "cannot be combined")) {
+			t.Fatalf("flags %v: want auth refusal before listening, got %v", flags, err)
+		}
+	}
+}
+
+func TestManagedRunRequiresCredentials(t *testing.T) {
+	t.Setenv(modeEnv, "")
+	t.Setenv(tokenEnv, "")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	cmd := serveCmd(ctx, run.App)
+	cmd.SetArgs([]string{"--managed"})
+	if err := cmd.Execute(); err == nil || !strings.Contains(err.Error(), "bearer token") {
+		t.Fatalf("managed run without credentials: %v", err)
+	}
+}
+
+// TestServeReportsModeAndGuards runs the real server on a free loopback port.
+func TestServeReportsModeAndGuards(t *testing.T) {
+	t.Setenv(modeEnv, "enforce")
+	t.Setenv(tokenEnv, "test-token")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	run, err := boot.Start(ctx, substrateApp, substrateModules, `{"httphost":{"addr":"127.0.0.1:0"},"logging":{"format":"text","level":"error"}}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = run.Stop(context.Background()) }()
+	// A stand-in for the mcp module's mount: httphost serves it at /mcp, outside /api/.
+	run.App.Set("mcp.mount", mcpStub{})
+	ready := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() { done <- serve(ctx, run.App, func(a net.Addr) { ready <- a }) }()
+	var base string
+	select {
+	case a := <-ready:
+		base = "http://" + a.String()
+	case err := <-done:
+		t.Fatalf("serve returned early: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("serve did not start")
+	}
+	get := func(path, token string) (int, string) {
+		req, _ := http.NewRequest(http.MethodGet, base+path, nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		b, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(b)
+	}
+	if code, body := get("/healthz", ""); code != 200 || !strings.Contains(body, "auth_enforce") {
+		t.Errorf("/healthz = %d %s: want 200 naming the active auth mode", code, body)
+	}
+	if code, _ := get("/api/ping", ""); code != 401 {
+		t.Errorf("/api/ping without a token = %d, want 401", code)
+	}
+	if code, _ := get("/api/ping", "wrong"); code != 401 {
+		t.Errorf("/api/ping with a wrong token = %d, want 401", code)
+	}
+	if code, _ := get("/api/ping", "test-token"); code != 200 {
+		t.Errorf("/api/ping with the token = %d, want 200", code)
+	}
+	// /mcp is mounted by httphost outside /api/; the guard must cover it too.
+	if code, _ := get("/mcp", ""); code != 401 {
+		t.Errorf("/mcp without a token = %d, want 401", code)
+	}
+	if code, _ := get("/mcp", "wrong"); code != 401 {
+		t.Errorf("/mcp with a wrong token = %d, want 401", code)
+	}
+	if code, body := get("/mcp", "test-token"); code != 200 || body != "mcp" {
+		t.Errorf("/mcp with the token = %d %q, want 200 mcp", code, body)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Errorf("serve after cancel: %v", err)
+	}
+}
+func TestDevelopmentLoopbackServesWithoutToken(t *testing.T) {
+	t.Setenv(modeEnv, "loopback_open")
+	t.Setenv(tokenEnv, "")
+	ctx, run := startApp(t, "127.0.0.1:0")
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	ready := make(chan net.Addr, 1)
+	done := make(chan error, 1)
+	go func() { done <- serveWith(ctx, run.App, func(a net.Addr) { ready <- a }, true, false) }()
+	select {
+	case a := <-ready:
+		resp, err := http.Get("http://" + a.String() + "/api/ping")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("dev request: %d", resp.StatusCode)
+		}
+	case err := <-done:
+		t.Fatalf("dev service returned early: %v", err)
+	case <-ctx.Done():
+		t.Fatal("dev service did not start")
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+{{- end }}

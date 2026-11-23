@@ -1,0 +1,142 @@
+{{- if eq .inputs.tool_kind "service" -}}
+package main
+
+import (
+	"context"
+{{- if .inputs.with_mcp }}
+	"fmt"
+{{- end }}
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+
+	"github.com/spf13/cobra"
+
+	"github.com/hollis-labs/substrate/module"
+{{- if .inputs.with_mcp }}
+	"github.com/hollis-labs/substrate/modules/auth"
+{{- end }}
+	"github.com/hollis-labs/substrate/modules/health"
+	"github.com/hollis-labs/substrate/modules/httphost"
+
+	"{{ .computed.module_path }}/internal/authmode"
+)
+
+// modeEnv overrides the compiled default auth mode; tokenEnv carries the bearer token `enforce` requires.
+// Neither is committed: they come from the unit's environment.
+const (
+	modeEnv  = "{{ .computed.env_prefix }}_AUTH"
+	tokenEnv = "{{ .computed.env_prefix }}_TOKEN"
+)
+
+func serveCmd(ctx context.Context, app *module.App) *cobra.Command {
+	var dev, managed bool
+	var addr string
+	cmd := &cobra.Command{
+		Use:   "serve",
+		Short: "Serve the HTTP API",
+		Args:  cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			if addr != "" {
+				cfg, _ := app.Config["httphost"].(map[string]any)
+				if cfg == nil {
+					cfg = map[string]any{}
+					app.Config["httphost"] = cfg
+				}
+				cfg["addr"] = addr
+			}
+			return serveWith(ctx, app, nil, dev, managed)
+		},
+	}
+	cmd.Flags().StringVar(&addr, "addr", "", "Listener address (overrides httphost.addr)")
+	cmd.Flags().BoolVar(&dev, "dev", false, "Allow loopback_open for a local development run")
+	cmd.Flags().BoolVar(&managed, "managed", false, "Require enforced auth for a supervised run")
+	return cmd
+}
+
+// serve runs the HTTP host until ctx ends. ready, when set, learns the bound address.
+func serve(ctx context.Context, app *module.App, ready func(net.Addr)) error {
+	return serveWith(ctx, app, ready, false, false)
+}
+
+func serveWith(ctx context.Context, app *module.App, ready func(net.Addr), dev, managed bool) error {
+	override := os.Getenv(modeEnv)
+	if managed && override == "" {
+		override = string(authmode.Enforce)
+	}
+	mode, err := authmode.Resolve(override)
+	if err != nil {
+		return err
+	}
+	if err := authmode.CheckRun(mode, dev, managed); err != nil {
+		return err
+	}
+{{- if .inputs.with_mcp }}
+	if mode != authmode.Enforce {
+		return fmt.Errorf("MCP-enabled services require enforce auth, including development runs")
+	}
+{{- end }}
+	addr := bindAddr(app)
+	// loopback_open on a non-loopback bind is refused before anything listens.
+	if err := authmode.CheckBind(mode, addr); err != nil {
+		return err
+	}
+{{- if .inputs.with_mcp }}
+	if auth.Guard(app) == nil {
+		return fmt.Errorf("MCP service requires the auth module")
+	}
+{{- else }}
+	guard, err := authmode.Guard(mode, os.Getenv(tokenEnv))
+	if err != nil {
+		return err
+	}
+{{- end }}
+	// The active mode is part of /healthz.
+	health.From(app).Add("auth_"+string(mode), func(context.Context) error { return nil })
+
+	api := http.NewServeMux()
+	api.HandleFunc("GET /api/ping", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	routes := http.NewServeMux()
+	routes.Handle("/api/", api)
+	inner, err := httphost.Handler(app, httphost.Options{Routes: routes})
+	if err != nil {
+		return err
+	}
+	// The guard wraps the whole host, not just /api/: /mcp and routes that modules mount outside /api/ are
+	// reached through httphost and would otherwise serve without credentials. Only GET /healthz stays open.
+{{- if .inputs.with_mcp }}
+	guarded := auth.Middleware(app, inner)
+{{- else }}
+	guarded := guard(inner)
+{{- end }}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == "/healthz" {
+			inner.ServeHTTP(w, r)
+			return
+		}
+		guarded.ServeHTTP(w, r)
+	})
+	return httphost.Serve(ctx, app, handler, httphost.ServeOptions{
+		Addr: addr,
+		Ready: func(a net.Addr) {
+			slog.Info("{{ .inputs.repo_name }} listening", "addr", a.String(), "auth", string(mode))
+			if ready != nil {
+				ready(a)
+			}
+		},
+	})
+}
+
+func bindAddr(app *module.App) string {
+	cfg, _ := app.Config["httphost"].(map[string]any)
+	addr, _ := cfg["addr"].(string)
+	if addr == "" {
+		addr = "127.0.0.1:{{ .inputs.http_port }}"
+	}
+	return addr
+}
+{{- end }}

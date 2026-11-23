@@ -1,0 +1,99 @@
+import { Button, Input } from "@hollis-labs/design-components"
+import { type FormEvent, useEffect, useRef, useState } from "react"
+import { ApiError, request } from "../api/request"
+import { APP_CMD, APP_NAME, Field, Notice } from "./forms"
+
+/** The server's message; a 429 also says when to try again (its Retry-After). */
+function failureText(e: unknown) {
+  if (!(e instanceof Error)) return "Could not sign in."
+  if (e instanceof ApiError && e.status === 429 && e.retryAfter > 0) {
+    const minutes = Math.ceil(e.retryAfter / 60)
+    return `${e.message} Try again in ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`
+  }
+  return e.message
+}
+
+/**
+ * First-run setup is closed over HTTP (POST /api/setup is always 403 setup_offline), so with no
+ * owner there is nothing to submit: say how the owner is created on the host.
+ */
+export function SetupOffline() {
+  return (
+    <main className="entry">
+      <section className="entry-panel stack">
+        <h1>No owner yet</h1>
+        <p className="text-fg-muted">
+          This app has no owner account, and first-run setup is not offered over the web. Create the
+          owner on the host that runs {APP_NAME}, then sign in here:
+        </p>
+        <pre className="panel body-text mono">{APP_CMD} identity setup --username NAME</pre>
+        <p className="text-fg-muted">
+          API keys for agents and routers are created on the host too:{" "}
+          <code className="mono">{APP_CMD} identity key create</code>.
+        </p>
+        <Button onClick={() => window.location.reload()}>Check again</Button>
+      </section>
+    </main>
+  )
+}
+
+/** Sign-in. Starts a session cookie. */
+export function Entry({ onReady }: { onReady: (name: string) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState("")
+  const errorRef = useRef<HTMLParagraphElement>(null)
+  // A failed sign-in moves focus to the announced error message, so a keyboard user is not sent back to the page top.
+  useEffect(() => {
+    if (error) errorRef.current?.focus()
+  }, [error])
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (busy) return
+    const form = event.currentTarget
+    const data = new FormData(form)
+    setBusy(true)
+    setError("")
+    try {
+      const profile = await request<{ display_name?: string; username?: string }>("login", "POST", {
+        username: data.get("username"),
+        password: data.get("password"),
+      })
+      form.reset()
+      onReady(profile?.display_name || profile?.username || "")
+    } catch (e) {
+      setError(failureText(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <main className="entry">
+      <section className="entry-panel">
+        <h1>Sign in to {APP_NAME}</h1>
+        <p className="text-fg-muted">Pick up where you left off.</p>
+        <form onSubmit={submit} className="stack" aria-busy={busy}>
+          <div className="stack">
+            <Field label="Username">
+              {(id) => <Input id={id} name="username" autoComplete="username" required autoFocus />}
+            </Field>
+            <Field label="Password">
+              {(id) => (
+                <Input
+                  id={id}
+                  name="password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                />
+              )}
+            </Field>
+            <Notice error={error} ref={errorRef} />
+            <Button type="submit" disabled={busy}>
+              {busy ? "Please wait…" : "Sign in"}
+            </Button>
+          </div>
+        </form>
+      </section>
+    </main>
+  )
+}

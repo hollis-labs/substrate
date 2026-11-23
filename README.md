@@ -56,3 +56,10 @@ python3 scripts/scan-public --ref HEAD
 
 Moving an existing app onto Substrate: [`docs/adopting-substrate.md`](docs/adopting-substrate.md). See [`docs/writing-a-module.md`](docs/writing-a-module.md), [`docs/compat-policy.md`](docs/compat-policy.md), [`CONTRIBUTING.md`](CONTRIBUTING.md), [`AGENTS.md`](AGENTS.md), [`SECURITY.md`](SECURITY.md) and
 [`CHANGELOG.md`](CHANGELOG.md). Licensed under the [MIT License](LICENSE).
+
+
+## Project scaffolding
+
+[Folio](folio/README.md) lives in the independent `folio/` Go module. It owns
+the generator and generic presets; Surface owns its own preset pack. Folio
+checks run separately from the root framework and keep generated-app conformance.

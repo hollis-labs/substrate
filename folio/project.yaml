@@ -1,0 +1,21 @@
+# Authored project/1 RC1 descriptor. This describes Folio itself, not its output.
+schema: project/1
+id: folio
+name: Folio
+description: Typed project presets and local deployment descriptor rendering
+class: 2
+lifecycle: active
+visibility: public
+owner: user:chrispian
+org: hollis-labs
+repo: https://github.com/hollis-labs/substrate
+location: folio
+interfaces:
+  - { type: cli, name: folio, auth: none }
+release: { tagging: semver }
+settings: {}
+metadata:
+  runtime_note: >-
+    Folio is a local CLI governed by the caller's OS permissions. It does not
+    currently run on Substrate or implement an authentication or policy gate.
+    Its generated class 1 and class 2 applications have their own runtime contracts.

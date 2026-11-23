@@ -1,0 +1,24 @@
+import { type ReactNode, type Ref, useId } from "react"
+
+export function Field({ label, children }: { label: string; children: (id: string) => ReactNode }) {
+  const id = useId()
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      {children(id)}
+    </div>
+  )
+}
+
+export function Notice({ error, ref }: { error?: string; ref?: Ref<HTMLParagraphElement> }) {
+  return error ? (
+    <p className="text-danger" role="alert" tabIndex={-1} ref={ref}>
+      {error}
+    </p>
+  ) : null
+}
+
+/** The app's display name, for headings and messages. */
+export const APP_NAME = "{{ .computed.app_title }}"
+/** The command name, for the host-side bootstrap commands shown on screen. */
+export const APP_CMD = "{{ .inputs.repo_name }}"

@@ -1,0 +1,64 @@
+folio_version: "0.1"
+id: base
+version: 0.2.0
+description: Minimal Go project layout — folio's atom preset
+author: hollis-labs
+license: MIT
+
+inputs:
+  - name: project_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9_]*$"
+    description: Go module name (lowercase, snake_case)
+  - name: github_owner
+    type: string
+    required: true
+    description: GitHub username or org
+  - name: description
+    type: string
+    default: ""
+    description: One-line project description
+  - name: go_version
+    type: string
+    default: "1.26.11"
+    pattern: "^[0-9]+\\.[0-9]+(\\.[0-9]+)?$"
+    description: >-
+      Go language version. Renders into go.mod, the CI workflow and
+      golangci-lint's `go:` key from one input so the three cannot drift.
+      The default is the portfolio floor (go 1.26.11): govulncheck judges the
+      stdlib by go.mod's `go` line, so a lower floor reports fixed advisories.
+  - name: go_packages
+    type: string
+    default: "./..."
+    description: >-
+      Package pattern the lefthook go-vet and go-test hooks run against.
+      Override for repos where `./...` pulls in trees that should not gate a
+      commit.
+
+computed:
+  module_path: "github.com/{{ .inputs.github_owner }}/{{ .inputs.project_name }}"
+  year: "{{ .now.Year }}"
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: "Makefile"
+      policy: overwrite
+    # Shared portfolio configs: folio is the canonical copy, so a re-render
+    # replaces them. A project needing a local deviation should get it added
+    # here as an input rather than editing the rendered file.
+    - glob: "lefthook.yml"
+      policy: overwrite
+    - glob: ".golangci.yml"
+      policy: overwrite
+    - glob: ".github/workflows/**"
+      policy: overwrite
+    - glob: "internal/**"
+      policy: skip
+    - glob: "README.md"
+      policy: three-way

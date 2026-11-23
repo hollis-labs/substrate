@@ -1,0 +1,57 @@
+# {{ .inputs.repo_name }}
+
+{{ if .inputs.description }}{{ .inputs.description }}{{ else }}A hollis-labs shared Go library.{{ end }}
+
+## Install
+
+```sh
+go get {{ .computed.import_path }}
+```
+
+## Usage
+
+```go
+package main
+
+import (
+	"fmt"
+
+	{{ .computed.import_line }}
+)
+
+func main() { fmt.Println({{ .inputs.package_name }}.Hello()) }
+```
+
+The same program lives in [`examples/hello`](./examples/hello/main.go).
+
+## Compatibility
+
+{{ if eq .inputs.stability "stable" -}}
+This module follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+from v1: the exported API of `{{ .inputs.package_name }}` does not break within a
+major version. A symbol is deprecated for at least one minor release, with a
+`// Deprecated:` comment naming its replacement, before a major release may
+remove it. [CHANGELOG.md](./CHANGELOG.md) records every change.
+{{- else -}}
+This module is pre-1.0: minor releases may break the exported API. Pin an exact
+version, and read [CHANGELOG.md](./CHANGELOG.md) before upgrading — every
+breaking change is listed there.
+{{- end }}
+
+## Out of scope
+
+- TODO(author): what this library deliberately does not do (the cheapest defence against scope-creep reports).
+
+## Development
+
+```sh
+gofmt -l .
+go vet ./...
+go test -race -count=1 ./...
+```
+
+CI (`.github/workflows/check.yml`) is the full gate.
+
+## License
+
+MIT — see [LICENSE](./LICENSE).

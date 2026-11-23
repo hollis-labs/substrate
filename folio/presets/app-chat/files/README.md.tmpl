@@ -1,0 +1,57 @@
+# {{ .computed.app_title }}
+
+An app-chat project: the shared Substrate agentic app host, own identity and SQLite,
+app-shell, kit-chat and kit-identity. Conversations and messages belong to the verified
+principal. There is no anonymous chat and no provider connection in the starter.
+
+## Start
+
+```sh
+go mod tidy
+go run github.com/hollis-labs/substrate/cmd/substrate pins sync --app .
+go mod tidy
+cd frontend
+npm install
+npm run typecheck
+npm run lint
+npm run build
+cd ..
+go build -o {{ .inputs.repo_name }} ./cmd/{{ .inputs.repo_name }}
+./{{ .inputs.repo_name }} identity setup --username owner
+./{{ .inputs.repo_name }} serve --managed
+```
+
+Commit `go.sum` and `frontend/package-lock.json`. CI checks pins, generated wiring,
+frontend types/lint/build, Go vet/race tests, both lint boundaries and public hygiene.
+See `docs/identity-bootstrap.md` for scoped keys and `docs/runbook.md` for installed
+operation, XDG paths, backup, release and rollback. Deploy settings are in `project.yaml`;
+`folio deploy render . --plan` previews changes without deploying.
+
+## Chat behavior
+
+Create a conversation, send messages and reopen it to read saved history. The server
+supplies roles and owner IDs; clients cannot select either. Conversation IDs belonging
+to someone else return the same 404 as missing IDs. Plain text stays plain text.
+
+By default the UI says **No assistant provider connected**. It does not invent a reply
+or send data to an external service. To connect one, implement `service.Responder` and
+call `service.New(...).WithResponder(provider)` in `cmd/{{ .inputs.repo_name }}/serve.go`
+before serving. The hook receives only the authenticated owner's selected history;
+keep provider credentials in operator configuration. It must honor context cancellation
+and support concurrent calls. Concurrent sends can interleave replies; add a queue if
+your application needs serialized turns. Failed assistant replies leave the user's
+message saved and are reported separately, preventing automatic duplicate sends.
+
+The API is GET/POST `/api/conversations` and GET/POST
+`/api/conversations/{conversation}/messages`, requiring `{{ .inputs.repo_name }}.read`
+or `{{ .inputs.repo_name }}.write`. The inherited `/api/items` example remains available
+as a small service/transport example. The inherited MCP endpoint uses app-issued scopes;
+chat is not exposed as MCP tools until you add authorized adapters to the service layer.
+
+## Frontend development
+
+For a separate Vite development origin, set `identity.allowed_origins` only in a local
+`SUBSTRATE_CONFIG` override. Never add development origins to production configuration.
+The published kit-identity renders sign-in and offline owner setup; the shared request
+adapter owns cookies, CSRF headers and session expiry. All direct Hollis kits are explicit
+BOM-version inputs; upgrade them together from the selected Substrate BOM.

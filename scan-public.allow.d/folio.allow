@@ -1,0 +1,7 @@
+# folio: findings reviewed by the owner 2026-10-15 (path, host and home-directory references only).
+agent-box-host folio/.agent-ops/project.yaml Internal build machine name used as a label or example; reviewed by the owner 2026-10-15, not an access path.
+agent-box-host folio/docs/chat-app-consumer-verification.md Internal build machine name used as a label or example; reviewed by the owner 2026-10-15, not an access path.
+agent-box-host (commit-message)@9e20f3a6f35c Internal build machine name used as a label or example; reviewed by the owner 2026-10-15, not an access path.
+home-path-linux folio/docs/screenshots/registry-0.4.0/gate.json Developer home directory path in a test, doc or local config; reviewed by the owner 2026-10-15, no credential.
+home-path-linux folio/internal/compose/graph.go Developer home directory path in a test, doc or local config; reviewed by the owner 2026-10-15, no credential.
+home-path-macos folio/internal/manifest/manifest_test.go Developer home directory path in a test, doc or local config; reviewed by the owner 2026-10-15, no credential.

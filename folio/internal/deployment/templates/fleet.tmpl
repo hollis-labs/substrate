@@ -1,0 +1,25 @@
+# Generated from project.yaml settings.runtime; regenerate with folio deploy render.
+schema: fleet-deploy/v1
+app: {{ .ID }}
+repo: {{ .Repo }}
+artifact: {name: "{{ .ID }}-{sha12}", tarball: "{{ .ID }}_{version}_{os}_{arch}.tar.gz", sums: SHA256SUMS}
+targets:
+  - id: {{ .ID }}-{{ .Runtime.OS }}-{{ .Runtime.Arch }}
+    when: {os: {{ .Runtime.OS }}, arch: {{ .Runtime.Arch }}}
+    hosts: [{{ .Runtime.Host }}]
+    binary: {{ .ID }}
+    install_root: {{ .Runtime.InstallRoot | yaml }}
+    symlinks:
+      - path: {{ .Runtime.Link | yaml }}
+{{- if .Runtime.BackupDatabase }}
+    preflight:
+      - {kind: sqlite_backup, db: {{ .Runtime.BackupDatabase | yaml }}, dest: "{backup_dir}/{{ .ID }}.pre-{version}.db"}
+{{- end }}
+{{- if .Service }}
+    # Cerberus supervises the process (Option B): it runs the symlink above and never builds or places the binary.
+    restart: {via: cerberus, resource: {{ .ID }}}
+    health:
+      url: "http://127.0.0.1:{{ .Runtime.Port }}/healthz"
+      expect_status: [200]
+      timeout: 30s
+{{- end }}

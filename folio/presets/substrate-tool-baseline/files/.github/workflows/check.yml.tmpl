@@ -1,0 +1,39 @@
+name: {{ .inputs.repo_name }} check
+# Class 2 gate (project/1 class bar): vet, pins check, build, tests, scan-public.
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: {{ .inputs.repo_name }}-check-{{ "${{" }} github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: {{ .inputs.repository_location }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # the hygiene scan reads history
+      # go.mod is the single Go pin: the `go` line is the floor; an optional `toolchain` line, if
+      # present, wins (setup-go v6+ only).
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: {{ .computed.workflow_directory }}go.mod
+          cache-dependency-path: {{ .computed.workflow_directory }}go.sum
+      - run: go vet ./...
+      - name: pins match the Substrate BOM
+        run: go run github.com/hollis-labs/substrate/cmd/substrate pins check --app .
+      - name: generated wiring is current
+        run: |
+          go run github.com/hollis-labs/substrate/cmd/substrate generate -f cmd/{{ .inputs.repo_name }}/substrate.yaml
+          git diff --exit-code -- cmd/{{ .inputs.repo_name }}/substrate_wiring.go
+      - run: go build ./...
+      # Includes internal/descriptor: project.yaml schema, drift pairs and the declared auth mode.
+      - run: go test -race ./...
+      - name: hygiene (secrets, hosts, private paths)
+        run: go run github.com/hollis-labs/substrate/cmd/substrate scan-public --ref HEAD

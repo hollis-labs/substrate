@@ -26,8 +26,10 @@ python3 scripts/scan-public --ref HEAD     # secrets / hosts / private paths, tr
 
 - Layering: Substrate sits above `github.com/hollis-labs/libs` and may import any of it; nothing in libs imports Substrate. Wrap and pin libs code; never copy it.
 - Every module is optional. Selected modules are linked by the generated wiring file only; `go build` of generated output must work without the substrate CLI.
-- Pins are hand-edited only in `bom/bom.yaml`. `substrate pins sync` writes `go.mod` and the CI workflow from it (and, with `--folio <dir>`, the generated mirror `folio/platform-pins.yaml` in the hollis-labs/tools monorepo); `substrate pins check` verifies. Never edit those copies by hand.
+- Pins are hand-edited only in `bom/bom.yaml`. `substrate pins sync` writes `go.mod` and the CI workflow from it (and, with `--folio <dir>`, the generated mirror `folio/platform-pins.yaml` in this repository); `substrate pins check` verifies. Never edit those copies by hand.
 - Scope is Go backend plus TypeScript frontend. Other stacks are a seam, not built.
 - The repo is public. No secrets, internal hosts, internal addresses or personal paths in files, commits or CI. Tags are a maintainer's decision.
-- The hollis-labs org is monorepos: Folio is `hollis-labs/tools` under `folio/`, libs is `hollis-labs/libs`. Old standalone clones under `~/dev/hollis-labs/` may point at deleted remotes; work in a fresh clone of the monorepo (Tesseract `project/hollis-labs/knowledge/orientation`).
+- The hollis-labs org is monorepos: Folio is the independent `folio/` module in this repository, libs is `hollis-labs/libs`. Old standalone clones under `~/dev/hollis-labs/` may point at deleted remotes; work in a fresh clone of the monorepo (Tesseract `project/hollis-labs/knowledge/orientation`).
 - This repo reuses the name of an older libs-era `substrate` repo that was deleted in the 2026-10-19 reorg; stale `github.com/hollis-labs/substrate/<mesh|agent|harness|llm-core>` paths elsewhere are that old code and are not this module.
+
+- Folio owns generic scaffolding. Surface owns `scaffolding/presets/surface-*`; use Folio’s explicit `--preset-pack` with a pinned Surface checkout. Do not copy those presets or the shared agent-dir layer between owners. Run Folio checks from `folio/`; its module does not participate in root framework builds.

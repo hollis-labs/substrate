@@ -1,0 +1,130 @@
+folio_version: "0.1"
+id: substrate-tool-baseline
+version: 0.1.0
+description: "Shell of a class 2 Substrate tool (cli or service): project.yaml, deploy.yaml, Cerberus manifest for daemons, trimmed CI, loopback-dev auth guard, drift test; compose, do not render directly"
+author: hollis-labs
+license: MIT
+layer_only: true
+
+# A LAYER for class 2 (tool / service / util) of the project/1 class model (RC1; spec
+# spec_project_kind_v1_class_bar_rc1_20261115). `substrate-app` and `app-dashboard` stay the class 1
+# presets. The composing preset (`substrate-cli`, `substrate-service`) sets `tool_kind` through its
+# compose vars and redeclares the inputs a person supplies.
+#
+# Renders: project.yaml (project/1 RC1; sync policy skip, so Folio never overwrites it), deploy.yaml
+# (fleet-deploy/v1, always), `<name>.cerberus.yaml` (cerberus-project/v1, services only, Option B: fleet-install
+# places the binary, Cerberus only supervises), trimmed CI (vet, pins, test, build, scan-public), the Substrate
+# shell (variant cli or microservice, profile minimal), and `internal/descriptor`, whose tests check the
+# descriptor against the embedded project/1 RC1 schema and the drift pairs between the three files.
+#
+# All three descriptor files render once, from the same inputs. Folio does not re-render project.yaml, so
+# `internal/descriptor` is what keeps them from diverging afterwards.
+#
+# Versions: `go_version` comes from go-baseline (platform-pins.yaml). `substrate_version` has NO default.
+# Not rendered: go.sum (run `go mod tidy` once). Not yet: the optional `mcp` subcommand and the registry hook
+# (follow-up tasks).
+
+composes:
+  - id: go-baseline
+    version: ">=0.1,<1.0"
+    source: local
+    path: ../go-baseline
+    vars:
+      agents_start_here: |-
+        - `project.yaml` — the project descriptor (project/1, class 2): identity, interfaces, auth mode. Folio never overwrites it.
+        - `deploy.yaml` — fleet-install descriptor (fleet-deploy/v1).
+        - `{{ .inputs.repo_name }}.cerberus.yaml` — services only: what Cerberus supervises (Option B: it does not build or place the binary).
+        - `cmd/{{ .inputs.repo_name }}/substrate.yaml` — the manifest. `substrate_wiring.go` is generated from it (`substrate generate`); never edit it.
+        - `internal/descriptor/` — validates project.yaml and checks that deploy.yaml, the Cerberus manifest and the code agree with it.
+        - `internal/authmode/authmode.go` — services only: the auth mode and the refusal of `loopback_open` on a non-loopback bind.
+        - `.github/workflows/check.yml` — the class 2 gate (vet, pins check, build, race tests, scan-public).
+      agents_boundaries: |-
+        - project.yaml, deploy.yaml and (services) the Cerberus manifest describe one thing. Change a shared value (id, binary path, port, auth mode) in all of them; `internal/descriptor` tests fail when they differ.
+        - Pins are edited only in the Substrate `bom/bom.yaml`: run `substrate pins sync --app .`, never hand-edit a version in `go.mod`.
+        - Services: `auth: loopback_open` is for dev on a loopback bind only; the service refuses to start otherwise (`TestLoopbackOpenRefusesNonLoopback`). Cerberus-managed runs use `enforce`.
+        - Services: fleet-install places the binary; the Cerberus manifest has no build_strategy and no artifact_path (they would overwrite the fleet-install link).
+        - No secret, host name, address or personal path in a file, a commit or CI: `substrate scan-public --ref HEAD` must stay clean.
+
+inputs:
+  - name: with_mcp
+    type: bool
+    default: false
+    description: Include agentic modules and scoped MCP over stdio (and HTTP for services)
+  - name: repo_name
+    type: string
+    required: true
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Repository, binary, Substrate app and project id (lowercase, hyphens allowed)
+  - name: substrate_version
+    type: string
+    required: true
+    pattern: "^v[0-9]+\\.[0-9]+\\.[0-9]+([-+.][0-9A-Za-z.+-]*)?$"
+    description: >-
+      The github.com/hollis-labs/substrate version for the go.mod require line. No default: take it from
+      the Substrate BOM.
+  - name: tool_kind
+    type: string
+    default: cli
+    pattern: "^(cli|service)$"
+    description: Set by the composing preset (substrate-cli or substrate-service), not by a person
+  - name: http_port
+    type: string
+    default: "8080"
+    pattern: "^([1-9][0-9]{0,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"
+    description: Loopback port of a service (httphost.addr, the health URL, the Cerberus manifest)
+  - name: auth
+    type: string
+    default: enforce
+    pattern: "^(enforce|loopback_open)$"
+    description: >-
+      Default auth mode of a service. enforce needs a bearer token; loopback_open (class 2, dev only) lets a
+      loopback caller in and the service refuses to start on any other bind.
+  - name: owner
+    type: string
+    default: "user:owner"
+    pattern: "^(user|agency|agent):[a-z0-9][a-z0-9._-]*$"
+    description: "project.yaml owner ref (a placeholder: set your own, as user:<id>, agency:<id> or agent:<id>)"
+  - name: target_os
+    type: string
+    default: linux
+    pattern: "^(linux|darwin)$"
+    description: Operating system of the fleet deployment target
+  - name: target_arch
+    type: string
+    default: amd64
+    pattern: "^(amd64|arm64)$"
+    description: Architecture of the fleet deployment target
+  - name: deploy_host
+    type: string
+    default: fleet-host
+    pattern: "^[a-z][a-z0-9-]*$"
+    description: Fleet inventory alias of the machine that runs the tool (a placeholder until set)
+  - name: build_workflow_ref
+    type: string
+    default: 145fb50d827a1af7e38236eda5751cee22970ba5
+    pattern: "^[0-9a-f]{40}$"
+    description: Commit of hollis-labs/tools whose reusable go-app-build.yml the build workflow calls (pinned by commit)
+
+computed:
+  env_prefix: '{{ upper (replace "-" "_" .inputs.repo_name) }}'
+  app_title: '{{ pascalCase .inputs.repo_name }}'
+
+files:
+  source: ./files
+  template_suffix: .tmpl
+
+sync:
+  default: prompt
+  rules:
+    - glob: "project.yaml"
+      policy: skip
+    - glob: ".github/workflows/**"
+      policy: overwrite
+    - glob: "cmd/*/substrate_wiring.go"
+      policy: overwrite
+    - glob: "go.mod"
+      policy: skip
+    - glob: "internal/**"
+      policy: skip
+    - glob: "cmd/**"
+      policy: skip

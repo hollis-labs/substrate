@@ -1,0 +1,117 @@
+{{- if eq .inputs.tool_kind "service" -}}
+// Package authmode is the auth mode of a class 2 service and the one rule around it: loopback_open
+// (no credentials for a loopback caller, dev only) never runs on a non-loopback bind.
+package authmode
+
+import (
+	"crypto/subtle"
+	"fmt"
+	"net"
+	"net/http"
+	"strings"
+)
+
+// Mode is an auth mode from project/1: enforce or loopback_open. (policy_gated is for agent-only tools and
+// has no implementation in this template.)
+type Mode string
+
+const (
+	Enforce      Mode = "enforce"
+	LoopbackOpen Mode = "loopback_open"
+)
+
+// Default is the compiled default. project.yaml declares the same mode and a test in internal/descriptor
+// fails when they differ.
+const Default = {{ if eq .inputs.auth "loopback_open" }}LoopbackOpen{{ else }}Enforce{{ end }}
+
+// Resolve returns the mode named by override (an environment value), or Default when it is empty.
+func Resolve(override string) (Mode, error) {
+	switch Mode(override) {
+	case "":
+		return Default, nil
+	case Enforce, LoopbackOpen:
+		return Mode(override), nil
+	}
+	return "", fmt.Errorf("authmode: unknown mode %q (enforce, loopback_open)", override)
+}
+
+// CheckRun requires an explicit development run for loopback_open. A supervisor
+// must pass managed, which refuses a dev override even when the listener is loopback.
+func CheckRun(mode Mode, dev, managed bool) error {
+	if managed && dev {
+		return fmt.Errorf("authmode: --managed and --dev cannot be combined")
+	}
+	if mode == LoopbackOpen && (!dev || managed) {
+		return fmt.Errorf("authmode: loopback_open requires --dev and cannot run with --managed")
+	}
+	return nil
+}
+
+// CheckBind refuses loopback_open unless addr is a loopback address. A wildcard, an empty host or any other
+// address is refused; so is a name other than localhost (it could resolve anywhere).
+func CheckBind(mode Mode, addr string) error {
+	if mode != LoopbackOpen {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("authmode: loopback_open: bad bind address %q: %w", addr, err)
+	}
+	if !isLoopbackHost(host) {
+		return fmt.Errorf("authmode: loopback_open is refused on non-loopback bind %q: use enforce, or bind 127.0.0.1", addr)
+	}
+	return nil
+}
+
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// bearer returns the credential of an `Authorization: Bearer <credential>` header; the scheme is
+// case-insensitive (RFC 9110).
+func bearer(header string) (string, bool) {
+	const scheme = "Bearer "
+	if len(header) <= len(scheme) || !strings.EqualFold(header[:len(scheme)], scheme) {
+		return "", false
+	}
+	return header[len(scheme):], true
+}
+
+// Guard wraps a handler. enforce needs a non-empty token and answers 401 unless the request carries
+// `Authorization: Bearer <token>` (scheme case-insensitive). A token of only whitespace counts as empty. loopback_open lets a loopback peer in and answers 403 to any other.
+func Guard(mode Mode, token string) (func(http.Handler) http.Handler, error) {
+	switch mode {
+	case Enforce:
+		if strings.TrimSpace(token) == "" {
+			return nil, fmt.Errorf("authmode: enforce needs a bearer token (set the token environment variable)")
+		}
+		want := []byte(token)
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				got, ok := bearer(r.Header.Get("Authorization"))
+				if !ok || subtle.ConstantTimeCompare([]byte(got), want) != 1 {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		}, nil
+	case LoopbackOpen:
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				host, _, err := net.SplitHostPort(r.RemoteAddr)
+				if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
+					http.Error(w, "forbidden", http.StatusForbidden)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		}, nil
+	}
+	return nil, fmt.Errorf("authmode: unknown mode %q", mode)
+}
+{{- end }}
