@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 func TestAppChat_BuildsAndIsolatesOwners(t *testing.T) {

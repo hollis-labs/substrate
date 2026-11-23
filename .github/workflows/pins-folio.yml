@@ -16,4 +16,4 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
-      - run: go run ./cmd/substrate pins check --npm --folio https://raw.githubusercontent.com/hollis-labs/tools/main/folio/platform-pins.yaml
+      - run: go run ./cmd/substrate pins check --npm --folio folio/platform-pins.yaml

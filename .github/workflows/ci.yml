@@ -2,7 +2,9 @@ name: ci
 on:
   push:
     branches: [main]
+    paths-ignore: ["folio/**", ".github/workflows/folio-checks.yml", "scan-public.allow.d/folio.allow"]
   pull_request:
+    paths-ignore: ["folio/**", ".github/workflows/folio-checks.yml", "scan-public.allow.d/folio.allow"]
 permissions:
   contents: read
 concurrency:

@@ -1,114 +1,42 @@
 package folio_test
 
 import (
+	"github.com/hollis-labs/substrate/folio"
 	"io/fs"
-	"reflect"
-	"strings"
 	"testing"
 	"testing/fstest"
-	"time"
-
-	"github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/service"
 )
 
-func splitCatalog(t *testing.T) (fstest.MapFS, fstest.MapFS) {
-	t.Helper()
-	generic, surface := fstest.MapFS{}, fstest.MapFS{}
-	err := fs.WalkDir(folio.BundledPresets, ".", func(name string, entry fs.DirEntry, err error) error {
-		if err != nil || entry.IsDir() {
-			return err
-		}
-		data, err := fs.ReadFile(folio.BundledPresets, name)
-		if err != nil {
-			return err
-		}
-		dest := generic
-		if strings.HasPrefix(name, "presets/surface-") {
-			dest = surface
-		}
-		dest[name] = &fstest.MapFile{Data: data}
-		return nil
-	})
+func TestPresetPacksFilesystem(t *testing.T) {
+	base := fstest.MapFS{"presets/base/preset.yaml": {Data: []byte("base")}}
+	pack := fstest.MapFS{"presets/addon/preset.yaml": {Data: []byte("addon")}}
+	combined, err := folio.WithPresetPacks(base, pack)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return generic, surface
-}
-
-// Moving Surface templates to their owner must preserve exact generated output,
-// including its composition of Substrate's agent-dir layer and file provenance.
-func TestPresetPacksSplitPreservesSurfaceRendering(t *testing.T) {
-	generic, surface := splitCatalog(t)
-	combined, err := folio.WithPresetPacks(generic, surface)
-	if err != nil {
-		t.Fatal(err)
+	if testErr := fstest.TestFS(combined, "presets/base/preset.yaml", "presets/addon/preset.yaml"); testErr != nil {
+		t.Fatal(testErr)
 	}
-	var files []string
-	for name := range generic {
-		files = append(files, name)
-	}
-	for name := range surface {
-		files = append(files, name)
-	}
-	if fsErr := fstest.TestFS(combined, files...); fsErr != nil {
-		t.Fatal(fsErr)
-	}
-	now := time.Date(2026, 11, 18, 0, 0, 0, 0, time.UTC)
-	makeService := func(catalog fs.FS) *service.Service {
-		return service.New(service.Options{BundledFS: catalog, UserDir: t.TempDir(), FolioVersion: folio.Version, Now: now})
-	}
-	for _, id := range []string{"surface-app", "surface-desk"} {
-		opts := service.NewOptions{PresetID: id, TargetDir: "example", Inputs: map[string]any{"repo_name": "pack-check"}}
-		before, beforeErr := makeService(folio.BundledPresets).Plan(opts)
-		if beforeErr != nil {
-			t.Fatal(beforeErr)
-		}
-		after, afterErr := makeService(combined).Plan(opts)
-		if afterErr != nil {
-			t.Fatal(afterErr)
-		}
-		if !reflect.DeepEqual(before, after) {
-			t.Fatalf("%s output changed across pack split", id)
-		}
-	}
-	original, _, err := makeService(folio.BundledPresets).ListPresets()
-	if err != nil {
-		t.Fatal(err)
-	}
-	split, _, err := makeService(combined).ListPresets()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(original, split) {
-		t.Fatal("split changed preset discovery")
-	}
-	// A Surface-only catalog cannot quietly omit the shared agent layer.
-	isolated := makeService(surface)
-	if _, err := isolated.Plan(service.NewOptions{PresetID: "surface-desk", TargetDir: "example", Inputs: map[string]any{"repo_name": "pack-check"}}); err == nil || !strings.Contains(err.Error(), "agent-dir") {
-		t.Fatalf("expected missing agent-dir dependency error, got %v", err)
-	}
-	// Version constraints still apply across owners.
-	entry := generic["presets/agent-dir/preset.yaml"]
-	entry.Data = []byte(strings.Replace(string(entry.Data), "version: 0.1.0", "version: 9.0.0", 1))
-	if _, err := makeService(combined).Plan(service.NewOptions{PresetID: "surface-desk", TargetDir: "example", Inputs: map[string]any{"repo_name": "pack-check"}}); err == nil || !strings.Contains(err.Error(), "does not satisfy constraint") {
-		t.Fatalf("expected incompatible dependency version error, got %v", err)
-	}
-}
-
-func TestPresetPacksRejectAmbiguousOrMissingCatalog(t *testing.T) {
-	generic, surface := splitCatalog(t)
-	if _, err := folio.WithPresetPacks(generic, generic); err == nil {
-		t.Fatal("duplicate preset ID accepted")
-	}
-	if _, err := folio.WithPresetPacks(generic, fstest.MapFS{}); err == nil {
-		t.Fatal("missing pack root accepted")
-	}
-	combined, err := folio.WithPresetPacks(generic, surface)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := combined.Open("presets/../go-lib/preset.yaml"); err == nil {
+	if _, openErr := combined.Open("presets/../base/preset.yaml"); openErr == nil {
 		t.Fatal("invalid path accepted")
+	}
+	if _, dupErr := folio.WithPresetPacks(base, base); dupErr == nil {
+		t.Fatal("duplicate preset directory accepted")
+	}
+	if _, missingErr := folio.WithPresetPacks(base, fstest.MapFS{}); missingErr == nil {
+		t.Fatal("missing catalog accepted")
+	}
+	if _, nilErr := folio.WithPresetPacks(base, nil); nilErr == nil {
+		t.Fatal("nil pack accepted")
+	}
+	only, onlyErr := folio.WithPresetPacks(nil, pack)
+	if onlyErr != nil {
+		t.Fatal(onlyErr)
+	}
+	if testErr := fstest.TestFS(only, "presets/addon/preset.yaml"); testErr != nil {
+		t.Fatal(testErr)
+	}
+	if _, statErr := fs.Stat(combined, "presets/addon"); statErr != nil {
+		t.Fatal(statErr)
 	}
 }

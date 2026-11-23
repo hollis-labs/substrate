@@ -18,11 +18,11 @@ import (
 
 	"github.com/hollis-labs/go-materialize/artifact"
 	"github.com/hollis-labs/go-materialize/materialize"
-	"github.com/hollis-labs/tools/folio/internal/compose"
-	"github.com/hollis-labs/tools/folio/internal/deployment"
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/internal/preset"
-	"github.com/hollis-labs/tools/folio/internal/render"
+	"github.com/hollis-labs/substrate/folio/internal/compose"
+	"github.com/hollis-labs/substrate/folio/internal/deployment"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/internal/preset"
+	"github.com/hollis-labs/substrate/folio/internal/render"
 )
 
 // Options configure a Service. Both BundledFS and UserDir are optional —

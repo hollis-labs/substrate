@@ -3,7 +3,7 @@ package compose_test
 import (
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/internal/compose"
+	"github.com/hollis-labs/substrate/folio/internal/compose"
 )
 
 // TestSkeleton is a smoke test that the package compiles. Real coverage

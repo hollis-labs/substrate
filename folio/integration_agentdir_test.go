@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 func renderPreset(t *testing.T, preset string, inputs map[string]any) string {
@@ -27,8 +27,7 @@ func renderPreset(t *testing.T, preset string, inputs map[string]any) string {
 // The presets whose apps have an agent render Nanite's directory layout; the others render none.
 func TestAgentDir_RenderedOnlyForAgentPresets(t *testing.T) {
 	with := map[string]map[string]any{
-		"app-ade":      adeInputs("ade-agents"),
-		"surface-desk": {"repo_name": "desk-agents"},
+		"app-ade": adeInputs("ade-agents"),
 	}
 	for preset, inputs := range with {
 		t.Run(preset, func(t *testing.T) {
@@ -45,9 +44,6 @@ func TestAgentDir_RenderedOnlyForAgentPresets(t *testing.T) {
 			}
 			if !strings.Contains(readFile(t, filepath.Join(dir, "internal/agentdir/agentdir.go")), "agents.Resolve(app.Config, configFile,") {
 				t.Error("resolver does not use Substrate helper")
-			}
-			if preset == "surface-desk" && !strings.Contains(config, `"agent-directory"`) {
-				t.Error("resolver module not started")
 			}
 			if preset == "app-ade" && !strings.Contains(readFile(t, filepath.Join(dir, "cmd", name, "config.go")), "agentdir.Resolve(app)") {
 				t.Error("resolver not called after config")
@@ -72,7 +68,6 @@ func TestAgentDir_RenderedOnlyForAgentPresets(t *testing.T) {
 	}
 	without := map[string]map[string]any{
 		"app-chat":      chatInputs("chat-agents"),
-		"surface-app":   {"repo_name": "plain-agents"},
 		"substrate-app": {"repo_name": "plain-substrate", "substrate_version": "v0.1.1-0.20261119145946-6a4bb696c942"},
 	}
 	for preset, inputs := range without {
@@ -126,7 +121,7 @@ func checkWithNanite(t *testing.T, agentDir string) {
 }
 
 func TestAgentDir_GeneratedResolver(t *testing.T) {
-	for _, preset := range []string{"app-ade", "surface-desk"} {
+	for _, preset := range []string{"app-ade"} {
 		t.Run(preset, func(t *testing.T) {
 			inputs := map[string]any{"repo_name": "resolver-check"}
 			if preset == "app-ade" {

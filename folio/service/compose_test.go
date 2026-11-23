@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 func TestNew_ComposerOverSample(t *testing.T) {

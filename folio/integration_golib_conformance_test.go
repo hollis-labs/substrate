@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // The go-lib preset must render a module that passes the lib checklist by

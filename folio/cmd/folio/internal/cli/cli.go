@@ -12,8 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // Exit codes follow design doc cli-prompt-flow-v0.md §9.

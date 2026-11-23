@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
 )
 
 // repositoryOptions resolves a caller-selected boundary. Neither a preset nor

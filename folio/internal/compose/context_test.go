@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/internal/compose"
-	"github.com/hollis-labs/tools/folio/internal/preset"
-	"github.com/hollis-labs/tools/folio/internal/render"
+	"github.com/hollis-labs/substrate/folio/internal/compose"
+	"github.com/hollis-labs/substrate/folio/internal/preset"
+	"github.com/hollis-labs/substrate/folio/internal/render"
 )
 
 func TestScopeVarsForLayer_DefaultInherit(t *testing.T) {

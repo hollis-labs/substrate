@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
 )
 
 func TestDigest_StableForKnownContent(t *testing.T) {

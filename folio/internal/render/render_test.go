@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio/internal/render"
+	"github.com/hollis-labs/substrate/folio/internal/render"
 )
 
 func treeContext() render.Context {

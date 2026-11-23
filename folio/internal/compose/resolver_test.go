@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/internal/compose"
+	"github.com/hollis-labs/substrate/folio/internal/compose"
 )
 
 func TestParseConstraint(t *testing.T) {

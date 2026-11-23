@@ -20,8 +20,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // substrate-app renders a Substrate app-host: manifest, generated wiring, boot, identity with an

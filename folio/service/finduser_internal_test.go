@@ -6,8 +6,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/internal/compose"
-	"github.com/hollis-labs/tools/folio/internal/preset"
+	"github.com/hollis-labs/substrate/folio/internal/compose"
+	"github.com/hollis-labs/substrate/folio/internal/preset"
 )
 
 // TestCoerceInput_ListStringFromString covers the v0.2 path where the CLI

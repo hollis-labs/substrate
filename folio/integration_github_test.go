@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	folio "github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/service"
+	folio "github.com/hollis-labs/substrate/folio"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // TestIntegration_PublishToGitHub_E2E creates a real throwaway GitHub repo,

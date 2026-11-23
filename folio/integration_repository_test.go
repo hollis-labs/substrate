@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 func TestRepositoryGenerationAndInspection(t *testing.T) {

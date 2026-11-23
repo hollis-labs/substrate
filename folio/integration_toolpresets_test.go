@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // substrate-cli and substrate-service render class 2 tools (project/1 class model, RC1): project.yaml,

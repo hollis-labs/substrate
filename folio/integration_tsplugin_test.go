@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 func renderTSPlugin(t *testing.T, ui bool, sdk string) string {

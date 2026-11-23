@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio/internal/render"
+	"github.com/hollis-labs/substrate/folio/internal/render"
 )
 
 // renderString is a thin test helper that wraps render.RenderString with a

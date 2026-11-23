@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/internal/preset"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/internal/preset"
 )
 
 // SyncOptions parameterises Service.Sync.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/cmd/folio/internal/cli"
+	"github.com/hollis-labs/substrate/folio/cmd/folio/internal/cli"
 )
 
 // TestMakeVerb_NanitePlugin_DerivesDirAndInjectsName runs the make

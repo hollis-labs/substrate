@@ -10,9 +10,9 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/hollis-labs/tools/folio"
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // allPresetInputs holds a valid input set for rendering each bundled preset
@@ -35,10 +35,7 @@ var allPresetInputs = map[string]map[string]any{
 	"app-dashboard":           frontendInputs("sub-dash"),
 	"app-chat":                chatInputs("sub-chat"),
 	"app-ade":                 adeInputs("sub-ade"),
-	"surface-ui":              {"repo_name": "surface-layer"},
 	"agent-dir":               {"repo_name": "agent-layer"},
-	"surface-app":             {"repo_name": "surface-plain"},
-	"surface-desk":            {"repo_name": "surface-desk"},
 }
 
 func frontendInputs(name string) map[string]any {
@@ -93,7 +90,7 @@ func TestPresetDiscovery_ListMatchesEmbeddedPresets(t *testing.T) {
 		if p.Source != "bundled" || p.Version == "" || p.Description == "" || p.Author == "" {
 			t.Errorf("incomplete summary: %+v", p)
 		}
-		if p.LayerOnly != (p.ID == "go-baseline" || p.ID == "substrate-baseline" || p.ID == "substrate-frontend" || p.ID == "substrate-tool-baseline" || p.ID == "surface-ui" || p.ID == "agent-dir") {
+		if p.LayerOnly != (p.ID == "go-baseline" || p.ID == "substrate-baseline" || p.ID == "substrate-frontend" || p.ID == "substrate-tool-baseline" || p.ID == "agent-dir") {
 			t.Errorf("%s LayerOnly = %v", p.ID, p.LayerOnly)
 		}
 	}

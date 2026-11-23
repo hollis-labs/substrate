@@ -10,8 +10,8 @@ import (
 	"os"
 	"slices"
 
-	"github.com/hollis-labs/tools/folio/internal/deployment"
-	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/internal/deployment"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
 	"gopkg.in/yaml.v3"
 )
 

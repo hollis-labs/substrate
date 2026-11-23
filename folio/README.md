@@ -80,7 +80,7 @@ Application data and configuration remain in their XDG locations.
 ## Quickstart
 
 ```sh
-go install github.com/hollis-labs/tools/folio/cmd/folio@latest
+go install github.com/hollis-labs/substrate/folio/cmd/folio@latest
 
 folio new base /tmp/folio-smoke \
   --input project_name=smoke_test \
@@ -353,3 +353,24 @@ pins. Treat templates as trusted code. The manifest retains each preset's
 ID/version and the existing logical `bundled:presets/...` paths; it does not yet
 record pack repository revisions. Keep the selected catalog revision with your
 build inputs. Physical source relocation is a separate cleanup step.
+
+
+## Source ownership
+
+Folio is an independent module at `hollis-labs/substrate/folio`. Build and test
+from this directory; the root framework does not import the scaffolder. Its
+framework dependencies retain their selected versions until the adoption pass.
+The 16 built-in presets are generic/framework scaffolding. The three Surface
+presets now live at `hollis-labs/surface/scaffolding/presets/`; examples earlier
+in this document that name Surface require that explicit pack:
+
+```sh
+folio --preset-pack /path/to/pinned-surface/scaffolding preset list
+folio --preset-pack /path/to/pinned-surface/scaffolding plan surface-desk ./example --input repo_name=example --non-interactive
+```
+
+Surface's scaffolding suite owns those templates' rendering, escaping and
+agent-directory coverage. The shared `agent-dir` layer is embedded here only.
+Keep both source revisions with build inputs; Folio validates declared preset
+versions but does not fetch a matching release for you. No consumer pin sweep
+is part of this relocation.

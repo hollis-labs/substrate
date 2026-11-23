@@ -11,8 +11,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/hollis-labs/tools/folio/internal/preset"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/internal/preset"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // inputResolver materializes the final inputs map for service.New/Plan from

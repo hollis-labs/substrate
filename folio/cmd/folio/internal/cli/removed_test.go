@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hollis-labs/tools/folio/cmd/folio/internal/cli"
-	"github.com/hollis-labs/tools/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/cmd/folio/internal/cli"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
 )
 
 // writeBreadcrumb writes a minimal .folio.yaml naming one root preset, as an older folio would have.

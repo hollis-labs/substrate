@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/internal/manifest"
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/internal/manifest"
+	"github.com/hollis-labs/substrate/folio/service"
 )
 
 // syncRules marks domain/** as authored (skip) and lint.yml as the preset's canonical

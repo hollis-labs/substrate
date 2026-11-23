@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/service"
 	"github.com/spf13/cobra"
 )
 

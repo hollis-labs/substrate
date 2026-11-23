@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 
-	"github.com/hollis-labs/tools/folio/internal/preset"
+	"github.com/hollis-labs/substrate/folio/internal/preset"
 )
 
 // Prompter resolves missing inputs interactively. The real implementation

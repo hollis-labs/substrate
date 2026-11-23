@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hollis-labs/tools/folio/service"
+	"github.com/hollis-labs/substrate/folio/service"
 	"gopkg.in/yaml.v3"
 )
 
